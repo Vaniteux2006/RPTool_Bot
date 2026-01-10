@@ -51,6 +51,7 @@ require('dotenv').config(); // Carrega o token do arquivo .env
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs'); // Módulo para ler arquivos
 const path = require('path');
+const { Roll } = require('./commands/roll.js'); // Importando a lógica do dado
 
 // Configurações de "Intents" (o que o bot pode ver/ouvir)
 const client = new Client({
@@ -79,6 +80,50 @@ const prefix = "rp!";
 
 client.on('messageCreate', async message => {
     if (message.author.bot) return; // Ignora outros bots
+
+    // ====================================================
+    // 0. SISTEMA DE DADOS (MODULARIZADO)
+    // ====================================================
+    
+    // Regex Estrita: ^(inicio) (\d+)?(qtd) d (\d+)(lados) (\s*[-+*/]\s*\d+)?(modificador) $(fim)
+    const regexDado = /^\s*(\d+)?d(\d+)(\s*[-+*/]\s*\d+)?\s*$/i;
+    // Regex Suja: Começa com dado mas tem texto depois
+    const regexDadoSujo = /^\s*(\d+)?d(\d+)/i;
+    
+    // 1. Tenta casar com o padrão perfeito (Ex: 6d10+5 ou d20)
+    const match = message.content.match(regexDado);
+    
+    if (match) {
+        // --- EXTRAÇÃO DAS VARIÁVEIS (A, B, C, D) ---
+        let a = match[1]; // Quantidade
+        let b = match[2]; // Lados
+        let c = null; // Operador
+        let d = null; // Valor do Modificador
+
+        if (match[3]) {
+            let modLimpo = match[3].replace(/\s/g, ''); // Tira espaços
+            c = modLimpo.charAt(0);
+            d = modLimpo.substring(1);
+        }
+
+        // --- CHAMADA DA FUNÇÃO NO OUTRO ARQUIVO ---
+        const resultado = Roll(a, b, c, d);
+
+        if (resultado.erro) {
+            return message.reply(`⚠️ ${resultado.erro}`);
+        } else {
+            return message.reply({ embeds: [resultado.embed] }); 
+        }
+    }
+
+    // 2. Verifica se tem lixo junto (Ex: "d20 pra testar")
+    else if (regexDadoSujo.test(message.content)) {
+        // Só avisa se a mensagem for curta
+        if (message.content.length < 50) {
+            const tentativa = message.content.match(regexDadoSujo)[0];
+            return message.reply(`⚠️ Opa! Se você quer rolar um **${tentativa}**, mande a mensagem **sozinha** (sem texto junto).`);
+        }
+    }
 
     // ====================================================
     // 1. SISTEMA DE TUPPER (CORRIGIDO E FUNCIONAL)
@@ -163,5 +208,3 @@ client.on('messageCreate', async message => {
 
 // Faz o login
 client.login(process.env.TOKEN);
-
-
