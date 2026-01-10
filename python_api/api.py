@@ -46,7 +46,7 @@ class InteractionRequest(BaseModel):
 
 @app.post("/chat")
 async def chat_endpoint(request: InteractionRequest):
-    print(f"📩 Recebido pedido para: {request.npc_name}")
+    print(f"[NOVA MENSAGEM] Recebido pedido para: {request.npc_name}")
     
     # Monta o prompt pro Gemini
     prompt_final = f"""

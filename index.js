@@ -47,150 +47,61 @@
 //====================================================
 // =============================================================
 
-require('dotenv').config(); // Carrega o token do arquivo .env
+require('dotenv').config(); 
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
-const fs = require('fs'); // Módulo para ler arquivos
+const fs = require('fs'); 
 const path = require('path');
-const { Roll } = require('./commands/roll.js'); // Importando a lógica do dado
 
-// Configurações de "Intents" (o que o bot pode ver/ouvir)
+// --- IMPORTAÇÕES DOS SISTEMAS ---
+const { processRoll } = require('./commands/roll.js'); // AGORA IMPORTAMOS O PROCESSADOR
+const { giveRole } = require('./commands/autorole.js');
+const { processMessage } = require('./commands/webhook.js');
+
+// Configurações do Cliente
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
     ]
 });
 
-// Evento: Quando o bot fica online
+// Bot Online
 client.once('ready', () => {
     console.log(`🤖 Bot online como ${client.user.tag}!`);
 });
 
+// Carregamento de Comandos
 client.commands = new Collection();
+const prefix = "rp!";
 
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
-
 for (const file of commandFiles) {
     const command = require(`./commands/${file}`);
     client.commands.set(command.name, command);
 }
 
-const prefix = "rp!";
+// ====================================================
+// EVENTO: ENTRADA DE MEMBRO
+// ====================================================
+client.on('guildMemberAdd', async member => {
+    await giveRole(member);
+});
 
+// ====================================================
+// EVENTO: MENSAGEM (O Maestro Otimizado)
+// ====================================================
 client.on('messageCreate', async message => {
-    if (message.author.bot) return; // Ignora outros bots
+    if (message.author.bot) return; 
 
-    // ====================================================
-    // 0. SISTEMA DE DADOS (MODULARIZADO)
-    // ====================================================
-    
-    // Regex Estrita: ^(inicio) (\d+)?(qtd) d (\d+)(lados) (\s*[-+*/]\s*\d+)?(modificador) $(fim)
-    const regexDado = /^\s*(\d+)?d(\d+)(\s*[-+*/]\s*\d+)?\s*$/i;
-    // Regex Suja: Começa com dado mas tem texto depois
-    const regexDadoSujo = /^\s*(\d+)?d(\d+)/i;
-    
-    // 1. Tenta casar com o padrão perfeito (Ex: 6d10+5 ou d20)
-    const match = message.content.match(regexDado);
-    
-    if (match) {
-        // --- EXTRAÇÃO DAS VARIÁVEIS (A, B, C, D) ---
-        let a = match[1]; // Quantidade
-        let b = match[2]; // Lados
-        let c = null; // Operador
-        let d = null; // Valor do Modificador
+    // 1. SISTEMA DE TUPPER (WEBHOOK)
+    if (await processMessage(message, client)) return;
 
-        if (match[3]) {
-            let modLimpo = match[3].replace(/\s/g, ''); // Tira espaços
-            c = modLimpo.charAt(0);
-            d = modLimpo.substring(1);
-        }
+    // 2. SISTEMA DE DADOS (ROLL)
+    if (await processRoll(message)) return;
 
-        // --- CHAMADA DA FUNÇÃO NO OUTRO ARQUIVO ---
-        const resultado = Roll(a, b, c, d);
-
-        if (resultado.erro) {
-            return message.reply(`⚠️ ${resultado.erro}`);
-        } else {
-            return message.reply({ embeds: [resultado.embed] }); 
-        }
-    }
-
-    // 2. Verifica se tem lixo junto (Ex: "d20 pra testar")
-    else if (regexDadoSujo.test(message.content)) {
-        // Só avisa se a mensagem for curta
-        if (message.content.length < 50) {
-            const tentativa = message.content.match(regexDadoSujo)[0];
-            return message.reply(`⚠️ Opa! Se você quer rolar um **${tentativa}**, mande a mensagem **sozinha** (sem texto junto).`);
-        }
-    }
-
-    // ====================================================
-    // 1. SISTEMA DE TUPPER (CORRIGIDO E FUNCIONAL)
-    // ====================================================
-    
-    // Carrega os tuppers
-    const dbPath = path.join(__dirname, 'tuppers.json');
-    let tuppers = [];
-    try {
-        tuppers = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    } catch (e) { tuppers = []; }
-
-    // Procura se o usuário tem algum tupper que bate com o prefixo da mensagem
-    const userTuppers = tuppers.filter(t => t.uid === message.author.id);
-    
-    // Verifica se a mensagem começa com algum prefixo registrado desse usuário
-    const tupperFound = userTuppers.find(t => message.content.startsWith(t.prefix + ":") || message.content.startsWith(t.prefix + " "));
-
-    if (tupperFound) {
-        // Se achou, ativa o modo Webhook!
-        
-        // Remove o prefixo da mensagem pra sobrar só o texto
-        let textContent = message.content.slice(tupperFound.prefix.length).trim();
-        // Remove o ":" ou espaço inicial se sobrou
-        if (textContent.startsWith(':') || textContent.startsWith(' ')) {
-            textContent = textContent.substring(1).trim();
-        }
-
-        // Se não tiver texto nem anexo, ignora (evita bugs)
-        if (!textContent && message.attachments.size === 0) return;
-
-        try {
-            
-            // 1. Busca ou Cria um Webhook no canal (PRIMEIRO DE TUDO)
-            const webhooks = await message.channel.fetchWebhooks();
-            let webhook = webhooks.find(wh => wh.owner.id === client.user.id);
-
-            if (!webhook) {
-                webhook = await message.channel.createWebhook({
-                    name: 'RPTool Webhook',
-                    avatar: client.user.displayAvatarURL(),
-                });
-            }
-
-            // 2. Manda a mensagem clonada
-            // USAMOS .map(a => a.url) PARA PEGAR O LINK DIRETO DA IMAGEM
-            await webhook.send({
-                content: textContent,
-                username: tupperFound.name,
-                avatarURL: tupperFound.avatar,
-                files: message.attachments.map(a => a.url) 
-            });
-
-            // 3. SÓ AGORA apaga a mensagem original do usuário
-            try { await message.delete(); } catch (e) {} 
-
-        } catch (err) {
-            console.error("Erro no Tupper:", err);
-        }
-        
-        return; // Para o código aqui
-    }
-
-    // ====================================================
-    // 2. SISTEMA DE COMANDOS
-    // ====================================================
-
+    // 3. COMANDOS NORMAIS (rp!)
     if (!message.content.startsWith(prefix)) return;
 
     const args = message.content.slice(prefix.length).trim().split(/ +/);
@@ -206,5 +117,4 @@ client.on('messageCreate', async message => {
     }
 });
 
-// Faz o login
 client.login(process.env.TOKEN);
