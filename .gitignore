@@ -3,3 +3,4 @@ node_modules
 __pycache__/
 *.pyc
 python_api/__pycache__/
+tuppers.json

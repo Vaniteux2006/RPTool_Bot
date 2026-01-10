@@ -16,7 +16,7 @@
 // Lembrar-se quando terminar:
 // git add . 
 // git commit -m "Nome da Atualização"
-// git push origin main 
+// git push origin main (Ou "teste", que é o ideal). para trocar de branch, "git checkout -b teste" (ou Main)
 
 // protocolos da atualização:
 // "1.000.010-xx -> Grandes Commits feitos para o Main"
