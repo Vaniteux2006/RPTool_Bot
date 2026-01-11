@@ -6,4 +6,7 @@ python_api/__pycache__/
 tuppers.json
 *.o
 *.obj
+*.exe
+app.rc
+server_config.json
 chess_engine

@@ -1,21 +1,21 @@
 import os
 import sys
 import uvicorn
+import google.generativeai as genai
 from fastapi import FastAPI
 from pydantic import BaseModel
-import google.generativeai as genai
 from dotenv import load_dotenv
 from pathlib import Path
 
 # --- TRUQUE PARA IMPORTAR DA PASTA VIZINHA ---
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-# Importa da pasta renomeada 'chess_engine'
-from chess_engine.chess_logic import ChessBot 
 
 # --- CONFIGURAÇÕES DO SISTEMA ---
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
+
+from chess_engine.chess_logic import ChessBot 
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 

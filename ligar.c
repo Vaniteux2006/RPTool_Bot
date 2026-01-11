@@ -16,6 +16,7 @@ int main() {
     // O programa vai ficar PRESO nesta linha enquanto o bot estiver vivo.
     // Quando você der Ctrl+C, o Node fecha, essa linha termina e o programa desce.
     system("node index.js");
+    system("python python_api/api.py");
 
     // 4. Tchau!
     return 0;
