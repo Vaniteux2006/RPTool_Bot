@@ -6,3 +6,4 @@ python_api/__pycache__/
 tuppers.json
 *.o
 *.obj
+chess_engine
