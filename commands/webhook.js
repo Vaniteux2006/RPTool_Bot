@@ -13,7 +13,7 @@ module.exports = {
     // PARTE 2: A Lógica Pesada (O Sistema)
     async processMessage(message, client) {
         // Carrega os tuppers
-        const dbPath = path.join(__dirname, '../tuppers.json');
+        const dbPath = path.join(__dirname, '../Data/tuppers.json');
         let tuppers = [];
         try {
             tuppers = JSON.parse(fs.readFileSync(dbPath, 'utf8'));

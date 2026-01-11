@@ -48,12 +48,12 @@
 // =============================================================
 
 require('dotenv').config(); 
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, ActivityType, Events } = require('discord.js');
 const fs = require('fs'); 
 const path = require('path');
 
 // --- IMPORTAÇÕES DOS SISTEMAS ---
-const { processRoll } = require('./commands/roll.js'); // AGORA IMPORTAMOS O PROCESSADOR
+const { processRoll } = require('./commands/roll.js'); 
 const { giveRole } = require('./commands/autorole.js');
 const { processMessage } = require('./commands/webhook.js');
 
@@ -68,8 +68,29 @@ const client = new Client({
 });
 
 // Bot Online
-client.once('ready', () => {
-    console.log(`🤖 Bot online como ${client.user.tag}!`);
+client.once(Events.ClientReady, readyClient => {
+    console.log(`🤖 Bot online como ${readyClient.user.tag}!`);
+
+    // Lista de frases
+    const statusArray = [
+        { content: 'Temos Stockfish! 🐟 (rp!chess)', type: ActivityType.Playing },
+        { content: 'rp!help para comandos! 📚', type: ActivityType.Listening },
+        { content: 'RS representando o RPG 🧉', type: ActivityType.Playing },
+        { content: 'assistindo hentai 😳', type: ActivityType.Watching },
+        { content: 'Eu vou acordar algum dia 👁️', type: ActivityType.Watching },
+        { content: '9 anos, vizinho, [...] 💀', type: ActivityType.Listening },
+        { content: 'Ouçam Linkin Park 🎸', type: ActivityType.Listening },
+        { content: 'When I was, a young boy... 🥀', type: ActivityType.Playing },
+        { content: 'My father took me into the city... 🥀', type: ActivityType.Playing },
+        { content: '... To see a marching band 🥀', type: ActivityType.Playing },
+    ];
+
+    let option = 0;
+    setInterval(() => {
+        client.user.setActivity(statusArray[option].content, { type: statusArray[option].type });
+        option++;
+        if (option >= statusArray.length) option = 0;
+    }, 5000); // 10000 ms = 10 segundos
 });
 
 // Carregamento de Comandos

@@ -1,0 +1,20 @@
+const { EmbedBuilder } = require('discord.js');
+
+module.exports = {
+    name: 'help',
+    description: 'Mostra a lista de comandos do RPTool',
+    execute(message, args) {
+        const embed = new EmbedBuilder()
+            .setColor(0x00FF00) // Verde Hacker
+            .setTitle('📚 Manual do RPTool')
+            .setDescription('Aqui está tudo que eu sei fazer (por enquanto):')
+            .addFields(
+                { name: '🎲 RPG & Dados', value: '`d20`, `4d6+2` (Direto no chat)\n`rp!roll` (Ajuda sobre dados)' },
+                { name: '🎭 Personagens (Tuppers)', value: '`rp!create "Nome" prefixo` (Cria char)\n`prefixo: mensagem` (Fala como char)' },
+                { name: '🤖 Inteligência & Games', value: '`rp!ai [texto]` (Conversa com NPC)\n`rp!chess start` (Xadrez/Stockfish)' },
+                { name: '⚙️ Sistema', value: '`rp!helloworld` (Ping)\n`rp!autorole [add/del/check]` (Cargos Automáticos)' }
+            )
+            .setFooter({ text: 'Versão 1.000.010-6' }); 
+        message.reply({ embeds: [embed] });
+    },
+};

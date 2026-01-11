@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Carrega o .env igualzinho ao seu bot
+# Sobe duas pastas para achar o .env
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
@@ -22,7 +22,7 @@ try:
             found = True
     
     if not found:
-        print("❌ Nenhum modelo de texto encontrado. Sua chave pode estar limitada.")
+        print("❌ Nenhum modelo de texto encontrado.")
 
 except Exception as e:
     print(f"🔥 Erro fatal ao conectar: {e}")

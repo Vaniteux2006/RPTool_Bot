@@ -54,6 +54,7 @@ module.exports = {
     },
 
     // 3. A Matemática Pura (Mantivemos isolada e pura)
+    // 3. A Matemática Pura
     Roll: function(qtdInput, ladosInput, operador, modificador) {
         let qtd = parseInt(qtdInput) || 1;
         let lados = parseInt(ladosInput);
@@ -69,6 +70,42 @@ module.exports = {
             resultados.push(valor);
             somaBruta += valor;
         }
+
+        // --- INÍCIO DA LÓGICA DE CORES (Inserido Aqui) ---
+        const minPossivel = qtd;             // Ex: 6d10, min é 6
+        const maxPossivel = qtd * lados;     // Ex: 6d10, max é 60
+        let corFinal;
+
+        // 1. Extremos Absolutos
+        if (somaBruta === minPossivel) {
+            corFinal = 0x66000a; // Vermelho Sangue (Crítico de Falha)
+        } else if (somaBruta === maxPossivel) {
+            corFinal = 0x0099FF; // Azul Maravilhoso (Crítico de Sucesso)
+        } else {
+            // 2. Cálculo da Porcentagem (0 a 100%)
+            // Evita divisão por zero se alguém rolar 1d1
+            const range = maxPossivel - minPossivel;
+            const porcentagem = range === 0 ? 100 : ((somaBruta - minPossivel) / range) * 100;
+
+            if (porcentagem >= 40 && porcentagem <= 60) {
+                // MÉDIA (Amarelo)
+                // Calcula a distância do centro exato (50%). 
+                // Se for 0 (bem no centro), amarelo forte. Se for 10 (nas bordas 40 ou 60), fraco.
+                const distCentro = Math.abs(50 - porcentagem); 
+                corFinal = distCentro < 4 ? 0xffb700 : 0xf0ddaf; // Gold (Forte) vs LightYellow (Fraco)
+            
+            } else if (porcentagem < 40) {
+                // RUIM (Vermelho)
+                // < 20% (Muito ruim) = Vermelho Escuro | 20-39% (Ruim, mas ok) = Vermelho Claro
+                corFinal = porcentagem < 20 ? 0xa10010 : 0xff8c98; // FireBrick vs LightCoral
+
+            } else {
+                // BOM (Verde)
+                // > 80% (Muito bom) = Verde Forte | 61-79% (Bom) = Verde Claro
+                corFinal = porcentagem > 80 ? 0x008000 : 0x90EE90; // Green vs LightGreen
+            }
+        }
+        // --- FIM DA LÓGICA DE CORES ---
 
         resultados.sort((a, b) => a - b);
 
@@ -89,7 +126,7 @@ module.exports = {
         if (listaStr.length > 50) listaStr = listaStr.substring(0, 50) + "...";
         
         const embed = new EmbedBuilder()
-            .setColor(0x57F287)
+            .setColor(corFinal) // <--- Alterado para usar a variável dinâmica
             .setAuthor({ name: 'Dadinhos! 🎲', iconURL: 'https://media.discordapp.net/attachments/1459362898127098014/1459399809025703988/doguinho.png?ex=6963237c&is=6961d1fc&hm=7ea6574e5b4cc8904ba7547339c89c3874e6955bff8c72973a1aa8090422305b&=&format=webp&quality=lossless' })
             .setDescription(`**[${qtd}d${lados}${textoModificador} : ${listaStr}]**\n No fim, a soma de todos os dados deu: \n **${totalFinal}**`);
 
