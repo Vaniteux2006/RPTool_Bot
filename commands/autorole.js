@@ -1,52 +1,151 @@
-const { PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
+// Caminho para o JSON
+const dbPath = path.join(__dirname, '../Data/server_config.json');
+
+// Funções Auxiliares de Banco de Dados
+function lerDB() {
+    try {
+        const raw = fs.readFileSync(dbPath, 'utf8');
+        const data = JSON.parse(raw);
+        // Garante que é um Array (se for o formato antigo {}, ele reseta pra [])
+        return Array.isArray(data) ? data : []; 
+    } catch (e) {
+        return [];
+    }
+}
+
+function salvarDB(data) {
+    fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
+}
+
 module.exports = {
     name: 'autorole',
-    description: 'Configura ou executa o sistema de Autorole',
+    description: 'Gerencia cargos automáticos (add, del, zero, check)',
     
-    // PARTE 1: O COMANDO (rp!autorole @cargo)
+    // --- PARTE 1: COMANDOS (rp!autorole) ---
     async execute(message, args) {
+        // 1. Segurança: Só Admin mexe aqui
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply("❌ Você precisa ser Administrador para configurar isso.");
+            return message.reply("❌ **Sem Permissão:** Apenas Administradores podem configurar o Autorole.");
         }
 
-        const role = message.mentions.roles.first();
-        if (!role) {
-            return message.reply("⚠️ Uso correto: `rp!autorole @cargo`");
+        const subCommand = args[0] ? args[0].toLowerCase() : null;
+        const guildId = message.guild.id;
+
+        // Carrega o banco
+        let db = lerDB();
+        
+        // Procura a configuração deste servidor específico
+        let serverConfig = db.find(entry => entry.server === guildId);
+
+        // Se não existir, cria o esqueleto
+        if (!serverConfig) {
+            serverConfig = { server: guildId, autorole: [] };
+            db.push(serverConfig);
         }
 
-        const configPath = path.join(__dirname, '../server_config.json');
-        let config = {};
-        try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch (e) {}
+        // ======================================================
+        // SUB-COMANDO: ADD (Adicionar Cargo)
+        // ======================================================
+        if (subCommand === 'add') {
+            const role = message.mentions.roles.first();
+            if (!role) return message.reply("⚠️ Uso: `rp!autorole add @cargo`");
 
-        if (!config[message.guild.id]) config[message.guild.id] = {};
-        config[message.guild.id].autorole = role.id;
+            if (serverConfig.autorole.includes(role.id)) {
+                return message.reply("⚠️ Esse cargo já está na lista de Autorole.");
+            }
 
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
+            serverConfig.autorole.push(role.id);
+            salvarDB(db);
+            return message.reply(`✅ **Adicionado:** O cargo **${role.name}** será dado aos novatos.`);
+        }
 
-        message.reply(`✅ **Autorole Configurado!**\nNovos membros receberão: **${role.name}**\n(Garanta que meu cargo RPTool esteja acima do cargo ${role.name} na lista!)`);
+        // ======================================================
+        // SUB-COMANDO: DEL (Remover Cargo)
+        // ======================================================
+        else if (subCommand === 'del') {
+            const role = message.mentions.roles.first();
+            if (!role) return message.reply("⚠️ Uso: `rp!autorole del @cargo`");
+
+            if (!serverConfig.autorole.includes(role.id)) {
+                return message.reply("⚠️ Esse cargo não estava configurado.");
+            }
+
+            // Filtra removendo o ID do cargo
+            serverConfig.autorole = serverConfig.autorole.filter(id => id !== role.id);
+            salvarDB(db);
+            return message.reply(`🗑️ **Removido:** O cargo **${role.name}** não será mais dado.`);
+        }
+
+        // ======================================================
+        // SUB-COMANDO: ZERO (Resetar Tudo)
+        // ======================================================
+        else if (subCommand === 'zero') {
+            // Remove o objeto do servidor do array principal
+            db = db.filter(entry => entry.server !== guildId);
+            salvarDB(db);
+            return message.reply("💥 **Resetado!** Todas as configurações de Autorole deste servidor foram apagadas.");
+        }
+
+        // ======================================================
+        // SUB-COMANDO: CHECK (Verificar Config)
+        // ======================================================
+        else if (subCommand === 'check') {
+            if (serverConfig.autorole.length === 0) {
+                return message.reply("📂 **Status:** Nenhum cargo configurado para Autorole.");
+            }
+
+            // Transforma IDs em Nomes
+            const nomesCargos = serverConfig.autorole.map(roleId => {
+                const role = message.guild.roles.cache.get(roleId);
+                return role ? `• ${role.name}` : `• Cargo Deletado (${roleId})`;
+            }).join('\n');
+
+            const embed = new EmbedBuilder()
+                .setColor(0x00FF00)
+                .setTitle(`📋 Autorole de ${message.guild.name}`)
+                .setDescription(`**Cargos que serão dados:**\n${nomesCargos}`)
+                .setFooter({ text: "Use rp!autorole del @cargo para remover." });
+
+            return message.reply({ embeds: [embed] });
+        }
+
+        // ======================================================
+        // AJUDA (Se não digitou nada certo)
+        // ======================================================
+        else {
+            return message.reply(
+                "**⚙️ Comandos do Autorole:**\n" +
+                "`rp!autorole add @cargo` - Adiciona um cargo à lista\n" +
+                "`rp!autorole del @cargo` - Remove um cargo da lista\n" +
+                "`rp!autorole check` - Vê quais cargos estão configurados\n" +
+                "`rp!autorole zero` - Desativa tudo e limpa a config"
+            );
+        }
     },
 
-    // PARTE 2: A AÇÃO AUTOMÁTICA (O Sistema)
-    // Essa função será chamada pelo index.js quando alguém entrar
+    // --- PARTE 2: AÇÃO AUTOMÁTICA (Chamada pelo index.js) ---
     async giveRole(member) {
-        const configPath = path.join(__dirname, '../server_config.json');
-        let config = {};
-        try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch (e) { return; }
+        const db = lerDB();
+        const serverConfig = db.find(entry => entry.server === member.guild.id);
 
-        const roleId = config[member.guild.id]?.autorole;
-        
-        if (roleId) {
+        // Se não tem config ou a lista tá vazia, tchau
+        if (!serverConfig || !serverConfig.autorole || serverConfig.autorole.length === 0) return;
+
+        console.log(`[AUTOROLE] Processando entrada de ${member.user.tag}...`);
+
+        for (const roleId of serverConfig.autorole) {
             try {
                 const role = member.guild.roles.cache.get(roleId);
                 if (role) {
                     await member.roles.add(role);
-                    console.log(`✅ Autorole: Dei o cargo ${role.name} para ${member.user.tag}`);
+                    console.log(`   -> Cargo ${role.name} adicionado.`);
                 }
-            } catch (error) {
-                console.log(`❌ Erro no Autorole: Sem permissão ou cargo baixo demais.`);
+            } catch (err) {
+                console.error(`   -> ❌ Erro ao dar cargo ${roleId}: Sem permissão ou cargo do bot é baixo.`);
             }
         }
     }

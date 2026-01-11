@@ -53,7 +53,7 @@ const fs = require('fs');
 const path = require('path');
 
 // --- IMPORTAÇÕES DOS SISTEMAS ---
-const { processRoll } = require('./commands/roll.js'); // AGORA IMPORTAMOS O PROCESSADOR
+const { processRoll } = require('./commands/roll.js'); 
 const { giveRole } = require('./commands/autorole.js');
 const { processMessage } = require('./commands/webhook.js');
 

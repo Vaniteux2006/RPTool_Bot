@@ -1,4 +1,4 @@
-const pythonManager = require('../python_manager.js'); // Importa o gerente
+const pythonManager = require('../python_codes/python_manager.js')
 
 module.exports = {
     name: 'ai',
@@ -18,7 +18,7 @@ module.exports = {
 
             const npcData = {
                 npc_name: "RPTool",
-                persona: "Você é um bot assistente de RPG. Seja útil e breve.",
+                persona: "Você é um bot assistente de RPG. Seja útil e breve, respondendo usando gírias de usuário de Discord. E seja muito fã do usuário",
                 user_message: userMessage
             };
 

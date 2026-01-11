@@ -39,7 +39,7 @@ module.exports = {
         };
 
         // Lê o arquivo atual, adiciona e salva
-        const dbPath = path.join(__dirname, '../tuppers.json');
+        const dbPath = path.join(__dirname, '../Data/tuppers.json');
         let db = [];
         
         try {

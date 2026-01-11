@@ -12,10 +12,9 @@ module.exports = {
                 { name: '🎲 RPG & Dados', value: '`d20`, `4d6+2` (Direto no chat)\n`rp!roll` (Ajuda sobre dados)' },
                 { name: '🎭 Personagens (Tuppers)', value: '`rp!create "Nome" prefixo` (Cria char)\n`prefixo: mensagem` (Fala como char)' },
                 { name: '🤖 Inteligência & Games', value: '`rp!ai [texto]` (Conversa com NPC)\n`rp!chess start` (Xadrez/Stockfish)' },
-                { name: '⚙️ Sistema', value: '`rp!helloworld` (Ping)\n`rp!autorole @cargo` (Configurar entrada)' }
+                { name: '⚙️ Sistema', value: '`rp!helloworld` (Ping)\n`rp!autorole [add/del/check]` (Cargos Automáticos)' }
             )
-            .setFooter({ text: 'Versão 1.000.010-8' });
-
+            .setFooter({ text: 'Versão 1.000.010-6' }); 
         message.reply({ embeds: [embed] });
     },
 };

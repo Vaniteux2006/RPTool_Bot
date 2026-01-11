@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const pythonManager = require('../python_manager.js'); // Importa o gerente
+const pythonManager = require('../python_codes/python_manager.js');; // Importa o gerente
 
 module.exports = {
     name: 'chess',
