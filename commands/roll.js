@@ -128,7 +128,9 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor(corFinal) // <--- Alterado para usar a variável dinâmica
             .setAuthor({ name: 'Dadinhos! 🎲', iconURL: 'https://media.discordapp.net/attachments/1459362898127098014/1459399809025703988/doguinho.png?ex=6963237c&is=6961d1fc&hm=7ea6574e5b4cc8904ba7547339c89c3874e6955bff8c72973a1aa8090422305b&=&format=webp&quality=lossless' })
-            .setDescription(`**[${qtd}d${lados}${textoModificador} : ${listaStr}]**\n No fim, a soma de todos os dados deu: \n **${totalFinal}**`);
+            .setDescription(`**[${qtd}d${lados}${textoModificador} : ${listaStr}]**\n No fim, a soma de todos os dados deu: \n **${totalFinal}**`)
+            .setFooter({ text: `RPTool v1.100.010-06` })
+        ;
 
         return { erro: null, embed: embed };
     }

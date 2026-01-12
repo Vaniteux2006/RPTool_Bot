@@ -14,7 +14,7 @@ module.exports = {
                 { name: '🤖 Inteligência & Games', value: '`rp!ai [texto]` (Conversa com NPC)\n`rp!chess start` (Xadrez/Stockfish)' },
                 { name: '⚙️ Sistema', value: '`rp!helloworld` (Ping)\n`rp!autorole [add/del/check]` (Cargos Automáticos)' }
             )
-            .setFooter({ text: 'Versão 1.000.010-6' }); 
+            .setFooter({ text: 'Versão 1.100.010-6' }); 
         message.reply({ embeds: [embed] });
     },
 };

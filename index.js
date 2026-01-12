@@ -56,6 +56,8 @@ const path = require('path');
 const { processRoll } = require('./commands/roll.js'); 
 const { giveRole } = require('./commands/autorole.js');
 const { processMessage } = require('./commands/webhook.js');
+const phoneCommand = require('./commands/phone.js');
+const ReturnVersion = require('./ReturnVersion.js');
 
 // Configurações do Cliente
 const client = new Client({
@@ -73,11 +75,12 @@ client.once(Events.ClientReady, readyClient => {
 
     // Lista de frases
     const statusArray = [
+        { content: `Rodando v${ReturnVersion()} ⚙️`, type: ActivityType.Playing },
         { content: 'Temos Stockfish! 🐟 (rp!chess)', type: ActivityType.Playing },
         { content: 'rp!help para comandos! 📚', type: ActivityType.Listening },
-        { content: 'RS representando o RPG 🧉', type: ActivityType.Playing },
+        { content: 'Made In Porto Alegre, RS 🧉', type: ActivityType.Playing },
         { content: 'assistindo hentai 😳', type: ActivityType.Watching },
-        { content: 'Eu vou acordar algum dia 👁️', type: ActivityType.Watching },
+        { content: `BIG BROTHER IS WATCHING YOU 👁️`, type: ActivityType.Watching },
         { content: '9 anos, vizinho, [...] 💀', type: ActivityType.Listening },
         { content: 'Ouçam Linkin Park 🎸', type: ActivityType.Listening },
         { content: 'When I was, a young boy... 🥀', type: ActivityType.Playing },
@@ -119,10 +122,13 @@ client.on('messageCreate', async message => {
     // 1. SISTEMA DE TUPPER (WEBHOOK)
     if (await processMessage(message, client)) return;
 
-    // 2. SISTEMA DE DADOS (ROLL)
+    // 2. TELEFONE 
+    if (await phoneCommand.processPhoneMessage(message)) return;
+
+    // 3. SISTEMA DE DADOS (ROLL)
     if (await processRoll(message)) return;
 
-    // 3. COMANDOS NORMAIS (rp!)
+    // 4. COMANDOS NORMAIS (rp!)
     if (!message.content.startsWith(prefix)) return;
 
     const args = message.content.slice(prefix.length).trim().split(/ +/);
