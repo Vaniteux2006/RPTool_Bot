@@ -30,7 +30,7 @@ module.exports = {
 
             const data = await response.json();
             msg.edit(`${data.reply}`);
-
+            console.log("Registrado conversa com IA")
         } catch (error) {
             console.error(error);
             msg.edit("❌ Erro: Não consegui ligar o Python. Veja o terminal.");

@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 
+
 # --- CONFIGURAÇÕES DE CAMINHO ---
 # 1. Achar o .env (Sobe python/ -> RPTool/ -> .env)
 env_path = Path(__file__).parent.parent / '.env'
@@ -18,12 +19,15 @@ load_dotenv(dotenv_path=env_path)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 chess_dir = os.path.join(current_dir, "..", "Commands", "chess")
 phone_dir = os.path.join(current_dir, "..", "commands", "phone")
+tupper_dir = os.path.join(current_dir, "..", "commands", "tupper")
 sys.path.append(chess_dir)
 sys.path.append(phone_dir)
+sys.path.append(tupper_dir)
 
 # Agora podemos importar normal, como se ele estivesse aqui do lado
 from chess_logic import ChessBot 
 from phone_logic import PhoneSystem
+from tupper_logic import TupperBrain
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -43,6 +47,8 @@ app = FastAPI()
 # Inicializa o Bot de Xadrez
 chess_brain = ChessBot()
 
+# Iniciativa o Cérebro do Tupper
+tupper_brain = TupperBrain()
 
 # INICIALIZA O SISTEMA DE TELEFONE
 phone_brain = PhoneSystem()
@@ -70,6 +76,16 @@ class PhoneMessage(BaseModel):
     server_name: str
     server_id: str
     channel_id: str
+
+class PersonaRequest(BaseModel):
+    uid: str
+    tupper_name: str
+    persona: str
+
+class TupperChatRequest(BaseModel):
+    uid: str
+    tupper_name: str
+    context: list[str]
 
 # --- ROTA 1: CHAT GEMINI ---
 @app.post("/chat")
@@ -130,6 +146,15 @@ async def phone_transmit(request: PhoneMessage):
     )
     if result: return result
     return {"status": "ignored"} # Não está em call ou erro
+
+# --- ROTA 5: TUPPER AI ---
+@app.post("/tupper/create")
+async def create_persona(request: PersonaRequest):
+    return tupper_brain.register_persona(request.uid, request.tupper_name, request.persona)
+
+@app.post("/tupper/chat")
+async def chat_tupper(request: TupperChatRequest):
+    return tupper_brain.generate_response(request.uid, request.tupper_name, request.context)
 
 # =======================================================
 # O INICIADOR TEM QUE SER A ÚLTIMA COISA DO ARQUIVO

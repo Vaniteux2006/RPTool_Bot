@@ -59,6 +59,7 @@ module.exports = {
                 .setFooter({ text: `Engine Local | Profundidade: 15` });
 
             await msg.edit({ content: '', embeds: [embed] });
+            console.log("Registrado Comando de Xadrez")
 
         } catch (error) {
             console.error(error);

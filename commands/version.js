@@ -26,5 +26,6 @@ module.exports = {
             .setTimestamp();
 
         message.reply({ embeds: [embed] });
+        console.log("Registrado Checagem de versão")
     },
 };

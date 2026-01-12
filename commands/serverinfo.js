@@ -69,5 +69,6 @@ module.exports = {
         }
 
         message.reply({ embeds: [embed] });
+        console.log("Registrado Checagem de Server")
     },
 };

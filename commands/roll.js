@@ -131,7 +131,8 @@ module.exports = {
             .setDescription(`**[${qtd}d${lados}${textoModificador} : ${listaStr}]**\n No fim, a soma de todos os dados deu: \n **${totalFinal}**`)
             .setFooter({ text: `RPTool v1.100.010-06` })
         ;
-
+        console.log("Registrado Roll")
         return { erro: null, embed: embed };
+        
     }
 };

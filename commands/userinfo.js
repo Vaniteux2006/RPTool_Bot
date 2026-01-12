@@ -54,5 +54,6 @@ module.exports = {
             .setFooter({ text: `RPTool v1.1 • Solicitado por ${message.author.username}` });
 
         message.reply({ embeds: [embed] });
+        console.log("Registrado Checagem de Usuário")
     },
 };

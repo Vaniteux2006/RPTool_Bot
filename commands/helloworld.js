@@ -4,5 +4,6 @@ module.exports = {
     execute(message, args) {
         const ping = Date.now() - message.createdTimestamp;
         message.reply(`Hello World! Conexão de ${ping}ms.`);
+        console.log("Registrado Hello World")
     },
 };

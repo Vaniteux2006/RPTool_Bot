@@ -58,6 +58,7 @@ const { giveRole } = require('./commands/autorole.js');
 const { processMessage } = require('./commands/webhook.js');
 const phoneCommand = require('./commands/phone.js');
 const ReturnVersion = require('./ReturnVersion.js');
+const pythonManager = require('./python_codes/python_manager.js');
 
 // Configurações do Cliente
 const client = new Client({
@@ -100,12 +101,28 @@ client.once(Events.ClientReady, readyClient => {
 client.commands = new Collection();
 const prefix = "rp!";
 
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
-for (const file of commandFiles) {
-    const command = require(`./commands/${file}`);
-    client.commands.set(command.name, command);
+function loadCommands(dir) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+            loadCommands(fullPath);
+        } else if (file.endsWith('.js')) {
+            // AQUI ESTÁ A CORREÇÃO: path.resolve()
+            // Isso transforma "commands\ai.js" em "C:\Users\...\commands\ai.js"
+            // O require nunca erra com caminho completo.
+            const command = require(path.resolve(fullPath));
+            
+            // Proteção extra: só carrega se tiver nome
+            if (command.name) {
+                client.commands.set(command.name, command);
+                console.log(`✅ Comando carregado: ${command.name} de ${fullPath}`);
+            }
+        }
+    }
 }
-
+loadCommands('./commands');
 // ====================================================
 // EVENTO: ENTRADA DE MEMBRO
 // ====================================================
@@ -125,6 +142,57 @@ client.on('messageCreate', async message => {
     // 2. TELEFONE 
     if (await phoneCommand.processPhoneMessage(message)) return;
 
+    if (global.aiSessions && global.aiSessions[message.channel.id]) {
+        const session = global.aiSessions[message.channel.id];
+
+        // Se NÃO tem o gatilho, apenas guarda no buffer
+        if (!message.content.includes(':ai')) {
+            session.buffer.push(`${message.author.username}: ${message.content}`);
+            if (session.buffer.length > 20) session.buffer.shift();
+        } 
+        else {
+            // É O GATILHO! Hora de responder.
+            const cleanContent = message.content.replace(':ai', '').trim();
+            session.buffer.push(`${message.author.username} (USER): ${cleanContent}`);
+            
+            // Avisa que está pensando
+            const thinkingMsg = await message.channel.send(`🧠 **${session.tupperName}** está pensando...`);
+
+            try {
+                await pythonManager.ensureConnection();
+                
+                const payload = {
+                    uid: session.ownerId,
+                    tupper_name: session.tupperName,
+                    context: session.buffer
+                };
+
+                const response = await fetch('http://127.0.0.1:8000/tupper/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                // Apaga o "pensando" e manda a resposta
+                await thinkingMsg.delete();
+                
+                if (data.reply) {
+                    // Opcional: Adiciona a resposta da própria IA no buffer pra ela lembrar o que disse
+                    session.buffer.push(`${session.tupperName}: ${data.reply}`);
+                    message.channel.send(`**${session.tupperName}:** ${data.reply}`);
+                } else {
+                    message.channel.send(`❌ Erro: ${data.error || "IA muda."}`);
+                }
+
+            } catch (e) {
+                console.error(e);
+                thinkingMsg.edit("❌ Erro de conexão com o cérebro.");
+            }
+            return; // Impede de processar outros comandos
+        }
+    }
     // 3. SISTEMA DE DADOS (ROLL)
     if (await processRoll(message)) return;
 

@@ -4,7 +4,7 @@ const path = require('path');
 let pythonProcess = null;
 let shutdownTimer = null;
 const PYTHON_PORT = 8000;
-const SHUTDOWN_DELAY = 5 * 60 * 100000000; 
+const SHUTDOWN_DELAY = 60 * 60 * 1000; 
 
 const waitForServer = async (retries = 20) => {
     for (let i = 0; i < retries; i++) {
