@@ -4,18 +4,15 @@ import google.generativeai as genai
 from pathlib import Path
 
 # --- CONFIGURAÇÃO ---
-MODEL_NAME = 'gemini-3-flash-preview' # <--- MUDE AQUI SE TIVER O V3
+MODEL_NAME = 'gemini-3-flash-preview' 
 
 class TupperBrain:
     def __init__(self):
-        # Caminho: commands/tupper/ -> ... -> Data/ai_memory.json
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.db_path = os.path.join(current_dir, "..", "..", "Data", "ai_memory.json")
         self.memory_db = {}
         self.load_memory()
         
-        # Configura Gemini (Pega a key do ambiente via api.py ou os.environ)
-        # Assume que a API Key já está carregada pelo api.py
         self.model = genai.GenerativeModel(MODEL_NAME)
 
     def load_memory(self):
@@ -34,71 +31,73 @@ class TupperBrain:
 
     # --- FUNÇÕES ---
 
+    def add_memory(self, uid, tupper_name, memory_text):
+        key = f"{uid}_{tupper_name}"
+        if key not in self.memory_db:
+            self.memory_db[key] = { "persona": "Indefinida", "long_term_memories": [] }
+        if "long_term_memories" not in self.memory_db[key]:
+            self.memory_db[key]["long_term_memories"] = []
+            
+        self.memory_db[key]["long_term_memories"].append(memory_text)
+        self.save_memory()
+        return {"status": "ok", "msg": "Memória implantada."}
+
     def register_persona(self, uid, tupper_name, persona_text):
         key = f"{uid}_{tupper_name}"
         if key not in self.memory_db:
-            self.memory_db[key] = {
-                "persona": persona_text,
-                "long_term_memories": [] # Lista de strings (fatos aprendidos)
-            }
+            self.memory_db[key] = { "persona": persona_text, "long_term_memories": [] }
         else:
             self.memory_db[key]["persona"] = persona_text
-        
         self.save_memory()
-        return {"status": "ok", "msg": "Persona registrada com sucesso!"}
+        return {"status": "ok", "msg": "Persona registrada!"}
 
     def generate_response(self, uid, tupper_name, context_messages):
-        """
-        uid: ID do dono do tupper
-        tupper_name: Nome do char
-        context_messages: Lista de strings com o chat recente (Buffer do Node)
-        """
         key = f"{uid}_{tupper_name}"
         if key not in self.memory_db:
-            return {"error": "Tupper sem persona definida. Use rp!create ai..."}
+            return {"error": "Tupper sem persona."}
 
         data = self.memory_db[key]
-        persona = data["persona"]
-        memories = data["long_term_memories"]
+        persona = data.get("persona", "Personalidade não encontrada.")
+        memories = data.get("long_term_memories", [])
 
-        # 1. PROCESSAMENTO DE MEMÓRIA (Resumir o chat recente se for grande)
-        # Se o contexto for muito grande, a gente pede pra IA extrair fatos antes de responder
-        # Por simplicidade na V1, vamos pular a extração complexa e focar na resposta
-        
-        # 2. PROMPT DE GERAÇÃO
+        # PROMPT COM INSTRUÇÃO DE SILÊNCIO
         prompt = f"""
         [PERSONA DO PERSONAGEM]
         {persona}
 
-        [MEMÓRIAS DE LONGO PRAZO (O que você já sabe)]
+        [MEMÓRIAS DE LONGO PRAZO]
         {chr(10).join(f"- {m}" for m in memories)}
 
-        [CONTEXTO ATUAL (Chat recente)]
+        [CHAT RECENTE]
         {chr(10).join(context_messages)}
 
-        [INSTRUÇÃO]
-        Responda a última mensagem do contexto como o personagem descrito.
-        Mantenha o tom da persona. Não use emojis se a persona for séria.
-        Se aprendeu algo MUITO importante sobre o usuário agora, adicione uma tag [MEMORY: o que aprendeu] no final da resposta (invisível ao usuário).
+        [INSTRUÇÃO CRÍTICA]
+        Você está em um chat (Discord). Analise a ÚLTIMA mensagem do contexto.
+        1. Se a mensagem NÃO for direcionada a você, ou for um assunto que seu personagem ignoraria: RESPONDA APENAS "[NO_REPLY]" (sem aspas).
+        2. Se for para você ou se você tiver algo importante a dizer: Responda como o personagem.
+        3. Se aprender algo novo importante sobre o usuário: Adicione [MEMORY: fato] ao final da resposta.
         """
 
         try:
             response = self.model.generate_content(prompt)
-            raw_text = response.text
+            raw_text = response.text.strip()
             
-            # Lógica simples de memória: Se a IA decidiu salvar algo
+            # FILTRO DE SILÊNCIO
+            if raw_text == "[NO_REPLY]" or raw_text == "NO_REPLY":
+                return {"reply": None} 
+
             final_reply = raw_text
+            
+            # Processa Memória
             if "[MEMORY:" in raw_text:
                 parts = raw_text.split("[MEMORY:")
                 final_reply = parts[0].strip()
                 new_memory = parts[1].replace("]", "").strip()
-                
-                # Salva a memória nova
-                if new_memory not in memories:
+                if new_memory and new_memory not in memories:
                     memories.append(new_memory)
                     self.save_memory()
 
-            return {"reply": final_reply, "new_memories": len(memories)}
+            return {"reply": final_reply}
 
         except Exception as e:
             return {"reply": f"// Erro cerebral: {str(e)}"}

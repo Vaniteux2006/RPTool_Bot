@@ -2,10 +2,10 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = {
-    name: 'webhook', // Nome do comando (necessário pro loader do index.js)
+    name: 'webhook', 
     description: 'Sistema de Tuppers/Webhooks',
     
-    // PARTE 1: Se alguém digitar rp!webhook
+    // PARTE 1: Se alguém digitar rp!webhook (Ajuda básica)
     execute(message, args) {
         message.reply("🎭 Este sistema é automático! Apenas digite o prefixo do seu personagem para usá-lo.");
     },
@@ -27,8 +27,20 @@ module.exports = {
 
         if (!tupperFound) return false; // Retorna FALSE: "Não era comigo, pode seguir"
 
-        // --- ACHOU! Executa a lógica ---
+        // ============================================================
+        // 🛑 TRAVA DE SEGURANÇA DA IA 🛑
+        // ============================================================
+        // Se o tupper é uma IA, o sistema de webhook deve IGNORAR.
+        // Isso permite que o código no index.js processe o "prefixo:ai".
+        if (tupperFound.ai_enabled) {
+            return false; // Deixa passar pro index.js
+        }
+        // ============================================================
+
+        // --- ACHOU (E é normal)! Executa a lógica ---
         let textContent = message.content.slice(tupperFound.prefix.length).trim();
+        
+        // Remove os separadores (: ou espaço) do início da mensagem
         if (textContent.startsWith(':') || textContent.startsWith(' ')) {
             textContent = textContent.substring(1).trim();
         }
