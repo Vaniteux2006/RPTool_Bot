@@ -8,21 +8,31 @@ class ChessBot:
         self.load_engine()
 
     def load_engine(self):
-        # Como o script e o executável estão JUNTOS na pasta Commands/chess,
-        # basta pegar o diretório atual do arquivo.
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        exe_path = os.path.join(current_dir, "stockfish.exe")
+        
+        # Tenta achar o executável local (Windows ou Linux binário local)
+        local_exe = os.path.join(current_dir, "stockfish.exe" if os.name == 'nt' else "stockfish")
+        
+        # Caminho padrão do Linux instalado via apt
+        system_exe = "/usr/games/stockfish" 
 
-        print(f"[XADREZ] Procurando Stockfish em: {exe_path}")
+        path_to_use = None
 
-        if os.path.exists(exe_path):
+        if os.path.exists(local_exe):
+            path_to_use = local_exe
+            print(f"[XADREZ] Usando binário local: {path_to_use}")
+        elif os.path.exists(system_exe):
+            path_to_use = system_exe
+            print(f"[XADREZ] Usando Stockfish do sistema: {path_to_use}")
+        
+        if path_to_use:
             try:
-                self.engine = Stockfish(path=exe_path, depth=15, parameters={"Threads": 2, "Hash": 16})
+                self.engine = Stockfish(path=path_to_use, depth=15, parameters={"Threads": 2, "Hash": 16})
                 print("[XADREZ] Stockfish carregado e pronto!")
             except Exception as e:
                 print(f"[XADREZ] Erro ao iniciar binario: {e}")
         else:
-            print("[XADREZ] ERRO CRÍTICO: Não achei o stockfish.exe aqui do meu lado.")
+            print("[XADREZ] ERRO CRÍTICO: Não achei o Stockfish (nem local, nem no sistema).")
 
     def analyze(self, fen):
         if not self.engine:

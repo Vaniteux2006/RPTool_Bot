@@ -159,6 +159,10 @@ async def add_memories(request: MemoryRequest):
     # Chama a função que você já criou no tupper_logic.py
     return tupper_brain.add_memory(request.uid, request.tupper_name, request.memory_text)
 
+
 # =======================================================
+# O INICIADOR TEM QUE SER A ÚLTIMA COISA DO ARQUIVO
+# =======================================================
+
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -25,27 +25,41 @@ module.exports = {
         if (!pythonProcess) {
             console.log("🐍 [MANAGER] Iniciando servidor Python...");
             
-            // ATUALIZADO: Arquivo está na mesma pasta agora
             const scriptPath = path.join(__dirname, 'api.py');
             
+            // DETECTA O SISTEMA OPERACIONAL
+            // Se for Windows ('win32'), tenta 'python' ou 'py'. 
+            // Se for Linux, usa 'python3'.
+            const command = process.platform === 'win32' ? 'python' : 'python3';
+            
             try {
-                pythonProcess = spawn('python', [scriptPath]);
+                // Tenta iniciar com o comando principal
+                pythonProcess = spawn(command, [scriptPath]);
                 
                 pythonProcess.on('error', (err) => {
-                    console.log("⚠️ [MANAGER] 'python' falhou. Tentando 'py'...");
-                    pythonProcess = spawn('py', [scriptPath]);
+                    console.log(`⚠️ [MANAGER] '${command}' falhou. Tentando fallback...`);
+                    // Fallback para Windows caso 'python' falhe
+                    if (process.platform === 'win32') {
+                         pythonProcess = spawn('py', [scriptPath]);
+                    } else {
+                        // Fallback para Linux (as vezes é só 'python')
+                        pythonProcess = spawn('python', [scriptPath]);
+                    }
                 });
             } catch (e) {
                 console.error("❌ [MANAGER] Erro crítico no spawn:", e);
             }
 
-            pythonProcess.stdout.on('data', (data) => console.log(`[PYTHON]: ${data}`));
-            pythonProcess.stderr.on('data', (data) => console.error(`[PYTHON ERRO]: ${data}`));
-            
-            pythonProcess.on('close', (code) => {
-                console.log(`🐍 Python desligado (Código ${code})`);
-                pythonProcess = null;
-            });
+            // O resto continua igual...
+            if (pythonProcess) {
+                pythonProcess.stdout.on('data', (data) => console.log(`[PYTHON]: ${data}`));
+                pythonProcess.stderr.on('data', (data) => console.error(`[PYTHON ERRO]: ${data}`));
+                
+                pythonProcess.on('close', (code) => {
+                    console.log(`🐍 Python desligado (Código ${code})`);
+                    pythonProcess = null;
+                });
+            }
 
             const isOnline = await waitForServer();
             if (!isOnline) {

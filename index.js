@@ -9,6 +9,7 @@ const { processMessage } = require('./commands/webhook.js');
 const phoneCommand = require('./commands/phone.js');
 const ReturnVersion = require('./ReturnVersion.js');
 const pythonManager = require('./python_codes/python_manager.js');
+const { checkBirthdays } = require('./commands/birthday.js');
 
 const client = new Client({
     intents: [
@@ -24,6 +25,15 @@ client.once(Events.ClientReady, readyClient => {
     const statusArray = [
         { content: `Rodando v${ReturnVersion()} ⚙️`, type: ActivityType.Playing },
         { content: 'rp!help para comandos! 📚', type: ActivityType.Listening },
+        { content: 'Made In Porto Alegre, RS 🧉', type: ActivityType.Playing },
+        { content: 'assistindo hentai 😳', type: ActivityType.Playing },
+        { content: 'BIG BROTHER IS WATCHING YOU 👁️', type: ActivityType.Playing },
+        { content: '9 anos, vizinho, [...] 💀', type: ActivityType.Listening },
+        { content: 'Ouçam Linkin Park 🎸', type: ActivityType.Listening },
+        { content: 'When I was, a young boy... 🥀', type: ActivityType.Playing },
+        { content: 'My father took me into the city... 🥀', type: ActivityType.Playing },
+        { content: '... To see a marching band 🥀', type: ActivityType.Playing },
+        { content: 'Temos Stockfish! 🐟 (rp!chess)', type: ActivityType.Playing }
     ];
     let option = 0;
     setInterval(() => {
@@ -124,6 +134,9 @@ client.on('messageCreate', async message => {
             session.buffer.push(`${message.author.username}: ${message.content}`);
             if (session.buffer.length > 20) session.buffer.shift();
         }
+
+        setInterval(() => checkBirthdays(client), 60000);
+        checkBirthdays(client);
     }
 
     async function sendAsWebhook(channel, name, avatar, content) {

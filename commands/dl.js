@@ -118,7 +118,12 @@ module.exports = {
         }
 
         // === ROTA 2: PADRÃO (Insta/YouTube via yt-dlp) ===
-        const ytDlpPath = path.join(__dirname, 'dl/yt-dlp.exe');
+        let ytDlpPath = path.join(__dirname, 'dl/yt-dlp.exe'); // Padrão Windows Local
+        
+        if (process.platform !== 'win32') {
+            ytDlpPath = 'yt-dlp'; 
+        }
+
         const info = await checarExtensao(url, ytDlpPath);
 
         // CASO A: VÍDEO (YouTube / Insta Reels)
