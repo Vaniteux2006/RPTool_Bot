@@ -1,158 +1,290 @@
+const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
-async function checkBirthdays(client) {
-    const dbPath = path.join(__dirname, '../Data/birthdays.json');
+// Caminho do arquivo JSON
+const dbPath = path.join(__dirname, '../Data/birthdays.json');
+
+// --- FUNÇÕES AUXILIARES DE BANCO DE DADOS ---
+function lerDB() {
+    try {
+        if (!fs.existsSync(dbPath)) return {};
+        const raw = fs.readFileSync(dbPath, 'utf8');
+        return JSON.parse(raw);
+    } catch (e) {
+        return {};
+    }
+}
+
+function salvarDB(data) {
+    // Garante que a pasta existe
+    const dir = path.dirname(dbPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     
-    // Se não tem banco de dados, nem tenta ler
-    if (!fs.existsSync(dbPath)) return;
+    fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
+}
 
-    let db = {};
-    try { db = JSON.parse(fs.readFileSync(dbPath, 'utf8')); } catch (e) { return; }
+// --- LÓGICA DO PLACAR (O CORAÇÃO DO SISTEMA) ---
+// Essa função checa o dia, checa a mensagem e atualiza tudo.
+async function atualizarPlacar(client, guildId) {
+    let db = lerDB();
+    const config = db[guildId];
 
+    if (!config || !config.channelId) return; // Nada configurado pra esse server
+
+    // 1. Definições de Data e Hora
     const nowUTC = new Date();
-    let dbChanged = false;
+    // Offset -3 (Brasil) padrão, mas poderia vir do config
+    const tzOffset = -3; 
+    const serverTime = new Date(nowUTC.getTime() + (tzOffset * 3600000) + (nowUTC.getTimezoneOffset() * 60000));
+    
+    const todayDay = serverTime.getDate();
+    const todayMonth = serverTime.getMonth() + 1;
+    const currentYear = serverTime.getFullYear();
+    const isLeapYear = (currentYear % 4 === 0 && currentYear % 100 !== 0) || (currentYear % 400 === 0);
 
-    // Para cada servidor configurado
-    for (const key in db) {
-        const config = db[key];
-        const [guildId, channelId] = key.split('-');
+    // 2. Filtra quem faz aniversário HOJE
+    const birthdaysToday = config.entries.filter(e => {
+        if (e.day === todayDay && e.month === todayMonth) return true;
+        // Lógica para nascidos em 29/02 em anos não bissextos (comemoram dia 28/02 ou 01/03, aqui pus 28)
+        if (!isLeapYear && todayDay === 28 && todayMonth === 2 && e.day === 29 && e.month === 2) return true;
+        return false;
+    });
 
-        // Lógica de Fuso Horário e Bissexto (v2.0 blindada)
-        const tzOffset = config.timezone !== undefined ? config.timezone : -3;
-        const serverTime = new Date(nowUTC.getTime() + (tzOffset * 3600000) + (nowUTC.getTimezoneOffset() * 60000));
-        
-        const todayDay = serverTime.getDate();
-        const todayMonth = serverTime.getMonth() + 1;
-        const currentYear = serverTime.getFullYear();
-        const isLeapYear = (currentYear % 4 === 0 && currentYear % 100 !== 0) || (currentYear % 400 === 0);
+    // 3. Monta o Texto do Placar
+    let newText = "📅 **Placar de Aniversários:**\nNenhum aniversariante hoje. O dia está tranquilo.";
+    
+    if (birthdaysToday.length > 0) {
+        newText = "🎉 **HOJE É DIA DE FESTA!** 🎉\n\n";
+        birthdaysToday.forEach(b => {
+            let line = `🎂 **${b.name.toUpperCase()}**`;
+            
+            // Menciona o usuário se tiver ID válido (não for NPC)
+            if (b.aniversarianteId && b.aniversarianteId.match(/^\d+$/)) {
+                line += ` (<@${b.aniversarianteId}>)`;
+            }
 
-        // Filtra aniversariantes
-        const birthdaysToday = config.entries.filter(e => {
-            if (e.day === todayDay && e.month === todayMonth) return true;
-            if (!isLeapYear && todayDay === 28 && todayMonth === 2 && e.day === 29 && e.month === 2) return true;
-            return false;
+            if (b.day === 29 && b.month === 2 && !isLeapYear) line += " (Antecipado de 29/fev 🐸)";
+            if (b.year) line += ` • Completando **${currentYear - b.year} anos**`;
+            
+            line += `\n*(Registrado por <@${b.requesterId}>)*`;
+            newText += line + "\n";
         });
+    }
 
-        // 1. Monta o Texto
-        let newText = "📅 **Aniversários:**\nNenhum aniversário por hoje.";
-        if (birthdaysToday.length > 0) {
-            newText = "🎉 **HOJE É DIA DE FESTA!** 🎉\n\n";
-            birthdaysToday.forEach(b => {
-                let line = `🎂 **${b.name}**`;
-                if (b.day === 29 && b.month === 2 && !isLeapYear) line += " (Antecipado 🐸)";
-                if (b.year) line += ` (${currentYear - b.year} anos)`;
-                newText += line + "\n";
-            });
+    // 4. Manutenção da Mensagem (A Parte da Estabilidade)
+    try {
+        const channel = await client.channels.fetch(config.channelId);
+        if (!channel) return; // Canal foi deletado, paciência
+
+        let targetMsg = null;
+        
+        // Tenta achar a mensagem antiga
+        if (config.messageId) {
+            try {
+                targetMsg = await channel.messages.fetch(config.messageId);
+            } catch (e) {
+                targetMsg = null; // Mensagem não existe mais (foi apagada)
+            }
         }
 
-        // 2. Atualiza Placar (Usando o client passado por parâmetro)
-        try {
-            const channel = await client.channels.fetch(channelId);
-            if (channel) {
-                try {
-                    const msg = await channel.messages.fetch(config.messageId);
-                    if (msg.content !== newText) await msg.edit(newText);
-                } catch (err) {
-                    console.log(`[BIRTHDAY] Recriando placar em ${channelId}`);
-                    const newMsg = await channel.send(newText);
-                    config.messageId = newMsg.id;
-                    dbChanged = true;
-                }
+        // Se não achou a mensagem, cria uma nova
+        if (!targetMsg) {
+            console.log(`[BIRTHDAY] Criando novo placar em ${guildId}...`);
+            targetMsg = await channel.send(newText);
+            config.messageId = targetMsg.id; // Salva o novo ID
+            salvarDB(db); // Atualiza o JSON com o novo ID
+        } else {
+            // Se achou, só edita se o texto mudou (pra não gastar API)
+            if (targetMsg.content !== newText) {
+                await targetMsg.edit(newText);
             }
-        } catch (e) {}
+        }
 
-        // 3. Manda DM
+        // 5. Enviar DM (Notificação) - Só envia 1 vez por ano
         for (const b of birthdaysToday) {
             if (b.lastNotifiedYear < currentYear) {
                 try {
-                    const user = await client.users.fetch(b.requesterId);
-                    let msg = `🎈 **HOJE É ANIVERSÁRIO DE ${b.name.toUpperCase()}!** AVISE O PESSOAL DISSO!`;
-                    if (b.year) msg += `\n(Fazendo ${currentYear - b.year} anos)`;
-                    await user.send(msg);
+                    // Manda DM pro Requester avisando pra dar parabéns
+                    const requester = await client.users.fetch(b.requesterId);
+                    let dmMsg = `🎈 **PSIUU! Hoje é aniversário de ${b.name}!**\nVocê pediu pra eu avisar. Não esqueça de dar parabéns!`;
+                    if (b.year) dmMsg += `\n(Fazendo ${currentYear - b.year} anos)`;
+                    
+                    await requester.send(dmMsg);
                     b.lastNotifiedYear = currentYear;
-                    dbChanged = true;
-                } catch (e) { console.log(`[BIRTHDAY] Falha DM: ${b.requesterId}`); }
+                    salvarDB(db); // Salva que já avisou esse ano
+                } catch (e) {
+                    // DM fechada ou usuário saiu
+                }
             }
         }
-    }
 
-    if (dbChanged) fs.writeFileSync(dbPath, JSON.stringify(db, null, 4));
+    } catch (error) {
+        console.error(`[BIRTHDAY ERROR] Server ${guildId}:`, error.message);
+    }
 }
 
+// --- FUNÇÃO EXPORTADA PRO INDEX.JS ---
+async function checkBirthdays(client) {
+    const db = lerDB();
+    for (const guildId in db) {
+        // Roda a verificação para cada servidor configurado
+        await atualizarPlacar(client, guildId);
+    }
+}
+
+
+// --- COMANDOS E EXPORTS ---
 module.exports = {
     name: 'birthday',
-    description: 'Gerencia o sistema de Aniversários (Billboard)',
+    description: 'Gerencia Aniversários (Check, Reset, Add)',
+    checkBirthdays, // Exporta a função pro index.js usar no setInterval
+
     async execute(message, args) {
+        const subCommand = args[0] ? args[0].toLowerCase() : null;
+        const guildId = message.guild.id;
+
+        // ==========================================================
+        // 1. COMANDO: CHECK (Listar)
+        // ==========================================================
+        if (subCommand === 'check') {
+            const db = lerDB();
+            const config = db[guildId];
+
+            if (!config || config.entries.length === 0) {
+                return message.reply("📭 Ninguém faz aniversário neste servidor (ou o banco está vazio).");
+            }
+
+            // Ordena por Mês e Dia
+            const sorted = config.entries.sort((a, b) => {
+                if (a.month !== b.month) return a.month - b.month;
+                return a.day - b.day;
+            });
+
+            // Monta a lista
+            const listaTxt = sorted.map(e => {
+                const yearStr = e.year ? `/${e.year}` : '';
+                return `• **${e.day.toString().padStart(2, '0')}/${e.month.toString().padStart(2, '0')}${yearStr}** - ${e.name} (<@${e.requesterId}>)`;
+            }).join('\n');
+
+            const embed = new EmbedBuilder()
+                .setColor(0xFF007F) // Rosa Choque
+                .setTitle(`🎂 Lista de Aniversariantes - ${message.guild.name}`)
+                .setDescription(listaTxt.substring(0, 4000)) // Limite do Discord
+                .setFooter({ text: "Use rp!birthday Nome Data #canal para adicionar" });
+
+            return message.reply({ embeds: [embed] });
+        }
+
+        // ==========================================================
+        // 2. COMANDO: RESET (Zerar Tudo)
+        // ==========================================================
+        if (subCommand === 'reset') {
+            // Permissão de Admin Necessária
+            if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return message.reply("⛔ **Apenas Administradores podem resetar o sistema de aniversários.**");
+            }
+
+            let db = lerDB();
+            if (!db[guildId]) return message.reply("⚠️ Não há nada para resetar aqui.");
+
+            // Tenta apagar a mensagem de placar antiga pra não ficar lixo
+            try {
+                const canal = await message.guild.channels.fetch(db[guildId].channelId);
+                const msg = await canal.messages.fetch(db[guildId].messageId);
+                if (msg) await msg.delete();
+            } catch (e) { /* Ignora se já não existe */ }
+
+            delete db[guildId];
+            salvarDB(db);
+
+            return message.reply("💥 **Sistema resetado!** Todos os aniversários deste servidor foram apagados e o placar removido.");
+        }
+
+        // ==========================================================
+        // 3. COMANDO: ADD (Adicionar Aniversário)
         // Sintaxe: rp!birthday Nome Data #canal
+        // ==========================================================
         
-        // 1. Achar o canal (pode ser menção ou ID no final)
+        // A. Achar o canal (último argumento ou menção)
         const channel = message.mentions.channels.first() || message.guild.channels.cache.get(args[args.length - 1]);
-        if (!channel) return message.reply("⚠️ Faltou o canal! Ex: `rp!birthday Fulano 13/04 #aniversarios`");
+        if (!channel) return message.reply("⚠️ **Erro:** Faltou o canal no final! Ex: `rp!birthday Bruno 15/09 #aniversarios`");
 
-        // 2. Achar a data (Regex para DD/MM ou DD/MM/AAAA)
+        // B. Achar a data (Regex busca DD/MM ou DD/MM/AAAA)
         const dateRegex = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/;
-        let dateStr = null;
         let dateIndex = -1;
+        let day, month, year = null;
 
-        // Varre os argumentos procurando algo que pareça uma data
         for (let i = 0; i < args.length; i++) {
-            if (dateRegex.test(args[i])) {
-                dateStr = args[i];
+            const match = args[i].match(dateRegex);
+            if (match) {
+                day = parseInt(match[1]);
+                month = parseInt(match[2]);
+                if (match[3]) year = parseInt(match[3]);
                 dateIndex = i;
                 break;
             }
         }
 
-        if (!dateStr) return message.reply("⚠️ Data inválida! Use o formato **DD/MM** ou **DD/MM/AAAA**.");
+        if (dateIndex === -1) return message.reply("⚠️ **Erro:** Data inválida! Use o formato **DD/MM** ou **DD/MM/AAAA**.");
 
-        // 3. O que sobrou é o Nome (Remove a data e o canal da lista de palavras)
-        const nameArgs = args.filter((arg, index) => index !== dateIndex && !arg.includes(channel.id));
-        const name = nameArgs.join(" ").replace(/<#\d+>/g, "").trim();
+        // Validação básica de data
+        if (month < 1 || month > 12 || day < 1 || day > 31) return message.reply("⚠️ **Erro:** Data impossível.");
 
-        if (!name) return message.reply("⚠️ Faltou o nome do aniversariante!");
-
-        // 4. Salvar no Banco de Dados
-        const dbPath = path.join(__dirname, '../Data/birthdays.json');
+        // C. O que sobrou é o Nome (Remove data e canal da lista)
+        // Também detecta se o "Nome" é uma menção (@User) para salvar o ID do aniversariante
+        const entries = args.filter((_, index) => index !== dateIndex && !args[index].includes(channel.id));
+        const nameClean = entries.join(" ").replace(/<@!?\d+>/g, "").trim(); // Nome sem a menção
         
-        // Garante que o arquivo existe
-        if (!fs.existsSync(path.dirname(dbPath))) fs.mkdirSync(path.dirname(dbPath));
-        let db = {};
-        if (fs.existsSync(dbPath)) {
-            try { db = JSON.parse(fs.readFileSync(dbPath, 'utf8')); } catch(e) {}
+        let targetId = "NPC"; // ID padrão se for só texto
+        const mentionedUser = message.mentions.users.first();
+        
+        // Se o usuário marcou alguém no "Nome", usamos o ID dele, senão usamos o nome limpo
+        // Ex: rp!birthday @Vaniteux 20/05 -> ID do Vaniteux
+        // Ex: rp!birthday Minha Mãe 20/05 -> ID "NPC"
+        if (mentionedUser && args.join(" ").includes(mentionedUser.id)) {
+            targetId = mentionedUser.id;
         }
 
-        const key = `${message.guild.id}-${channel.id}`; // Chave única por Servidor+Canal
-        
-        if (!db[key]) db[key] = { messageId: null, entries: [] };
+        // Nome final pra exibição (Se não tiver texto limpo, usa o username do mencionado)
+        const finalName = nameClean || (mentionedUser ? mentionedUser.username : "Desconhecido");
 
-        // Parse da data
-        const match = dateStr.match(dateRegex);
-        const day = parseInt(match[1]);
-        const month = parseInt(match[2]);
-        const year = match[3] ? parseInt(match[3]) : null;
+        // D. Salvar no Banco
+        let db = lerDB();
 
-        db[key].entries.push({
-            requesterId: message.author.id,
-            name: name,
-            day: day,
-            month: month,
-            year: year,
-            lastNotifiedYear: 0 // Pra saber se já mandamos DM esse ano
-        });
-
-        // 5. Verifica se já existe o Placar (Placeholder)
-        // Se não existir, cria agora.
-        if (!db[key].messageId) {
-            try {
-                const sentMsg = await channel.send("📅 **Aniversários:**\nNenhum aniversário por hoje.");
-                db[key].messageId = sentMsg.id;
-            } catch (e) {
-                return message.reply(`❌ Erro: Não consegui enviar mensagem em ${channel}. Verifique minhas permissões!`);
+        // Se o server não existe, cria a estrutura
+        if (!db[guildId]) {
+            db[guildId] = {
+                serverId: guildId, // Redundante mas você pediu
+                channelId: channel.id,
+                messageId: null,
+                entries: []
+            };
+        } else {
+            // Se mudou o canal, atualiza
+            if (db[guildId].channelId !== channel.id) {
+                db[guildId].channelId = channel.id;
+                db[guildId].messageId = null; // Força criar msg nova no novo canal
             }
         }
 
-        fs.writeFileSync(dbPath, JSON.stringify(db, null, 4));
-        message.reply(`✅ Aniversário de **${name}** (${dateStr}) registrado em ${channel}!`);
+        // Adiciona a entrada
+        db[guildId].entries.push({
+            name: finalName,
+            aniversarianteId: targetId, // ID do aniversariante
+            day: day,
+            month: month,
+            year: year,
+            requesterId: message.author.id, // ID de quem fez o comando
+            lastNotifiedYear: 0
+        });
+
+        salvarDB(db);
+
+        // E. Força atualização IMEDIATA do placar
+        await message.reply(`✅ Registrado! **${finalName}** em **${day}/${month}**. Atualizando placar...`);
+        
+        // CORREÇÃO AQUI: Passamos 'message.client' em vez de 'client'
+        await atualizarPlacar(message.client, guildId);
     }
 };
