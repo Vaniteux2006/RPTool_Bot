@@ -52,12 +52,14 @@ const { Client, GatewayIntentBits, Collection, ActivityType, Events } = require(
 const fs = require('fs'); 
 const path = require('path');
 
+
 // --- IMPORTAÇÕES DOS SISTEMAS ---
 const { processRoll } = require('./commands/roll.js'); 
 const { giveRole } = require('./commands/autorole.js');
 const { processMessage } = require('./commands/webhook.js');
 const phoneCommand = require('./commands/phone.js');
 const ReturnVersion = require('./ReturnVersion.js');
+const { trackMessage } = require('./commands/messageTracker.js');
 
 // Configurações do Cliente
 const client = new Client({
@@ -108,6 +110,13 @@ client.on('guildMemberAdd', async member => {
 // ====================================================
 client.on('messageCreate', async message => {
     if (message.author.bot) return; 
+
+    // --- NOVO: RASTREADOR DE STATS ---
+    try {
+        await trackMessage(message);
+    } catch (err) {
+        console.error("Erro ao salvar stats:", err);
+    }
 
     // 1. SISTEMA DE TUPPER (WEBHOOK)
     if (await processMessage(message, client)) return;
