@@ -1,4 +1,4 @@
-const pythonManager = require('../../python_codes/python_manager.js')
+const pythonManager = require('../python_codes/python_manager.js')
 
 module.exports = {
     name: 'ai',
