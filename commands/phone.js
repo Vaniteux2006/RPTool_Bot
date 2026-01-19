@@ -1,16 +1,64 @@
+const { SlashCommandBuilder } = require('discord.js');
 const pythonManager = require('../python_codes/python_manager.js');
 
 module.exports = {
     name: 'phone',
     description: 'Sistema de Telefone Inter-Servidores',
     
+    // --- ESTRUTURA SLASH ---
+    data: new SlashCommandBuilder()
+        .setName('phone')
+        .setDescription('Telefone Inter-Servidores')
+        .addSubcommand(sub => 
+            sub.setName('call')
+                .setDescription('Liga para um servidor')
+                .addStringOption(op => op.setName('alvo').setDescription('ID ou Nome do servidor').setRequired(true)))
+        .addSubcommand(sub => 
+            sub.setName('register')
+                .setDescription('Instala o telefone neste canal')
+                .addStringOption(op => op.setName('nome').setDescription('Nome público do local').setRequired(false)))
+        .addSubcommand(sub => sub.setName('accept').setDescription('Atende uma chamada'))
+        .addSubcommand(sub => sub.setName('decline').setDescription('Recusa uma chamada'))
+        .addSubcommand(sub => sub.setName('end').setDescription('Desliga a chamada'))
+        .addSubcommand(sub => sub.setName('group').setDescription('Pede para entrar na chamada em grupo')
+             .addStringOption(op => op.setName('alvo').setDescription('ID ou Nome de quem já está na call').setRequired(true))),
+
+    // --- ADAPTADOR SLASH ---
+    async executeSlash(interaction) {
+        const sub = interaction.options.getSubcommand();
+        const args = [sub]; 
+
+        if (sub === 'call' || sub === 'group') {
+            args.push(interaction.options.getString('alvo')); 
+        }
+        else if (sub === 'register') {
+            const nome = interaction.options.getString('nome');
+            if (nome) args.push(nome);
+        }
+
+        const fakeMessage = {
+            content: `rp!phone ${args.join(' ')}`,
+            author: interaction.user,
+            guild: interaction.guild,
+            channel: interaction.channel,
+            client: interaction.client, 
+            reply: async (payload) => {
+                if (interaction.replied || interaction.deferred) return interaction.followUp(payload);
+                return interaction.reply(payload);
+            }
+        };
+
+        await this.execute(fakeMessage, args);
+    },
+
+    // --- LÓGICA ORIGINAL (LEGADO) ---
     async execute(message, args) {
         const action = args[0] ? args[0].toLowerCase() : null;
         const serverId = message.guild.id;
         const validActions = ['register', 'call', 'group', 'accept', 'decline', 'end', 'off'];
 
         if (!action || !validActions.includes(action)) {
-            return message.reply("📱 **Telefone:** Use `register [nome], call [id/nome], group, accept, decline, end, off`.");
+            return message.reply("📱 **Telefone:** Use `register, call, group, accept, decline, end`.");
         }
 
         await pythonManager.ensureConnection();
@@ -20,16 +68,13 @@ module.exports = {
         switch (action) {
             case 'register':
                 payload.channel_id = message.channel.id;
-                // Pega o nome se tiver (rp!phone register CidadeAlta)
-                if (args[1]) {
-                    payload.marker = args.slice(1).join(" "); // Junta tudo caso o nome tenha espaço
-                }
+                if (args[1]) payload.marker = args.slice(1).join(" ");
                 break;
 
             case 'call':
             case 'group':
-                const target = args.slice(1).join(" "); // Suporta nomes com espaço
-                if (!target) return message.reply(`⚠️ Digite o ID ou o NOME do servidor alvo.\nEx: \`rp!phone ${action} CidadeAlta\``);
+                const target = args.slice(1).join(" ");
+                if (!target) return message.reply(`⚠️ Digite o ID ou o NOME do servidor alvo.`);
                 payload.target_id = target;
                 break;
         }
@@ -44,18 +89,17 @@ module.exports = {
 
             if (data.error) return message.reply(`❌ **Erro:** ${data.error}`);
             
-            // Tratamento de respostas (Switch Output)
             switch (data.status) {
                 case 'busy':
                     message.reply(data.msg); 
                     break;
                 case 'ringing':
                     message.reply(`📞 **Chamando...** (Aguardando resposta)`);
-                    notifyServer(message.client, data.target_channel, `📞 **TRIM TRIM!** O servidor **${message.guild.name}** está ligando!\nDigite \`rp!phone accept\` para atender.`);
+                    notifyServer(message.client, data.target_channel, `📞 **TRIM TRIM!** O servidor **${message.guild.name}** está ligando!\nDigite \`/phone accept\` para atender.`);
                     break;
                 case 'voting_started':
                     message.reply("🗳️ **Solicitação enviada!** Aguardando votos.");
-                    data.channels.forEach(cId => notifyServer(message.client, cId, `🙋‍♂️ **PEDIDO DE ENTRADA:** O servidor **${message.guild.name}** quer entrar na call!\nDigite \`rp!phone accept\` ou \`rp!phone decline\`.`));
+                    data.channels.forEach(cId => notifyServer(message.client, cId, `🙋‍♂️ **PEDIDO DE ENTRADA:** O servidor **${message.guild.name}** quer entrar na call!\nDigite \`/phone accept\` ou \`/phone decline\`.`));
                     break;
                 case 'vote_registered':
                     message.reply(`✅ **Voto Confirmado!** Faltam **${data.remaining}** aprovações.`);
@@ -93,9 +137,9 @@ module.exports = {
         }
     },
 
-    // --- LISTENER (Atualizado com channel_id) ---
+    // --- LISTENER (CRUCIAL PARA OUVIR MENSAGENS) ---
     async processPhoneMessage(message) {
-        if (message.author.bot || message.content.startsWith('rp!')) return false;
+        if (message.author.bot || message.content.startsWith('rp!') || message.content.startsWith('/')) return false;
         if (message.attachments.size > 0) return false;
 
         try {
@@ -106,7 +150,7 @@ module.exports = {
                 user_name: message.author.username,
                 server_name: message.guild.name,
                 server_id: message.guild.id,
-                channel_id: message.channel.id // ENVIANDO O ID DO CANAL
+                channel_id: message.channel.id // MANTIDO O FIX DO ARQUIVO ANTIGO
             };
 
             const response = await fetch('http://127.0.0.1:8000/phone/transmit', {
@@ -118,7 +162,6 @@ module.exports = {
             const data = await response.json();
 
             if (data.targets && data.targets.length > 0) {
-                //message.react('📡'); 
                 data.targets.forEach(channelId => {
                     notifyServer(message.client, channelId, data.msg);
                 });

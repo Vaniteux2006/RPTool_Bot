@@ -86,6 +86,9 @@ class MemoryRequest(BaseModel):
     tupper_name: str
     memory_text: str
 
+class AnalyticsRequest(BaseModel):
+    period: str
+
 
 # --- ROTA 1: CHAT GENÉRICO ---
 @app.post("/chat")

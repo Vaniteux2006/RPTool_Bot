@@ -1,9 +1,48 @@
-const { EmbedBuilder } = require('discord.js');
-const pythonManager = require('../python_codes/python_manager.js');; // Importa o gerente
+const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
+const pythonManager = require('../python_codes/python_manager.js');
 
 module.exports = {
     name: 'chess',
     description: 'Analisa posições de Xadrez com Stockfish',
+
+    // --- ESTRUTURA SLASH ---
+    data: new SlashCommandBuilder()
+        .setName('chess')
+        .setDescription('Ferramentas de Xadrez')
+        .addSubcommand(sub => 
+            sub.setName('start')
+                .setDescription('Analisa o tabuleiro inicial'))
+        .addSubcommand(sub => 
+            sub.setName('solve')
+                .setDescription('Analisa uma posição específica (FEN)')
+                .addStringOption(op => op.setName('fen').setDescription('Código FEN do tabuleiro').setRequired(true))),
+
+    // --- ADAPTADOR SLASH ---
+    async executeSlash(interaction) {
+        const sub = interaction.options.getSubcommand();
+        const args = [sub]; 
+
+        if (sub === 'solve') {
+            args.push(interaction.options.getString('fen')); 
+        }
+
+        // Fake Message com suporte a Edit
+        const fakeMessage = {
+            author: interaction.user,
+            guild: interaction.guild,
+            channel: interaction.channel,
+            reply: async (content) => {
+                await interaction.reply(content);
+                return {
+                    edit: async (newContent) => interaction.editReply(newContent)
+                };
+            }
+        };
+
+        await this.execute(fakeMessage, args);
+    },
+
+    // --- LÓGICA ORIGINAL (LEGADO) ---
     async execute(message, args) {
         
         const subCommand = args[0];
@@ -16,12 +55,10 @@ module.exports = {
         if (subCommand === 'start') fen = "start";
         if (!fen) return message.reply("⚠️ Você precisa fornecer um código FEN.");
 
-        // Aviso diferente pra mostrar que tá ligando
+        // Feedback de carregamento
         const msg = await message.reply("🔌 **Conectando à Engine (Isso pode levar alguns segundos)...**");
 
         try {
-            // === AQUI ESTÁ A MUDANÇA ===
-            // Garante que o Python tá ligado antes de pedir o xadrez
             await pythonManager.ensureConnection();
 
             const response = await fetch('http://127.0.0.1:8000/chess', {
@@ -32,7 +69,9 @@ module.exports = {
 
             const data = await response.json();
 
-            if (data.error) return msg.edit(`❌ **Erro na Engine:** ${data.error}`);
+            if (data.error) {
+                if(msg.edit) return msg.edit(`❌ **Erro na Engine:** ${data.error}`);
+            }
 
             // --- FORMATAÇÃO (Igual antes) ---
             let evalText = "";
@@ -56,14 +95,14 @@ module.exports = {
                 .setTitle('🐟 Análise do Stockfish 16')
                 .setDescription(`**Melhor Lance:** \`${data.best_move}\`\n**Avaliação:** \`${evalText}\``)
                 .setImage(boardImage)
-                .setFooter({ text: `Engine Local | Profundidade: 15` });
+                .setFooter({ text: `Engine Local | Profundidade: 15 • RPTool v1.2` });
 
-            await msg.edit({ content: '', embeds: [embed] });
-            console.log("Registrado Comando de Xadrez")
+            if(msg.edit) await msg.edit({ content: '', embeds: [embed] });
+            console.log("Registrado Comando de Xadrez");
 
         } catch (error) {
             console.error(error);
-            msg.edit("❌ **Erro:** O Python não quis acordar. Verifique se o arquivo api.py está ok.");
+            if(msg.edit) msg.edit("❌ **Erro:** O Python não quis acordar. Verifique se o arquivo api.py está ok.");
         }
     }
 };

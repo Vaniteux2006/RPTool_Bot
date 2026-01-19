@@ -1,17 +1,60 @@
-const { EmbedBuilder } = require('discord.js'); 
+const { EmbedBuilder, SlashCommandBuilder } = require('discord.js'); 
 
 module.exports = {
     name: 'roll',
     description: 'Rola dados de RPG com estilo',
-    
-    // 1. Comando rp!roll (Apenas informativo)
+
+    // --- ESTRUTURA SLASH ---
+    data: new SlashCommandBuilder()
+        .setName('roll')
+        .setDescription('Rola dados (ex: 1d20)')
+        .addStringOption(option => 
+            option.setName('formula')
+                .setDescription('A fórmula (Ex: 1d20+5, 4d6)')
+                .setRequired(true)),
+
+    // --- ADAPTADOR SLASH ---
+    async executeSlash(interaction) {
+        const formula = interaction.options.getString('formula');
+        
+        const fakeMessage = {
+            author: interaction.user,
+            content: formula, // Para logica interna se precisar
+            reply: async (payload) => interaction.reply(payload)
+        };
+
+        // Simula o processamento da string como se fosse args
+        // O execute antigo esperava args já quebrados ou a string inteira?
+        // O antigo usava args.join mas a lógica real estava no processRoll ou Roll.
+        // Vamos chamar a função Roll direto e responder.
+        
+        const regexDado = /^\s*(\d+)?d(\d+)(\s*[-+*/]\s*\d+)?\s*$/i;
+        const match = formula.match(regexDado);
+
+        if (!match) {
+            return interaction.reply({ content: "⚠️ Formato inválido. Use algo como `1d20+5`.", ephemeral: true });
+        }
+
+        let a = match[1], b = match[2], c = null, d = null;
+        if (match[3]) {
+            let modLimpo = match[3].replace(/\s/g, '');
+            c = modLimpo.charAt(0);
+            d = modLimpo.substring(1);
+        }
+
+        const res = this.Roll(a, b, c, d);
+        if (res.erro) interaction.reply({ content: `⚠️ ${res.erro}`, ephemeral: true });
+        else interaction.reply({ embeds: [res.embed] });
+    },
+
+    // --- EXECUÇÃO POR COMANDO (rp!roll) ---
     execute(message, args) {
+        // O antigo rp!roll era apenas informativo
         message.reply("🎲 Para rolar dados, digite direto: `d20`, `6d6`, `1d10+5`...");
     },
 
-    // 2. O Processador de Mensagens (A Faxina do index.js)
+    // --- PROCESSADOR DE MENSAGENS (d20 solto) ---
     async processRoll(message) {
-        // Regex definitions
         const regexDado = /^\s*(\d+)?d(\d+)(\s*[-+*/]\s*\d+)?\s*$/i;
         const regexDadoSujo = /^\s*(\d+)?d(\d+)/i;
 
@@ -19,26 +62,18 @@ module.exports = {
         const match = message.content.match(regexDado);
         
         if (match) {
-            let a = match[1]; 
-            let b = match[2];
-            let c = null; 
-            let d = null;
-            
+            let a = match[1], b = match[2], c = null, d = null;
             if (match[3]) {
                 let modLimpo = match[3].replace(/\s/g, '');
                 c = modLimpo.charAt(0);
                 d = modLimpo.substring(1);
             }
 
-            // Chama a função matemática interna (usando 'this')
-            const resultado = module.exports.Roll(a, b, c, d);
-
-            if (resultado.erro) {
-                await message.reply(`⚠️ ${resultado.erro}`);
-            } else {
-                await message.reply({ embeds: [resultado.embed] });
-            }
-            return true; // Retorna TRUE: "Eu cuidei disso"
+            const resultado = this.Roll(a, b, c, d);
+            if (resultado.erro) await message.reply(`⚠️ ${resultado.erro}`);
+            else await message.reply({ embeds: [resultado.embed] });
+            
+            return true; // "Eu cuidei disso"
         }
 
         // B. Verifica se tem lixo junto (Ex: "d20 pra testar")
@@ -46,20 +81,18 @@ module.exports = {
             if (message.content.length < 50) {
                 const tentativa = message.content.match(regexDadoSujo)[0];
                 await message.reply(`⚠️ Opa! Se você quer rolar um **${tentativa}**, mande a mensagem **sozinha**.`);
-                return true; // Retorna TRUE: "Eu avisei o usuário"
+                return true; 
             }
         }
-
-        return false; // Retorna FALSE: "Não é dado, segue o baile"
+        return false;
     },
 
-    // 3. A Matemática Pura (Mantivemos isolada e pura)
-    // 3. A Matemática Pura
+    // --- MATEMÁTICA E ESTILO (DO ANTIGO) ---
     Roll: function(qtdInput, ladosInput, operador, modificador) {
         let qtd = parseInt(qtdInput) || 1;
         let lados = parseInt(ladosInput);
         
-        if (qtd > 100) return { erro: "Calma lá! O limite físico é 100 dados." };
+        if (qtd > 100) return { erro: "Calma lá! Meu bolso aguenta só 100 dados." };
         if (lados < 1) return { erro: "Não existem dados de 0 ou menos lados." };
 
         let resultados = [];
@@ -71,41 +104,33 @@ module.exports = {
             somaBruta += valor;
         }
 
-        // --- INÍCIO DA LÓGICA DE CORES (Inserido Aqui) ---
-        const minPossivel = qtd;             // Ex: 6d10, min é 6
-        const maxPossivel = qtd * lados;     // Ex: 6d10, max é 60
+        // --- LÓGICA DE CORES ORIGINAL ---
+        const minPossivel = qtd;
+        const maxPossivel = qtd * lados;
         let corFinal;
 
         // 1. Extremos Absolutos
         if (somaBruta === minPossivel) {
-            corFinal = 0x66000a; // Vermelho Sangue (Crítico de Falha)
+            corFinal = 0x66000a; // Vermelho Sangue (Falha Crítica)
         } else if (somaBruta === maxPossivel) {
-            corFinal = 0x0099FF; // Azul Maravilhoso (Crítico de Sucesso)
+            corFinal = 0x0099FF; // Azul Maravilhoso (Sucesso Crítico)
         } else {
-            // 2. Cálculo da Porcentagem (0 a 100%)
-            // Evita divisão por zero se alguém rolar 1d1
+            // 2. Cálculo da Porcentagem
             const range = maxPossivel - minPossivel;
             const porcentagem = range === 0 ? 100 : ((somaBruta - minPossivel) / range) * 100;
 
             if (porcentagem >= 40 && porcentagem <= 60) {
                 // MÉDIA (Amarelo)
-                // Calcula a distância do centro exato (50%). 
-                // Se for 0 (bem no centro), amarelo forte. Se for 10 (nas bordas 40 ou 60), fraco.
                 const distCentro = Math.abs(50 - porcentagem); 
-                corFinal = distCentro < 4 ? 0xffb700 : 0xf0ddaf; // Gold (Forte) vs LightYellow (Fraco)
-            
+                corFinal = distCentro < 4 ? 0xffb700 : 0xf0ddaf; 
             } else if (porcentagem < 40) {
                 // RUIM (Vermelho)
-                // < 20% (Muito ruim) = Vermelho Escuro | 20-39% (Ruim, mas ok) = Vermelho Claro
-                corFinal = porcentagem < 20 ? 0xa10010 : 0xff8c98; // FireBrick vs LightCoral
-
+                corFinal = porcentagem < 20 ? 0xa10010 : 0xff8c98;
             } else {
                 // BOM (Verde)
-                // > 80% (Muito bom) = Verde Forte | 61-79% (Bom) = Verde Claro
-                corFinal = porcentagem > 80 ? 0x008000 : 0x90EE90; // Green vs LightGreen
+                corFinal = porcentagem > 80 ? 0x008000 : 0x90EE90;
             }
         }
-        // --- FIM DA LÓGICA DE CORES ---
 
         resultados.sort((a, b) => a - b);
 
@@ -115,7 +140,6 @@ module.exports = {
         if (operador && modificador) {
             let valMod = parseInt(modificador);
             textoModificador = ` ${operador}${valMod}`;
-
             if (operador === '+') totalFinal += valMod;
             if (operador === '-') totalFinal -= valMod;
             if (operador === '*') totalFinal *= valMod;
@@ -126,13 +150,11 @@ module.exports = {
         if (listaStr.length > 50) listaStr = listaStr.substring(0, 50) + "...";
         
         const embed = new EmbedBuilder()
-            .setColor(corFinal) // <--- Alterado para usar a variável dinâmica
+            .setColor(corFinal)
             .setAuthor({ name: 'Dadinhos! 🎲', iconURL: 'https://media.discordapp.net/attachments/1459362898127098014/1459399809025703988/doguinho.png?ex=6963237c&is=6961d1fc&hm=7ea6574e5b4cc8904ba7547339c89c3874e6955bff8c72973a1aa8090422305b&=&format=webp&quality=lossless' })
             .setDescription(`**[${qtd}d${lados}${textoModificador} : ${listaStr}]**\n No fim, a soma de todos os dados deu: \n **${totalFinal}**`)
-            .setFooter({ text: `RPTool v1.100.010-06` })
-        ;
-        console.log("Registrado Roll")
-        return { erro: null, embed: embed };
+            .setFooter({ text: `RPTool v1.2` });
         
+        return { erro: null, embed: embed };
     }
 };

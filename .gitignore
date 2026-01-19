@@ -8,6 +8,5 @@ tuppers.json
 *.obj
 *.exe
 app.rc
-server_config.json
 chess_engine
-phone_registry.json
+Data
