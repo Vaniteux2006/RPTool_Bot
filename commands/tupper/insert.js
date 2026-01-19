@@ -1,15 +1,70 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-
 const pythonManager = require('../../python_codes/python_manager.js');
 
-// VARIÁVEL GLOBAL
+// VARIÁVEL GLOBAL (CRUCIAL)
 global.aiSessions = global.aiSessions || {}; 
 
 module.exports = {
     name: 'insert',
-    description: 'Insere um Tupper. Use "auto" para ele responder sozinho.',
+    description: 'Controla a inserção de Tuppers IA no chat',
+
+    // --- ESTRUTURA SLASH ---
+    data: new SlashCommandBuilder()
+        .setName('insert')
+        .setDescription('Insere um personagem')
+        // Opção 1: Inserir (Padrão)
+        .addSubcommand(sub => 
+            sub.setName('start')
+                .setDescription('Insere um personagem no canal')
+                .addStringOption(op => op.setName('nome').setDescription('Nome do Tupper').setRequired(true))
+                .addBooleanOption(op => op.setName('auto').setDescription('Modo automático? (Fala sozinho)').setRequired(false)))
+        // Opção 2: Memórias
+        .addSubcommand(sub => 
+            sub.setName('memories')
+                .setDescription('Adiciona memórias ao personagem')
+                .addStringOption(op => op.setName('nome').setDescription('Nome do Tupper').setRequired(true)))
+        // Opção 3: Sair
+        .addSubcommand(sub => 
+            sub.setName('end')
+                .setDescription('Remove o personagem do canal')),
+
+    // --- ADAPTADOR SLASH ---
+    async executeSlash(interaction) {
+        const sub = interaction.options.getSubcommand();
+        const args = [];
+
+        if (sub === 'start') {
+            args.push(interaction.options.getString('nome'));
+            if (interaction.options.getBoolean('auto')) args.push('auto');
+        } 
+        else if (sub === 'memories') {
+            args.push('memories');
+            args.push(`"${interaction.options.getString('nome')}"`);
+        }
+        else if (sub === 'end') {
+            args.push('end');
+        }
+
+        const fakeMessage = {
+            author: interaction.user,
+            member: interaction.member,
+            guild: interaction.guild,
+            channel: interaction.channel, // Importante para o createMessageCollector
+            reply: async (payload) => {
+                if (interaction.replied || interaction.deferred) return interaction.followUp(payload);
+                return interaction.reply(payload);
+            }
+        };
+        
+        // Simula o método .send para o canal (usado no feedback final)
+        fakeMessage.channel.send = async (content) => interaction.followUp(content);
+
+        await this.execute(fakeMessage, args);
+    },
+
+    // --- LÓGICA ORIGINAL ---
     async execute(message, args) {
         const action = args[0] ? args[0].toLowerCase() : "";
 
@@ -48,7 +103,9 @@ module.exports = {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ uid: message.author.id, tupper_name: tupperData.name, memory_text: finalMemory })
                         });
-                        message.channel.send(`✅ **Memórias implantadas com sucesso!**`);
+                        // Tenta usar .send do canal, se não der usa .reply
+                        if(message.channel.send) message.channel.send(`✅ **Memórias implantadas com sucesso!**`);
+                        else message.reply(`✅ **Memórias implantadas com sucesso!**`);
                     } catch (e) { message.reply("❌ Erro ao conectar com o cérebro."); }
                 }
             });
@@ -66,11 +123,7 @@ module.exports = {
         }
 
         // === 3. INSERIR (AUTO OU MANUAL) ===
-        
-        // Verifica se tem o argumento "auto"
         const isAutoMode = args.includes('auto');
-        
-        // Remove a palavra "auto" pra pegar só o nome limpo do personagem
         const nameArgs = args.filter(a => a.toLowerCase() !== 'auto');
         const tupperName = nameArgs.join(' ');
 
@@ -85,10 +138,9 @@ module.exports = {
         if (!tupperData) return message.reply(`❌ Não achei o Tupper **"${tupperName}"**.`);
         if (!tupperData.ai_enabled) return message.reply(`⚠️ **${tupperData.name}** não tem cérebro (IA).`);
 
-        // INICIA SESSÃO COM A FLAG AUTO
         global.aiSessions[message.channel.id] = {
             active: true,
-            autoMode: isAutoMode, // <--- NOVA CONFIGURAÇÃO
+            autoMode: isAutoMode, 
             tupperName: tupperData.name,
             avatar: tupperData.avatar,
             prefix: tupperData.prefix,

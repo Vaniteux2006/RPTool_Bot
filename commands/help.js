@@ -1,89 +1,72 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const ReturnVersion = require('../ReturnVersion.js');
 
 module.exports = {
     name: 'help',
-    description: 'Mostra a lista completa de comandos do RPTool',
-    execute(message, args) {
+    description: 'Manual de comandos do RPTool',
+    
+    // --- ESTRUTURA SLASH ---
+    data: new SlashCommandBuilder()
+        .setName('help')
+        .setDescription('Mostra a lista de comandos'),
+
+    // --- EXECUÇÃO ANTIGA ---
+    execute(message) {
+        this.replyHelp(message, false);
+        console.log("Registrado comando de Ajuda");
+    },
+
+    // --- EXECUÇÃO NOVA ---
+    async executeSlash(interaction) {
+        await this.replyHelp(interaction, true);
+    },
+
+    // --- FUNÇÃO UNIFICADA (LISTA ATUALIZADA) ---
+    async replyHelp(target, isSlash) {
+        const p = isSlash ? "/" : "rp!"; // Prefixo dinâmico
+        
         const embed = new EmbedBuilder()
             .setColor(0x00FF00) // Verde Hacker
-            .setTitle('📚 Manual Completo do RPTool')
-            .setDescription('Lista atualizada com todas as funcionalidades disponíveis:')
+            .setTitle('📚 Manual do RPTool')
+            .setDescription('Agora com suporte total a **Slash Commands (/)** e **Prefixo (rp!)**!')
             
-            // --- UTILITÁRIOS ---
             .addFields({ 
-                name: '🔍 Informações & Útil', 
+                name: '🛠️ Utilidades & Info', 
                 value: [
-                    '`rp!dl <link>` (Baixa vídeos do TikTok, Instagram e YouTube)',
-                    '`rp!userinfo [usuário] [photo]` (Ver ficha ou avatar de alguém)',
-                    '`rp!serverinfo [photo]` (Ver dados e segredos do servidor)',
-                    '`rp!version` (Checa a versão atual do sistema)',
-                    '`rp!helloworld` (Teste de ping/conexão)'
+                    `\`${p}dl [link]\` (Baixa vídeos TikTok/Insta/YouTube)`,
+                    `\`${p}userinfo [user]\` (Stalkear usuário)`,
+                    `\`${p}serverinfo\` (Raio-X do servidor)`,
+                    `\`${p}version\` (Checar versão do bot)`,
+                    `\`${p}helloworld\` (Ping)`
                 ].join('\n')
             })
-
-            // --- ANIVERSÁRIOS (NOVO) ---
             .addFields({ 
-                name: '🎂 Aniversários (Billboard)', 
+                name: '🎲 RPG & Diversão', 
                 value: [
-                    '`rp!birthday Nome Data #canal` (Registra niver e cria placar)',
-                    'Ex: `rp!birthday Luke 13/04 #geral`'
+                    `\`${p}roll [formula]\` (Rolar dados: 1d20+5)`,
+                    `\`${p}chess\` (Ferramentas de Xadrez/Stockfish)`,
+                    `\`${p}ai [texto]\` (Conversar com o Bot)`
                 ].join('\n')
             })
-
-            // --- RPG ---
-            .addFields({ 
-                name: '🎲 RPG & Dados', 
-                value: [
-                    '`d20`, `4d6+2` (Rola dados direto no chat)',
-                    '`rp!roll` (Mostra detalhes de como rolar dados)'
-                ].join('\n')
-            })
-
-            // --- TUPPERS (PERSONAGENS) ---
             .addFields({ 
                 name: '🎭 Tuppers (Personagens)', 
                 value: [
-                    '`rp!create "Nome" prefixo` (Cria um novo personagem)',
-                    '`rp!create [delete/avatar/rename/prefix] ...` (Edita seu char)',
-                    '`rp!insert "Nome" [auto]` (Insere o char na conversa / Auto ativa a IA)',
-                    '`rp!insert [memories/end]` (Gerencia memória ou remove o char)',
-                    '`prefixo: mensagem` (Envia mensagem como o personagem)'
+                    `\`${p}create\` (Criar/Editar personagens)`,
+                    `\`${p}insert\` (Inserir personagem no chat)`,
+                    `\`${p}webhook\` (Ajuda sobre como falar)`
                 ].join('\n')
             })
-
-            // --- IA & GAMES ---
-            .addFields({ 
-                name: '🤖 IA & Minigames', 
-                value: [
-                    '`rp!ai [texto]` (Conversa rápida com o NPC padrão)',
-                    '`rp!chess start` (Inicia análise de tabuleiro de Xadrez)',
-                    '`rp!chess solve [FEN]` (Analisa uma jogada específica)'
-                ].join('\n')
-            })
-
-            // --- TELEFONE ---
-            .addFields({ 
-                name: '📞 Telefone Inter-Servidores', 
-                value: [
-                    '`rp!phone register [nome]` (Instala o telefone no canal)',
-                    '`rp!phone call [id/nome]` (Liga para outro servidor)',
-                    '`rp!phone [accept/decline/end]` (Atender, Recusar, Desligar)',
-                    '`rp!phone group [alvo]` (Pede para entrar numa chamada em grupo)'
-                ].join('\n')
-            })
-
-            // --- ADMINISTRAÇÃO ---
             .addFields({ 
                 name: '⚙️ Administração', 
-                value: '`rp!autorole [add/del/check/zero]` (Gerencia cargos automáticos)' 
+                value: [
+                    `\`${p}autorole\` (Cargos automáticos)`,
+                    `\`${p}phone\` (Telefone entre servidores)`
+                ].join('\n')
             })
-
-            // Rodapé dinâmico
-            .setFooter({ text: `RPTool • ${ReturnVersion()}` })
+            .setFooter({ text: `RPTool v1.2` })
             .setTimestamp();
 
-        message.reply({ embeds: [embed] });
-        console.log("Registrado comando de Ajuda Atualizado (v2)");
-    },
+        if (isSlash) await target.reply({ embeds: [embed] });
+        else target.reply({ embeds: [embed] });
+    }
 };

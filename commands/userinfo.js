@@ -1,16 +1,50 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
     name: 'userinfo',
     description: 'Puxa a ficha completa de um usuário',
+
+    // --- ESTRUTURA SLASH ---
+    data: new SlashCommandBuilder()
+        .setName('userinfo')
+        .setDescription('Ver dados de um usuário')
+        .addUserOption(option => 
+            option.setName('usuario')
+                .setDescription('Quem você quer stalkear?')
+                .setRequired(false))
+        .addStringOption(option =>
+            option.setName('modo')
+                .setDescription('O que você quer ver?')
+                .addChoices(
+                    { name: '📋 Ficha Completa', value: 'info' },
+                    { name: '🖼️ Apenas Foto', value: 'photo' }
+                )),
+
+    // --- ADAPTADOR SLASH ---
+    async executeSlash(interaction) {
+        const targetUser = interaction.options.getUser('usuario') || interaction.user;
+        const mode = interaction.options.getString('modo') || 'info';
+
+        // Fake Message para aproveitar a lógica pesada
+        const fakeMessage = {
+            author: interaction.user,
+            guild: interaction.guild,
+            mentions: { users: { first: () => targetUser } },
+            reply: async (payload) => interaction.reply(payload)
+        };
+
+        const args = mode === 'photo' ? ['photo'] : [];
+        await this.execute(fakeMessage, args);
+    },
+
+    // --- LÓGICA ORIGINAL RESTAURADA ---
     async execute(message, args) {
         
-        // Define quem é o alvo: Mencionado OU quem enviou a mensagem
         let targetUser = message.mentions.users.first() || message.author;
         let targetMember = await message.guild.members.fetch(targetUser.id);
 
         // --- SUBCOMANDO: PHOTO ---
-        if (args[0] && args[0].toLowerCase() === 'photo') {
+        if (args[0] && (args[0].toLowerCase() === 'photo' || args[0].toLowerCase() === 'avatar')) {
             const avatarUrl = targetUser.displayAvatarURL({ size: 1024, extension: 'png' });
             
             const embedPhoto = new EmbedBuilder()
@@ -21,10 +55,9 @@ module.exports = {
             return message.reply({ embeds: [embedPhoto] });
         }
 
-        // --- CÁLCULOS ---
+        // --- CÁLCULOS (LEGADO) ---
         
-        // 1. Posição de Entrada (Rank de antiguidade)
-        // Pega todos os membros, ordena por data de entrada
+        // 1. Posição de Entrada (Rank de antiguidade) - Lógica Original
         const membersSorted = message.guild.members.cache
             .sort((a, b) => a.joinedTimestamp - b.joinedTimestamp)
             .map(m => m.id);
@@ -32,15 +65,15 @@ module.exports = {
 
         // 2. Datas
         const criadoEm = `<t:${Math.floor(targetUser.createdTimestamp / 1000)}:D>`;
-        const entrouEm = `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:F>`; // F mostra data e hora completa
+        const entrouEm = `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:F>`; 
 
-        // 3. Cargos (ignora o @everyone)
+        // 3. Cargos
         const roles = targetMember.roles.cache
             .filter(r => r.name !== '@everyone')
-            .map(r => r) // Mantém o objeto pra ficar clicável
+            .map(r => r) 
             .join(', ') || "Nenhum cargo";
 
-        // MONTA O EMBED
+        // MONTA O EMBED ORIGINAL
         const embed = new EmbedBuilder()
             .setColor(targetMember.displayHexColor || 0x00FF00)
             .setAuthor({ name: targetUser.tag, iconURL: targetUser.displayAvatarURL() })
@@ -51,9 +84,9 @@ module.exports = {
                 { name: '🏆 Rank de Antiguidade', value: `Este foi o membro **Nº ${joinPosition}** a entrar no servidor!`, inline: false },
                 { name: '🛡️ Cargos', value: roles, inline: false }
             )
-            .setFooter({ text: `RPTool v1.1 • Solicitado por ${message.author.username}` });
+            .setFooter({ text: `RPTool v1.2` });
 
         message.reply({ embeds: [embed] });
-        console.log("Registrado Checagem de Usuário")
+        console.log("Registrado Checagem de Usuário");
     },
 };

@@ -1,20 +1,122 @@
 const fs = require('fs');
 const path = require('path');
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder, Collection } = require('discord.js'); // Importei Collection
 const pythonManager = require('../../python_codes/python_manager.js');
 
 module.exports = {
     name: 'create',
-    description: 'Cria um novo Tupper (Personagem)',
+    description: 'Gerencia seus personagens (Tuppers)',
+
+    // --- ESTRUTURA SLASH ---
+    data: new SlashCommandBuilder()
+        .setName('create')
+        .setDescription('Gerencia seus personagens')
+        // 1. Criar
+        .addSubcommand(sub => 
+            sub.setName('new')
+                .setDescription('Cria um novo personagem')
+                .addStringOption(op => op.setName('nome').setDescription('Nome').setRequired(true))
+                .addStringOption(op => op.setName('prefixo').setDescription('Prefixo (Ex: luke:)').setRequired(true))
+                .addAttachmentOption(op => op.setName('avatar').setDescription('Foto de perfil').setRequired(false)))
+        // 2. Deletar
+        .addSubcommand(sub => 
+            sub.setName('delete')
+                .setDescription('Apaga um personagem')
+                .addStringOption(op => op.setName('nome').setDescription('Nome exato').setRequired(true)))
+        // 3. Avatar (Editar)
+        .addSubcommand(sub => 
+            sub.setName('avatar')
+                .setDescription('Muda a foto do personagem')
+                .addStringOption(op => op.setName('nome').setDescription('Nome do personagem').setRequired(true))
+                .addAttachmentOption(op => op.setName('imagem').setDescription('Nova foto').setRequired(true)))
+        // 4. Renomear
+        .addSubcommand(sub => 
+            sub.setName('rename')
+                .setDescription('Muda o nome do personagem')
+                .addStringOption(op => op.setName('antigo').setDescription('Nome atual').setRequired(true))
+                .addStringOption(op => op.setName('novo').setDescription('Novo nome').setRequired(true)))
+        // 5. Prefixo (Editar)
+        .addSubcommand(sub => 
+            sub.setName('prefix')
+                .setDescription('Muda o prefixo do personagem')
+                .addStringOption(op => op.setName('nome').setDescription('Nome do personagem').setRequired(true))
+                .addStringOption(op => op.setName('novo_prefixo').setDescription('Novo prefixo').setRequired(true)))
+        // 6. Criar IA
+        .addSubcommand(sub => 
+            sub.setName('ai')
+                .setDescription('Cria um personagem com Inteligência Artificial')
+                .addStringOption(op => op.setName('nome').setDescription('Nome').setRequired(true))
+                .addStringOption(op => op.setName('prefixo').setDescription('Prefixo').setRequired(true))),
+
+    // --- ADAPTADOR SLASH ---
+    async executeSlash(interaction) {
+        const sub = interaction.options.getSubcommand();
+        const args = [];
+        // Cria uma Collection igual a do Discord.js para enganar o código antigo
+        let attachments = new Collection();
+
+        if (sub === 'new') {
+            args.push(`"${interaction.options.getString('nome')}"`);
+            args.push(interaction.options.getString('prefixo'));
+            const avatar = interaction.options.getAttachment('avatar');
+            if (avatar) attachments.set(avatar.id, avatar);
+        }
+        else if (sub === 'delete') {
+            args.push('delete');
+            args.push(`"${interaction.options.getString('nome')}"`);
+        }
+        else if (sub === 'avatar') {
+            args.push('avatar');
+            args.push(`"${interaction.options.getString('nome')}"`);
+            const img = interaction.options.getAttachment('imagem');
+            if (img) attachments.set(img.id, img);
+        }
+        else if (sub === 'rename') {
+            args.push('name');
+            args.push(`"${interaction.options.getString('antigo')}"`);
+            args.push(`"${interaction.options.getString('novo')}"`);
+        }
+        else if (sub === 'prefix') {
+            args.push('prefix');
+            args.push(`"${interaction.options.getString('nome')}"`);
+            args.push(interaction.options.getString('novo_prefixo'));
+        }
+        else if (sub === 'ai') {
+            args.push('ai');
+            args.push(`"${interaction.options.getString('nome')}"`);
+            args.push(interaction.options.getString('prefixo'));
+        }
+
+        // Fake Message
+        const fakeMessage = {
+            content: `rp!create ${args.join(' ')}`,
+            author: interaction.user,
+            member: interaction.member,
+            guild: interaction.guild,
+            channel: interaction.channel,
+            attachments: attachments, // Passamos a Collection aqui
+            reply: async (payload) => {
+                if (interaction.replied || interaction.deferred) return interaction.followUp(payload);
+                return interaction.reply(payload);
+            }
+        };
+        
+        // Adaptação para o Collector
+        fakeMessage.channel.createMessageCollector = (options) => interaction.channel.createMessageCollector(options);
+        fakeMessage.channel.send = async (content) => interaction.followUp(content);
+
+        await this.execute(fakeMessage, args);
+    },
+
+    // --- LÓGICA ORIGINAL ---
     async execute(message, args) {
 
         const subCommand = args[0] ? args[0].toLowerCase() : "";
 
         // === 1. DELETAR TUPPER ===
-        // rp!create delete "Nome"
         if (subCommand === 'delete') {
             const fullText = args.slice(1).join(' ');
-            const match = fullText.match(/"([^"]+)"/) || [null, fullText]; // Tenta pegar entre aspas ou tudo
+            const match = fullText.match(/"([^"]+)"/) || [null, fullText]; 
             const nameToDelete = match[1];
 
             if (!nameToDelete) return message.reply('⚠️ Use: `rp!create delete "Nome do Personagem"`');
@@ -24,7 +126,6 @@ module.exports = {
             try { db = JSON.parse(fs.readFileSync(dbPath, 'utf8')); } catch (e) {}
 
             const initialLength = db.length;
-            // Filtra removendo o que tem o nome E o ID do usuário
             db = db.filter(t => !(t.name.toLowerCase() === nameToDelete.toLowerCase() && t.uid === message.author.id));
 
             if (db.length === initialLength) {
@@ -35,6 +136,7 @@ module.exports = {
             return message.reply(`🗑️ **${nameToDelete}** foi deletado para sempre.`);
         }
         
+        // === 2. AVATAR ===
         if (subCommand === 'avatar') {
             if (message.attachments.size === 0) {
                 return message.reply("⚠️ Você precisa anexar uma imagem junto com o comando!");
@@ -56,15 +158,15 @@ module.exports = {
                 return message.reply(`❌ Não encontrei **"${nameToEdit}"**.`);
             }
 
-            // Atualiza a foto
             db[index].avatar = message.attachments.first().url;
             fs.writeFileSync(dbPath, JSON.stringify(db, null, 4));
 
             return message.reply(`🖼️ Avatar de **${db[index].name}** atualizado com sucesso!`);
         }
 
+        // === 3. RENOMEAR ===
         if (subCommand === 'name' || subCommand === 'rename') {
-            // Regex para pegar dois nomes entre aspas: "Velho" "Novo"
+            const fullText = args.slice(1).join(' ');
             const match = fullText.match(/"([^"]+)"\s+"([^"]+)"/);
             
             if (!match) return message.reply('⚠️ Formato inválido!\nUse: `rp!create name "Nome Antigo" "Nome Novo"`');
@@ -80,7 +182,6 @@ module.exports = {
 
             if (index === -1) return message.reply(`❌ Não encontrei o personagem **"${oldName}"**.`);
 
-            // Verifica se o NOVO nome já existe
             if (db.some(t => t.uid === message.author.id && t.name.toLowerCase() === newName.toLowerCase())) {
                 return message.reply(`❌ Você já tem um personagem chamado **"${newName}"**!`);
             }
@@ -91,8 +192,9 @@ module.exports = {
             return message.reply(`📝 **${oldName}** agora se chama **${newName}**!`);
         }
 
+        // === 4. PREFIXO ===
         if (subCommand === 'prefix') {
-            // Regex: "Nome" prefixo
+            const fullText = args.slice(1).join(' ');
             const match = fullText.match(/"([^"]+)"\s+(\S+)/);
 
             if (!match) return message.reply('⚠️ Formato inválido!\nUse: `rp!create prefix "Nome do Char" novo_prefixo`');
@@ -108,7 +210,6 @@ module.exports = {
 
             if (index === -1) return message.reply(`❌ Não encontrei o personagem **"${charName}"**.`);
 
-            // Verifica se o NOVO prefixo já existe
             if (db.some(t => t.uid === message.author.id && t.prefix === newPrefix)) {
                 return message.reply(`❌ Você já tem um personagem com o prefixo **"${newPrefix}"**!`);
             }
@@ -120,27 +221,21 @@ module.exports = {
             return message.reply(`🔄 Prefixo de **${charName}** alterado de \`${oldPrefix}\` para \`${newPrefix}\`.`);
         }
 
-        // Se for IA, desvia para a função especial
+        // === 5. IA (Redireciona) ===
         if (args[0] && args[0].toLowerCase() === 'ai') {
             return this.createAI(message, args.slice(1));
         }
 
-        // --- MODO NORMAL ---
-        if (args[0] && args[0].toLowerCase() === 'ai') {
-            return this.createAI(message, args.slice(1));
-        }
-
-        // --- MODO NORMAL ---
-        // 1. Tenta salvar e pega o resultado
+        // === 6. CRIAR NOVO (PADRÃO) ===
         const resultado = this.saveTupper(message, args.join(' '));
 
-        // 2. Se salvou com sucesso (não retornou erro/null), manda o aviso
         if (resultado && resultado.nome) {
-            message.channel.send(`✅ **${resultado.nome}** criado com sucesso!\nPara usar, digite: \`${resultado.prefixo}: sua mensagem\``);
+            if (message.channel.send) message.channel.send(`✅ **${resultado.nome}** criado com sucesso!\nPara usar, digite: \`${resultado.prefixo}: sua mensagem\``);
+            else message.reply(`✅ **${resultado.nome}** criado com sucesso!\nPara usar, digite: \`${resultado.prefixo}: sua mensagem\``);
         }
     },
 
-    // Separei a lógica de salvar pra reutilizar
+    // FUNÇÃO AUXILIAR: SALVAR JSON
     saveTupper(message, fullText, isAI = false) {
         const regex = /"([^"]+)"\s+(\S+)/;
         const match = fullText.match(regex);
@@ -158,10 +253,9 @@ module.exports = {
             name: nome,
             prefix: prefixo,
             avatar: avatarUrl,
-            ai_enabled: isAI // Marcamos se é IA ou não
+            ai_enabled: isAI 
         };
 
-        // CORREÇÃO DE CAMINHO: Sobe duas pastas (../../)
         const dbPath = path.join(__dirname, '../../Data/tuppers.json');
         let db = [];
         try {
@@ -186,16 +280,15 @@ module.exports = {
         return { nome, prefixo };
     },
 
+    // FUNÇÃO ESPECIAL: CRIAR COM IA (COM COLLECTOR)
     async createAI(message, args) {
-        // 1. Salva o Tupper fisicamente primeiro
         const fullText = args.join(' ');
         
-        // Verifica formato antes de começar o ritual
         if (!/"([^"]+)"\s+(\S+)/.test(fullText)) {
              return message.reply('⚠️ Formato: `rp!create ai "Nome" prefixo`');
         }
 
-        const saved = this.saveTupper(message, fullText, true); // Salva no JSON
+        const saved = this.saveTupper(message, fullText, true); 
         if (!saved) return;
 
         const userId = message.author.id;
@@ -216,7 +309,8 @@ module.exports = {
         collector.on('end', async (collected, reason) => {
             if (reason === 'finished') {
                 const finalPersona = personaBuffer.join('\n');
-                await message.reply("⚙️ **Configurando cérebro da IA...**");
+                // Feedback
+                const loadingMsg = await (message.channel.send ? message.channel.send("⚙️ **Configurando cérebro da IA...**") : message.reply("⚙️ **Configurando cérebro da IA...**"));
                 
                 try {
                     await pythonManager.ensureConnection();
@@ -225,7 +319,11 @@ module.exports = {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ uid: userId, tupper_name: name, persona: finalPersona })
                     });
-                    message.channel.send(`✅ **Cérebro conectado!**\nUse \`rp!insert ${name}\` nesse canal para começar a conversar.`);
+                    
+                    const successText = `✅ **Cérebro conectado!**\nUse \`rp!insert ${name}\` nesse canal para começar a conversar.`;
+                    if (message.channel.send) message.channel.send(successText);
+                    else message.reply(successText);
+
                 } catch (e) {
                     console.error(e);
                     message.reply("❌ O Tupper foi criado, mas a IA falhou ao conectar.");

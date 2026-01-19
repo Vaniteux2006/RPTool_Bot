@@ -1,4 +1,4 @@
-const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
+const { AttachmentBuilder, EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -7,24 +7,38 @@ module.exports = {
     name: 'status',
     description: 'Mostra o dashboard de estatísticas do servidor',
     aliases: ['stats', 'dashboard'],
+
+    // --- MENU SLASH ---
+    data: new SlashCommandBuilder()
+        .setName('status')
+        .setDescription('Mostra estatísticas do servidor'),
+
+    // --- ADAPTADOR ---
+    async executeSlash(interaction) {
+        const fakeMessage = {
+            guild: interaction.guild,
+            reply: async (payload) => interaction.reply(payload)
+        };
+        await this.execute(fakeMessage, []);
+    },
+
+    // --- LÓGICA ORIGINAL ---
     async execute(message, args) {
         const guildId = message.guild.id;
         const filePath = path.join(__dirname, '..', 'Data', 'statistics.json');
 
-        // Verifica se o arquivo existe
         if (!fs.existsSync(filePath)) {
             return message.reply("📉 O banco de dados global ainda não foi criado. Falem algo no chat!");
         }
 
         const globalStats = JSON.parse(fs.readFileSync(filePath));
-        const guildStats = globalStats[guildId]; // Pega só os dados DESTE servidor
+        const guildStats = globalStats[guildId]; 
 
-        // Verifica se tem dados para este servidor específico
         if (!guildStats) {
             return message.reply("📉 Ainda não tenho dados suficientes deste servidor específico!");
         }
 
-        // --- 1. PROCESSAR DADOS (Usando guildStats) ---
+        // PROCESSAR DADOS
         const daysArray = Object.entries(guildStats.days).map(([key, value]) => {
             const str = key.toString().padStart(8, '0');
             const day = str.substring(0, 2);
@@ -34,9 +48,9 @@ module.exports = {
         });
         
         daysArray.sort((a, b) => a.dateObj - b.dateObj);
-        const recentDays = daysArray.slice(-10); // Últimos 10 dias
+        const recentDays = daysArray.slice(-10); 
 
-        // --- 2. GERAR LINK DO QUICKCHART ---
+        // QUICKCHART
         const chartConfig = {
             type: 'line',
             data: {
@@ -71,7 +85,7 @@ module.exports = {
             const buffer = Buffer.from(response.data, 'binary');
             const attachment = new AttachmentBuilder(buffer, { name: 'graph.png' });
 
-            // --- 3. TOPS E EMBED ---
+            // TOPS
             const sortedUsers = Object.entries(guildStats.users).sort(([, a], [, b]) => b - a).slice(0, 5);
             const sortedChannels = Object.entries(guildStats.chats).sort(([, a], [, b]) => b - a).slice(0, 5);
             
@@ -81,6 +95,7 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setColor(0x7289da)
+                .setFooter({ text: `RPTool v1.2` })
                 .setTitle(`📊 Status de ${message.guild.name}`)
                 .addFields(
                     { name: '🏆 Top Usuários', value: userText, inline: true },
@@ -88,6 +103,7 @@ module.exports = {
                     { name: '📈 Total Rastreado', value: `\`${totalMsgs}\` mensagens`, inline: false }
                 )
                 .setImage('attachment://graph.png');
+                
 
             await message.reply({ embeds: [embed], files: [attachment] });
 

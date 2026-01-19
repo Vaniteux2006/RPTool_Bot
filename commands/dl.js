@@ -1,10 +1,11 @@
-
 const { spawn, exec } = require('child_process'); 
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const { SlashCommandBuilder } = require('discord.js');
 
-// --- 1. FUNÇÃO DE DOWNLOAD DIRETO (Rápida e sem frescura) ---
+// --- FUNÇÕES UTILITÁRIAS (DO ARQUIVO ANTIGO) ---
+
 function downloadDireto(url, destPath) {
     return new Promise((resolve, reject) => {
         const file = fs.createWriteStream(destPath);
@@ -13,32 +14,23 @@ function downloadDireto(url, destPath) {
                 return downloadDireto(response.headers.location, destPath).then(resolve).catch(reject);
             }
             response.pipe(file);
-            file.on('finish', () => {
-                file.close();
-                resolve();
-            });
-        }).on('error', (err) => {
-            fs.unlink(destPath, () => {});
-            reject(err);
-        });
+            file.on('finish', () => { file.close(); resolve(); });
+        }).on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
     });
 }
 
-// --- 2. FUNÇÃO ESPECIAL PRO TIKTOK (Apoio Aéreo) ---
 async function resolverTikTok(url) {
     try {
-        // Usa a API do TikWM para pegar o link limpo (sem marca d'água e sem login)
         const response = await fetch(`https://www.tikwm.com/api/?url=${url}`);
         const data = await response.json();
         
         if (data.code === 0 && data.data && data.data.play) {
             return {
                 tipo: 'video_tiktok',
-                url: data.data.play, // Link direto do MP4
+                url: data.data.play, 
                 desc: data.data.title || 'tiktok_video'
             };
         } else if (data.code === 0 && data.data && data.data.images) {
-             // Caso seja slideshow de fotos no TikTok
              return {
                 tipo: 'slideshow_tiktok',
                 urls: data.data.images,
@@ -52,14 +44,12 @@ async function resolverTikTok(url) {
     }
 }
 
-// --- 3. SONDA PADRÃO (Pra YouTube e Insta) ---
 function checarExtensao(url, ytDlpPath) {
     return new Promise((resolve) => {
         const command = `"${ytDlpPath}" --print "%(ext)s" --print "%(vcodec)s" --no-warnings --flat-playlist --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" "${url}"`;
         
         exec(command, (error, stdout, stderr) => {
             const errText = stderr.toString();
-            // Se der erro "no video", é imagem (Insta)
             if (errText.includes("no video") || errText.includes("GraphSidecar")) {
                 return resolve({ tipo: 'imagem', ext: 'jpg' }); 
             }
@@ -75,21 +65,60 @@ function checarExtensao(url, ytDlpPath) {
     });
 }
 
+// --- COMANDO PRINCIPAL ---
+
 module.exports = {
     name: 'dl',
     description: 'Baixa TUDO: TikTok (Sem login), Insta (Mão Leve) e YouTube (Clássico)',
+
+    // --- ESTRUTURA SLASH ---
+    data: new SlashCommandBuilder()
+        .setName('dl')
+        .setDescription('Baixar mídia de links (TikTok, Insta, YT)')
+        .addStringOption(op => op.setName('link').setDescription('URL do vídeo/foto').setRequired(true)),
+
+    // --- ADAPTADOR SLASH ---
+    async executeSlash(interaction) {
+        const url = interaction.options.getString('link');
+        
+        // Cria um "Fake Message" que sabe lidar com edits do Slash
+        const fakeMessage = {
+            id: interaction.id,
+            author: interaction.user,
+            channel: interaction.channel,
+            content: `rp!dl ${url}`, // Simula o comando antigo
+            reply: async (content) => {
+                // O primeiro reply do Slash
+                await interaction.reply(content);
+                // Retorna um objeto que simula a mensagem enviada, permitindo .edit()
+                return {
+                    edit: async (newContent) => interaction.editReply(newContent)
+                };
+            }
+        };
+
+        // Chama a lógica antiga passando o fakeMessage
+        await this.execute(fakeMessage, [url]);
+    },
+
+    // --- LÓGICA ORIGINAL (LEGADO) ---
     async execute(message, args) {
         const url = args[0];
         if (!url) return message.reply("❌ Cadê o link?");
 
         const msg = await message.reply("🕵️‍♂️ **Analisando link...**");
-        const filePrefix = `dl_${message.id}`;
+        const filePrefix = `dl_${message.id}`; // Garante unicidade
         const rootDir = path.join(__dirname, '../temp');
-        if (!fs.existsSync(rootDir )) fs.mkdirSync(rootDir);
+        if (!fs.existsSync(rootDir)) fs.mkdirSync(rootDir);
 
-        // === ROTA 1: É TIKTOK? (Usa a API mágica) ===
+        // Define a função de editar mensagem (compatível com msg real ou fake slash)
+        const safeEdit = async (text) => {
+            if (msg.edit) return msg.edit(text);
+        };
+
+        // === ROTA 1: É TIKTOK? ===
         if (url.includes('tiktok.com')) {
-            await msg.edit("🎵 **TikTok detectado!** Bypassing login...");
+            await safeEdit("🎵 **TikTok detectado!** Bypassing login...");
             const tkInfo = await resolverTikTok(url);
 
             if (tkInfo && tkInfo.tipo === 'video_tiktok') {
@@ -98,37 +127,29 @@ module.exports = {
                     await downloadDireto(tkInfo.url, destPath);
                     return enviarArquivos(msg, filePrefix);
                 } catch (e) {
-                    console.log(e)
-                    return msg.edit("❌ Erro ao baixar o arquivo do TikTok.");
+                    console.log(e);
+                    return safeEdit("❌ Erro ao baixar o arquivo do TikTok.");
                 }
             } 
             else if (tkInfo && tkInfo.tipo === 'slideshow_tiktok') {
-                await msg.edit(`📸 **Slideshow TikTok!** Baixando ${tkInfo.urls.length} fotos...`);
-                // Baixa as 5 primeiras fotos max
+                await safeEdit(`📸 **Slideshow TikTok!** Baixando ${tkInfo.urls.length} fotos...`);
                 for (let i = 0; i < Math.min(tkInfo.urls.length, 5); i++) {
                     const destPath = path.join(rootDir, `${filePrefix}_${i}.jpg`);
                     await downloadDireto(tkInfo.urls[i], destPath);
                 }
                 return enviarArquivos(msg, filePrefix);
             }
-            else {
-                // Se a API falhar, cai pra ROTA 2 (tentativa desesperada com yt-dlp)
-                console.log("API TikTok falhou, tentando yt-dlp...");
-            }
         }
 
         // === ROTA 2: PADRÃO (Insta/YouTube via yt-dlp) ===
-        let ytDlpPath = path.join(__dirname, 'dl/yt-dlp.exe'); // Padrão Windows Local
-        
-        if (process.platform !== 'win32') {
-            ytDlpPath = 'yt-dlp'; 
-        }
+        let ytDlpPath = path.join(__dirname, 'dl/yt-dlp.exe');
+        if (process.platform !== 'win32') ytDlpPath = 'yt-dlp'; // Compatibilidade Linux
 
         const info = await checarExtensao(url, ytDlpPath);
 
-        // CASO A: VÍDEO (YouTube / Insta Reels)
+        // CASO A: VÍDEO
         if (info.tipo === 'video') {
-            await msg.edit(`🎬 **Vídeo detectado!** Baixando MP4...`);
+            await safeEdit(`🎬 **Vídeo detectado!** Baixando MP4...`);
             const outputTemplate = path.join(rootDir, `${filePrefix}_%(autonumber)s.%(ext)s`);
             
             const processArgs = [
@@ -142,23 +163,23 @@ module.exports = {
             spawn(ytDlpPath, processArgs).on('close', () => enviarArquivos(msg, filePrefix));
         } 
         
-        // CASO B: IMAGEM (Instagram Foto)
+        // CASO B: IMAGEM
         else {
-            await msg.edit(`📸 **Imagem detectada!** Roubando URL direta...`);
+            await safeEdit(`📸 **Imagem detectada!** Roubando URL direta...`);
             const cmdGetUrl = `"${ytDlpPath}" -g --no-warnings --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" "${url}"`;
             
             exec(cmdGetUrl, async (error, stdout, stderr) => {
                 const links = stdout.trim().split('\n').filter(l => l.startsWith('http'));
                 
                 if (links.length === 0) {
-                    // Última esperança: Força bruta
+                    // Força bruta
                     const outputTemplate = path.join(rootDir, `${filePrefix}_%(autonumber)s.jpg`);
                     const processArgs = ['--ignore-errors', '--no-warnings', '-o', outputTemplate, url];
                     spawn(ytDlpPath, processArgs).on('close', () => enviarArquivos(msg, filePrefix));
                     return;
                 }
 
-                await msg.edit(`📸 **Baixando ${links.length} imagem(ns)...**`);
+                await safeEdit(`📸 **Baixando ${links.length} imagem(ns)...**`);
                 for (let i = 0; i < Math.min(links.length, 4); i++) {
                     const destPath = path.join(rootDir, `${filePrefix}_${i}.jpg`);
                     await downloadDireto(links[i], destPath).catch(e => console.log(e));
@@ -172,7 +193,10 @@ module.exports = {
 
 // Função de Envio e Limpeza
 async function enviarArquivos(msg, filePrefix) {
-    const rootDir = path.join(__dirname, '../');
+    const rootDir = path.join(__dirname, '../temp');
+    // Verifica se a pasta existe antes de ler
+    if (!fs.existsSync(rootDir)) return;
+
     const files = fs.readdirSync(rootDir);
     const foundFiles = files
         .filter(file => file.startsWith(filePrefix))
@@ -181,6 +205,7 @@ async function enviarArquivos(msg, filePrefix) {
     if (foundFiles.length > 0) {
         try {
             await msg.edit({ content: `✅ **Pronto!**`, files: foundFiles });
+            // Deleta após 5 segundos
             setTimeout(() => foundFiles.forEach(f => { if(fs.existsSync(f)) fs.unlinkSync(f) }), 5000);
         } catch (e) {
             msg.edit("❌ **Erro:** O arquivo é muito grande pro Discord (>25MB).");
