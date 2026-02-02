@@ -3,7 +3,6 @@ import os
 import google.generativeai as genai
 from pathlib import Path
 
-# --- CONFIGURAÇÃO ---
 MODEL_NAME = 'gemini-3-flash-preview' 
 
 class TupperBrain:
@@ -28,8 +27,6 @@ class TupperBrain:
                 json.dump(self.memory_db, f, indent=4, ensure_ascii=False)
         except Exception as e:
             print(f"Erro ao salvar memória: {e}")
-
-    # --- FUNÇÕES ---
 
     def add_memory(self, uid, tupper_name, memory_text):
         key = f"{uid}_{tupper_name}"
@@ -60,7 +57,6 @@ class TupperBrain:
         persona = data.get("persona", "Personalidade não encontrada.")
         memories = data.get("long_term_memories", [])
 
-        # PROMPT COM INSTRUÇÃO DE SILÊNCIO
         prompt = f"""
         [PERSONA DO PERSONAGEM]
         {persona}
@@ -68,27 +64,29 @@ class TupperBrain:
         [MEMÓRIAS DE LONGO PRAZO]
         {chr(10).join(f"- {m}" for m in memories)}
 
-        [CHAT RECENTE]
+        [LOG DE MENSAGENS RECENTES (ÚLTIMO MINUTO)]
+        O formato abaixo é: [Nome do Usuário]: Mensagem
+        ---
         {chr(10).join(context_messages)}
+        ---
 
         [INSTRUÇÃO CRÍTICA]
-        Você está em um chat (Discord). Analise a ÚLTIMA mensagem do contexto.
-        1. Se a mensagem NÃO for direcionada a você, ou for um assunto que seu personagem ignoraria: RESPONDA APENAS "[NO_REPLY]" (sem aspas).
-        2. Se for para você ou se você tiver algo importante a dizer: Responda como o personagem.
-        3. Se aprender algo novo importante sobre o usuário: Adicione [MEMORY: fato] ao final da resposta.
+        Você está lendo um log acumulado do chat.
+        1. Analise o fluxo da conversa acima.
+        2. Se ninguém falou com você ou o assunto não interessa: RESPONDA APENAS "[NO_REPLY]"
+        3. Se for pertinente participar: Responda como o personagem. Seja direto.
+        4. Se aprender algo novo: Use [MEMORY: fato] no final.
         """
 
         try:
             response = self.model.generate_content(prompt)
             raw_text = response.text.strip()
             
-            # FILTRO DE SILÊNCIO
             if raw_text == "[NO_REPLY]" or raw_text == "NO_REPLY":
                 return {"reply": None} 
 
             final_reply = raw_text
             
-            # Processa Memória
             if "[MEMORY:" in raw_text:
                 parts = raw_text.split("[MEMORY:")
                 final_reply = parts[0].strip()

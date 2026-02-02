@@ -9,57 +9,57 @@ class ChessBot:
 
     def load_engine(self):
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Tenta achar o executável local (Windows ou Linux binário local)
         local_exe = os.path.join(current_dir, "stockfish.exe" if os.name == 'nt' else "stockfish")
-        
-        # Caminho padrão do Linux instalado via apt
         system_exe = "/usr/games/stockfish" 
 
-        path_to_use = None
-
-        if os.path.exists(local_exe):
-            path_to_use = local_exe
-            print(f"[XADREZ] Usando binário local: {path_to_use}")
-        elif os.path.exists(system_exe):
-            path_to_use = system_exe
-            print(f"[XADREZ] Usando Stockfish do sistema: {path_to_use}")
+        path_to_use = local_exe if os.path.exists(local_exe) else (system_exe if os.path.exists(system_exe) else None)
         
         if path_to_use:
             try:
                 self.engine = Stockfish(path=path_to_use, depth=15, parameters={"Threads": 2, "Hash": 16})
-                print("[XADREZ] Stockfish carregado e pronto!")
+                print("[XADREZ] Stockfish carregado!")
             except Exception as e:
-                print(f"[XADREZ] Erro ao iniciar binario: {e}")
+                print(f"[XADREZ] Erro ao iniciar: {e}")
         else:
-            print("[XADREZ] ERRO CRÍTICO: Não achei o Stockfish (nem local, nem no sistema).")
+            print("[XADREZ] ERRO CRÍTICO: Stockfish não encontrado.")
 
-    def analyze(self, fen):
-        if not self.engine:
-            return {"error": "Engine offline"}
+    def play_turn(self, fen, user_move):
+        if not self.engine: return {"error": "Engine offline"}
+        
+        board = chess.Board(fen)
 
         try:
-            if fen == "start":
-                fen = chess.STARTING_FEN 
-                self.engine.set_position()
-            else:
-                if not self.engine.is_fen_valid(fen):
-                    return {"error": "FEN Invalido"}
-                self.engine.set_fen_position(fen)
+            move = board.push_san(user_move)
+        except ValueError:
+            return {"error": "Movimento inválido ou ilegal."}
 
-            best_move_uci = self.engine.get_best_move()
-            
-            board = chess.Board(fen)
-            move_object = chess.Move.from_uci(best_move_uci)
-            san_move = board.san(move_object) 
+        if board.is_game_over():
+            return {"fen": board.fen(), "game_over": True, "result": board.result(), "message": "Fim de jogo após seu lance!"}
 
-            evaluation = self.engine.get_evaluation()
-            
-            return {
-                "best_move": san_move, 
-                "uci": best_move_uci,
-                "evaluation": evaluation,
-                "fen": self.engine.get_fen_position()
-            }
+        self.engine.set_fen_position(board.fen())
+        bot_best_move_uci = self.engine.get_best_move()
+        
+        if bot_best_move_uci:
+            board.push_uci(bot_best_move_uci)
+            bot_move_san = board.peek() 
+        else:
+            return {"error": "Stockfish não encontrou lance (Mate?)"}
+
+        evaluation = self.engine.get_evaluation()
+        return {
+            "fen": board.fen(),
+            "bot_move": str(bot_move_san), 
+            "evaluation": evaluation,
+            "game_over": board.is_game_over()
+        }
+
+    def analyze(self, fen):
+        if not self.engine: return {"error": "Engine offline"}
+        try:
+            if fen == "start": fen = chess.STARTING_FEN 
+            self.engine.set_fen_position(fen)
+            best = self.engine.get_best_move()
+            eval_val = self.engine.get_evaluation()
+            return {"best_move": best, "evaluation": eval_val, "fen": fen}
         except Exception as e:
             return {"error": str(e)}

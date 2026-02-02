@@ -26,23 +26,16 @@ module.exports = {
             console.log("🐍 [MANAGER] Iniciando servidor Python...");
             
             const scriptPath = path.join(__dirname, 'api.py');
-            
-            // DETECTA O SISTEMA OPERACIONAL
-            // Se for Windows ('win32'), tenta 'python' ou 'py'. 
-            // Se for Linux, usa 'python3'.
             const command = process.platform === 'win32' ? 'python' : 'python3';
             
             try {
-                // Tenta iniciar com o comando principal
                 pythonProcess = spawn(command, [scriptPath]);
                 
                 pythonProcess.on('error', (err) => {
                     console.log(`⚠️ [MANAGER] '${command}' falhou. Tentando fallback...`);
-                    // Fallback para Windows caso 'python' falhe
                     if (process.platform === 'win32') {
                          pythonProcess = spawn('py', [scriptPath]);
                     } else {
-                        // Fallback para Linux (as vezes é só 'python')
                         pythonProcess = spawn('python', [scriptPath]);
                     }
                 });
@@ -50,7 +43,6 @@ module.exports = {
                 console.error("❌ [MANAGER] Erro crítico no spawn:", e);
             }
 
-            // O resto continua igual...
             if (pythonProcess) {
                 pythonProcess.stdout.on('data', (data) => console.log(`[PYTHON]: ${data}`));
                 pythonProcess.stderr.on('data', (data) => console.error(`[PYTHON ERRO]: ${data}`));

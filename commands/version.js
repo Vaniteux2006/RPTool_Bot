@@ -7,28 +7,21 @@ module.exports = {
     name: 'version',
     description: 'Mostra a versão atual do sistema',
 
-    // --- ESTRUTURA SLASH ---
     data: new SlashCommandBuilder()
         .setName('version')
         .setDescription('Mostra a versão do sistema'),
 
-    // --- ADAPTADOR SLASH ---
     async executeSlash(interaction) {
-        // Como o execute antigo não depende de args complexos, podemos reutilizar a lógica
-        // Mas o execute antigo usa message.reply com Embed. Vamos adaptar.
-        
         const embed = this.getEmbed();
         await interaction.reply({ embeds: [embed] });
     },
 
-    // --- EXECUÇÃO LEGADO ---
     execute(message) {
         const embed = this.getEmbed();
         message.reply({ embeds: [embed] });
         console.log("Registrado Checagem de versão");
     },
 
-    // --- LÓGICA ORIGINAL RESTAURADA ---
     getEmbed() {
         const versionPath = path.join(__dirname, '../Data/version.json');
         let versionData = { current_display: "Desconhecida" };

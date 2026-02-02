@@ -4,7 +4,6 @@ module.exports = {
     name: 'roll',
     description: 'Rola dados de RPG com estilo',
 
-    // --- ESTRUTURA SLASH ---
     data: new SlashCommandBuilder()
         .setName('roll')
         .setDescription('Rola dados (ex: 1d20)')
@@ -19,14 +18,9 @@ module.exports = {
         
         const fakeMessage = {
             author: interaction.user,
-            content: formula, // Para logica interna se precisar
+            content: formula, 
             reply: async (payload) => interaction.reply(payload)
         };
-
-        // Simula o processamento da string como se fosse args
-        // O execute antigo esperava args já quebrados ou a string inteira?
-        // O antigo usava args.join mas a lógica real estava no processRoll ou Roll.
-        // Vamos chamar a função Roll direto e responder.
         
         const regexDado = /^\s*(\d+)?d(\d+)(\s*[-+*/]\s*\d+)?\s*$/i;
         const match = formula.match(regexDado);
@@ -47,18 +41,14 @@ module.exports = {
         else interaction.reply({ embeds: [res.embed] });
     },
 
-    // --- EXECUÇÃO POR COMANDO (rp!roll) ---
     execute(message, args) {
-        // O antigo rp!roll era apenas informativo
         message.reply("🎲 Para rolar dados, digite direto: `d20`, `6d6`, `1d10+5`...");
     },
 
-    // --- PROCESSADOR DE MENSAGENS (d20 solto) ---
     async processRoll(message) {
         const regexDado = /^\s*(\d+)?d(\d+)(\s*[-+*/]\s*\d+)?\s*$/i;
         const regexDadoSujo = /^\s*(\d+)?d(\d+)/i;
 
-        // A. Verifica se é um dado perfeito (Ex: 6d10+5)
         const match = message.content.match(regexDado);
         
         if (match) {
@@ -73,10 +63,9 @@ module.exports = {
             if (resultado.erro) await message.reply(`⚠️ ${resultado.erro}`);
             else await message.reply({ embeds: [resultado.embed] });
             
-            return true; // "Eu cuidei disso"
+            return true;
         }
 
-        // B. Verifica se tem lixo junto (Ex: "d20 pra testar")
         else if (regexDadoSujo.test(message.content)) {
             if (message.content.length < 50) {
                 const tentativa = message.content.match(regexDadoSujo)[0];
@@ -87,7 +76,6 @@ module.exports = {
         return false;
     },
 
-    // --- MATEMÁTICA E ESTILO (DO ANTIGO) ---
     Roll: function(qtdInput, ladosInput, operador, modificador) {
         let qtd = parseInt(qtdInput) || 1;
         let lados = parseInt(ladosInput);
@@ -104,30 +92,25 @@ module.exports = {
             somaBruta += valor;
         }
 
-        // --- LÓGICA DE CORES ORIGINAL ---
         const minPossivel = qtd;
         const maxPossivel = qtd * lados;
         let corFinal;
 
-        // 1. Extremos Absolutos
+
         if (somaBruta === minPossivel) {
-            corFinal = 0x66000a; // Vermelho Sangue (Falha Crítica)
+            corFinal = 0x66000a;
         } else if (somaBruta === maxPossivel) {
-            corFinal = 0x0099FF; // Azul Maravilhoso (Sucesso Crítico)
+            corFinal = 0x0099FF;
         } else {
-            // 2. Cálculo da Porcentagem
             const range = maxPossivel - minPossivel;
             const porcentagem = range === 0 ? 100 : ((somaBruta - minPossivel) / range) * 100;
 
             if (porcentagem >= 40 && porcentagem <= 60) {
-                // MÉDIA (Amarelo)
                 const distCentro = Math.abs(50 - porcentagem); 
                 corFinal = distCentro < 4 ? 0xffb700 : 0xf0ddaf; 
             } else if (porcentagem < 40) {
-                // RUIM (Vermelho)
                 corFinal = porcentagem < 20 ? 0xa10010 : 0xff8c98;
             } else {
-                // BOM (Verde)
                 corFinal = porcentagem > 80 ? 0x008000 : 0x90EE90;
             }
         }

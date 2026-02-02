@@ -1,66 +1,182 @@
-const { spawn, exec } = require('child_process'); 
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
+const https = require('https'); 
 const { SlashCommandBuilder } = require('discord.js');
 
-// --- FUNÇÕES UTILITÁRIAS (DO ARQUIVO ANTIGO) ---
+// --- CONFIGURAÇÕES ---
+const TEMP_DIR = path.join(__dirname, '../temp');
 
-function downloadDireto(url, destPath) {
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
+
+let ytDlpPath = path.join(__dirname, 'dl/yt-dlp.exe');
+let handbrakePath = path.join(__dirname, 'dl/HandBrakeCLI.exe');
+let cookiesPath = path.join(__dirname, 'dl/cookies.txt'); 
+
+if (process.platform !== 'win32') {
+    ytDlpPath = 'yt-dlp';
+    handbrakePath = 'HandBrakeCLI';
+    cookiesPath = 'cookies.txt'; 
+}
+
+// --- FUNÇÕES DE AJUDA ---
+
+function criarBarraProgresso(porcentagem) {
+    const total = 10;
+    const progresso = Math.round((porcentagem / 100) * total);
+    const safeProg = Math.max(0, Math.min(10, progresso));
+    const vazia = total - safeProg;
+    return '🟩'.repeat(safeProg) + '⬜'.repeat(vazia);
+}
+
+function downloadManual(url, destPath) {
     return new Promise((resolve, reject) => {
         const file = fs.createWriteStream(destPath);
         https.get(url, (response) => {
-            if (response.statusCode === 301 || response.statusCode === 302) {
-                return downloadDireto(response.headers.location, destPath).then(resolve).catch(reject);
+            if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                return downloadManual(response.headers.location, destPath).then(resolve).catch(reject);
             }
             response.pipe(file);
-            file.on('finish', () => { file.close(); resolve(); });
-        }).on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
+            file.on('finish', () => { file.close(); resolve(destPath); });
+        }).on('error', (err) => { 
+            fs.unlink(destPath, () => {}); 
+            reject(err); 
+        });
     });
 }
 
-async function resolverTikTok(url) {
-    try {
-        const response = await fetch(`https://www.tikwm.com/api/?url=${url}`);
-        const data = await response.json();
-        
-        if (data.code === 0 && data.data && data.data.play) {
-            return {
-                tipo: 'video_tiktok',
-                url: data.data.play, 
-                desc: data.data.title || 'tiktok_video'
-            };
-        } else if (data.code === 0 && data.data && data.data.images) {
-             return {
-                tipo: 'slideshow_tiktok',
-                urls: data.data.images,
-                desc: data.data.title || 'tiktok_slides'
-             };
-        }
-        return null;
-    } catch (e) {
-        console.error("Erro na API TikTok:", e);
-        return null;
-    }
+function checarTipo(url) {
+    return new Promise((resolve) => {
+        let cmd = `"${ytDlpPath}" --print "vcodec" --no-warnings "${url}"`;
+        if (fs.existsSync(cookiesPath)) cmd += ` --cookies "${cookiesPath}"`;
+
+        exec(cmd, (error, stdout, stderr) => {
+            if (stderr && (stderr.includes("login required") || stderr.includes("rate-limit"))) return resolve('LOGIN_REQUIRED');
+            if (error || (stderr && stderr.includes("no video"))) return resolve('imagem'); 
+            
+            const vcodec = stdout.toString().trim();
+            if (!vcodec || vcodec === 'none' || vcodec === '(null)') return resolve('imagem');
+            return resolve('video');
+        });
+    });
 }
 
-function checarExtensao(url, ytDlpPath) {
+function getDuration(filePath) {
     return new Promise((resolve) => {
-        const command = `"${ytDlpPath}" --print "%(ext)s" --print "%(vcodec)s" --no-warnings --flat-playlist --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" "${url}"`;
-        
-        exec(command, (error, stdout, stderr) => {
-            const errText = stderr.toString();
-            if (errText.includes("no video") || errText.includes("GraphSidecar")) {
-                return resolve({ tipo: 'imagem', ext: 'jpg' }); 
-            }
-            
-            const lines = stdout.toString().trim().split('\n');
-            const vcodec = lines[1] ? lines[1].trim() : 'none';
+        const cmd = `"${ytDlpPath}" --print duration --no-warnings "${filePath}"`;
+        exec(cmd, (err, stdout) => {
+            if (err || !stdout) return resolve(60); 
+            const duration = parseFloat(stdout.trim());
+            resolve(isNaN(duration) ? 60 : duration);
+        });
+    });
+}
 
-            if (vcodec !== 'none' && vcodec !== '(null)' && vcodec) {
-                return resolve({ tipo: 'video', ext: lines[0] || 'mp4' });
+// BAIXAR IMAGEM
+function baixarImagem(url, outputPath) {
+    return new Promise((resolve, reject) => {
+        const args = ['--no-warnings', '--force-overwrites', '-o', outputPath, url];
+        if (fs.existsSync(cookiesPath)) { args.push('--cookies', cookiesPath); }
+
+        const process = spawn(ytDlpPath, args);
+        let stderrLog = "";
+        process.stderr.on('data', d => stderrLog += d.toString());
+
+        process.on('close', (code) => {
+            if (code === 0 && fs.existsSync(outputPath)) resolve(outputPath);
+            else {
+                // Plano B
+                const cmdUrl = `"${ytDlpPath}" -g --no-warnings "${url}"` + (fs.existsSync(cookiesPath) ? ` --cookies "${cookiesPath}"` : "");
+                exec(cmdUrl, async (err, stdout) => {
+                    const directUrl = stdout.toString().trim().split('\n')[0];
+                    if (directUrl && directUrl.startsWith('http')) {
+                        try { await downloadManual(directUrl, outputPath); resolve(outputPath); } 
+                        catch (manualErr) { reject(new Error(`Falha Plano B: ${manualErr.message}`)); }
+                    } else {
+                        reject(new Error("Falha total (Cookie inválido ou link privado)."));
+                    }
+                });
             }
-            return resolve({ tipo: 'imagem', ext: lines[0] || 'jpg' });
+        });
+    });
+}
+
+// BAIXAR VÍDEO
+function baixarComProgresso(url, outputPath, updateMsgFunc) {
+    return new Promise((resolve, reject) => {
+        const args = [
+            '--no-warnings', '--force-overwrites', 
+            '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '--recode-video', 'mp4',
+            '-o', outputPath,
+            url
+        ];
+        if (fs.existsSync(cookiesPath)) { args.push('--cookies', cookiesPath); }
+
+        const process = spawn(ytDlpPath, args);
+        let lastUpdate = 0;
+        let stderrLog = "";
+
+        process.stdout.on('data', (data) => {
+            const text = data.toString();
+            const match = text.match(/(\d+\.\d+)%/);
+            if (match) {
+                const percent = parseFloat(match[1]);
+                const now = Date.now();
+                if (now - lastUpdate > 3000 || percent === 100) {
+                    lastUpdate = now;
+                    updateMsgFunc(`📥 **Baixando vídeo...**\n${criarBarraProgresso(percent)} **${percent}%**`).catch(() => {});
+                }
+            }
+        });
+
+        process.stderr.on('data', (data) => stderrLog += data.toString());
+
+        process.on('close', (code) => {
+            if (code === 0) resolve(outputPath);
+            else {
+                if (stderrLog.includes("login required")) reject(new Error("INSTAGRAM_LOGIN"));
+                else reject(new Error(`yt-dlp falhou. Verifique Cookies/Link.`));
+            }
+        });
+    });
+}
+
+// COMPRESSÃO (Agora aceita um alvo "targetMB")
+function comprimirComProgresso(inputPath, outputPath, updateMsgFunc, targetMB) {
+    return new Promise(async (resolve, reject) => {
+        const duration = await getDuration(inputPath);
+        // Calcula bitrate baseado no alvo (targetMB)
+        const targetBytes = targetMB * 1024 * 1024;
+        const targetTotalBitrateKbps = (targetBytes * 8) / duration / 1000;
+        const videoBitrate = Math.max(50, Math.floor(targetTotalBitrateKbps - 128));
+
+        console.log(`[HandBrake] Alvo: ${targetMB}MB | Bitrate Calculado: ${videoBitrate}kbps`);
+
+        const args = [
+            '-i', inputPath, '-o', outputPath, '-f', 'mp4',
+            '-b', videoBitrate.toString(), '-E', 'av_aac', '-B', '128', '--optimize'
+        ];
+
+        const hb = spawn(handbrakePath, args);
+        let lastUpdate = 0;
+
+        hb.stdout.on('data', (data) => {
+            const text = data.toString();
+            const match = text.match(/(\d+\.\d+) %/);
+            if (match) {
+                const percent = parseFloat(match[1]);
+                const now = Date.now();
+                if (now - lastUpdate > 3000 || percent > 99) {
+                    lastUpdate = now;
+                    updateMsgFunc(`⚖️ **Comprimindo (Meta: ${targetMB}MB)...**\n${criarBarraProgresso(percent)} **${percent}%**`).catch(() => {});
+                }
+            }
+        });
+
+        hb.on('close', (code) => {
+            if (code === 0) resolve(outputPath);
+            else reject(new Error(`HandBrake falhou código ${code}`));
         });
     });
 }
@@ -69,149 +185,119 @@ function checarExtensao(url, ytDlpPath) {
 
 module.exports = {
     name: 'dl',
-    description: 'Baixa TUDO: TikTok (Sem login), Insta (Mão Leve) e YouTube (Clássico)',
+    description: 'Baixa mídia e tenta comprimir até caber.',
 
-    // --- ESTRUTURA SLASH ---
     data: new SlashCommandBuilder()
         .setName('dl')
-        .setDescription('Baixar mídia de links (TikTok, Insta, YT)')
-        .addStringOption(op => op.setName('link').setDescription('URL do vídeo/foto').setRequired(true)),
+        .setDescription('Baixar vídeo/imagem de links')
+        .addStringOption(op => op.setName('link').setDescription('URL').setRequired(true)),
 
-    // --- ADAPTADOR SLASH ---
     async executeSlash(interaction) {
-        const url = interaction.options.getString('link');
-        
-        // Cria um "Fake Message" que sabe lidar com edits do Slash
-        const fakeMessage = {
-            id: interaction.id,
-            author: interaction.user,
-            channel: interaction.channel,
-            content: `rp!dl ${url}`, // Simula o comando antigo
-            reply: async (content) => {
-                // O primeiro reply do Slash
-                await interaction.reply(content);
-                // Retorna um objeto que simula a mensagem enviada, permitindo .edit()
-                return {
-                    edit: async (newContent) => interaction.editReply(newContent)
-                };
-            }
+        const fakeMsg = {
+            id: interaction.id, author: interaction.user, channel: interaction.channel,
+            reply: async (c) => { await interaction.reply(c); return { edit: (n) => interaction.editReply(n) }; }
         };
-
-        // Chama a lógica antiga passando o fakeMessage
-        await this.execute(fakeMessage, [url]);
+        await this.execute(fakeMsg, [interaction.options.getString('link')]);
     },
 
-    // --- LÓGICA ORIGINAL (LEGADO) ---
     async execute(message, args) {
         const url = args[0];
         if (!url) return message.reply("❌ Cadê o link?");
 
-        const msg = await message.reply("🕵️‍♂️ **Analisando link...**");
-        const filePrefix = `dl_${message.id}`; // Garante unicidade
-        const rootDir = path.join(__dirname, '../temp');
-        if (!fs.existsSync(rootDir)) fs.mkdirSync(rootDir);
+        const msg = await message.reply("🕵️‍♂️ **Analisando...**");
+        const userId = message.author.id; 
+        const rawFile = path.join(TEMP_DIR, `${userId}_raw.mp4`);
+        const finalFile = path.join(TEMP_DIR, `${userId}.mp4`);
+        const imgFile = path.join(TEMP_DIR, `${userId}.jpg`); 
 
-        // Define a função de editar mensagem (compatível com msg real ou fake slash)
-        const safeEdit = async (text) => {
-            if (msg.edit) return msg.edit(text);
+        const updateStatus = async (text) => { try { if (msg.edit) await msg.edit(text); } catch (e) { } };
+        const limparTudo = () => {
+            if (fs.existsSync(rawFile)) fs.unlinkSync(rawFile);
+            if (fs.existsSync(finalFile)) fs.unlinkSync(finalFile);
+            if (fs.existsSync(imgFile)) fs.unlinkSync(imgFile);
         };
 
-        // === ROTA 1: É TIKTOK? ===
-        if (url.includes('tiktok.com')) {
-            await safeEdit("🎵 **TikTok detectado!** Bypassing login...");
-            const tkInfo = await resolverTikTok(url);
+        try {
+            limparTudo();
+            const tipo = await checarTipo(url);
+            
+            if (tipo === 'LOGIN_REQUIRED') throw new Error("INSTAGRAM_LOGIN");
 
-            if (tkInfo && tkInfo.tipo === 'video_tiktok') {
-                const destPath = path.join(rootDir, `${filePrefix}.mp4`);
-                try {
-                    await downloadDireto(tkInfo.url, destPath);
-                    return enviarArquivos(msg, filePrefix);
-                } catch (e) {
-                    console.log(e);
-                    return safeEdit("❌ Erro ao baixar o arquivo do TikTok.");
-                }
-            } 
-            else if (tkInfo && tkInfo.tipo === 'slideshow_tiktok') {
-                await safeEdit(`📸 **Slideshow TikTok!** Baixando ${tkInfo.urls.length} fotos...`);
-                for (let i = 0; i < Math.min(tkInfo.urls.length, 5); i++) {
-                    const destPath = path.join(rootDir, `${filePrefix}_${i}.jpg`);
-                    await downloadDireto(tkInfo.urls[i], destPath);
-                }
-                return enviarArquivos(msg, filePrefix);
+            // === ROTA IMAGEM ===
+            if (tipo === 'imagem') {
+                await updateStatus("📸 **Foto detectada!**");
+                await baixarImagem(url, imgFile);
+                if (!fs.existsSync(imgFile)) throw new Error("Erro ao baixar imagem.");
+                
+                await msg.edit({ content: `✅ <@${userId}>`, files: [imgFile] });
+                setTimeout(limparTudo, 5000);
+                return;
             }
-        }
 
-        // === ROTA 2: PADRÃO (Insta/YouTube via yt-dlp) ===
-        let ytDlpPath = path.join(__dirname, 'dl/yt-dlp.exe');
-        if (process.platform !== 'win32') ytDlpPath = 'yt-dlp'; // Compatibilidade Linux
+            // === ROTA VÍDEO (COM LÓGICA DE RETRY) ===
+            await updateStatus("🎬 **Vídeo detectado! Baixando original...**");
+            await baixarComProgresso(url, rawFile, updateStatus);
 
-        const info = await checarExtensao(url, ytDlpPath);
+            if (!fs.existsSync(rawFile)) throw new Error("O vídeo não foi baixado.");
+            
+            const originalStats = fs.statSync(rawFile);
+            let sizeMB = originalStats.size / (1024 * 1024);
+            let fileToSend = rawFile;
 
-        // CASO A: VÍDEO
-        if (info.tipo === 'video') {
-            await safeEdit(`🎬 **Vídeo detectado!** Baixando MP4...`);
-            const outputTemplate = path.join(rootDir, `${filePrefix}_%(autonumber)s.%(ext)s`);
-            
-            const processArgs = [
-                '--no-warnings', '--max-filesize', '25M', '--playlist-items', '1,2,3',
-                '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                '--recode-video', 'mp4',
-                '-o', outputTemplate,
-                url
-            ];
-            
-            spawn(ytDlpPath, processArgs).on('close', () => enviarArquivos(msg, filePrefix));
-        } 
-        
-        // CASO B: IMAGEM
-        else {
-            await safeEdit(`📸 **Imagem detectada!** Roubando URL direta...`);
-            const cmdGetUrl = `"${ytDlpPath}" -g --no-warnings --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" "${url}"`;
-            
-            exec(cmdGetUrl, async (error, stdout, stderr) => {
-                const links = stdout.trim().split('\n').filter(l => l.startsWith('http'));
-                
-                if (links.length === 0) {
-                    // Força bruta
-                    const outputTemplate = path.join(rootDir, `${filePrefix}_%(autonumber)s.jpg`);
-                    const processArgs = ['--ignore-errors', '--no-warnings', '-o', outputTemplate, url];
-                    spawn(ytDlpPath, processArgs).on('close', () => enviarArquivos(msg, filePrefix));
-                    return;
+            // Lógica Inteligente de Compressão
+            if (sizeMB > 15.0) {
+                // TENTATIVA 1: Mirar em 15MB
+                await updateStatus(`⚖️ **Arquivo grande (${sizeMB.toFixed(1)}MB)! Comprimindo (Tentativa 1/2)...**`);
+                try {
+                    await comprimirComProgresso(rawFile, finalFile, updateStatus, 15.0);
+                    
+                    // Checa resultado
+                    let finalSize = fs.statSync(finalFile).size / (1024 * 1024);
+                    
+                    if (finalSize > 25.0) {
+                        // TENTATIVA 2: O arquivo ainda tá gordo. Vamos ser agressivos. Mirar em 10MB.
+                        await updateStatus(`⚠️ **Ainda grande (${finalSize.toFixed(1)}MB)! Tentando comprimir mais forte (Tentativa 2/2)...**`);
+                        
+                        // Apaga a tentativa falha para não confundir
+                        fs.unlinkSync(finalFile);
+                        
+                        // Comprime DE NOVO usando o original (rawFile)
+                        await comprimirComProgresso(rawFile, finalFile, updateStatus, 10.0);
+                    }
+
+                    fileToSend = finalFile;
+                } catch (e) {
+                    console.error(e);
+                    await updateStatus(`⚠️ **Erro na compressão.** Tentando enviar o original...`);
+                    fileToSend = rawFile;
                 }
+            }
 
-                await safeEdit(`📸 **Baixando ${links.length} imagem(ns)...**`);
-                for (let i = 0; i < Math.min(links.length, 4); i++) {
-                    const destPath = path.join(rootDir, `${filePrefix}_${i}.jpg`);
-                    await downloadDireto(links[i], destPath).catch(e => console.log(e));
-                }
-                
-                enviarArquivos(msg, filePrefix);
-            });
+            // Verificação Final Pré-Envio
+            if (!fs.existsSync(fileToSend)) throw new Error("Arquivo final sumiu.");
+            const finalCheckSize = fs.statSync(fileToSend).size / (1024*1024);
+            
+            if (finalCheckSize > 25.0) {
+                throw new Error(`MESMO COMPRIMINDO DUAS VEZES, AINDA FICOU COM ${finalCheckSize.toFixed(1)}MB. ESSE VÍDEO É O CHEFÃO FINAL! 🗿`);
+            }
+
+            await updateStatus("✅ **Enviando...**");
+            await message.channel.send({ content: `✅ <@${userId}>`, files: [fileToSend] });
+            await updateStatus("✅ **Pronto!**");
+
+            setTimeout(limparTudo, 10000);
+
+        } catch (error) {
+            console.error(error);
+            const errStr = (error.message || "").toLowerCase();
+            let userMsg = `❌ **ERRO:** ${error.message}`;
+
+            if (errStr.includes("instagram_login")) userMsg = "🔒 **Erro de Login:** O Instagram bloqueou. Verifique o `cookies.txt`.";
+            if (errStr.includes("headerstimeout")) userMsg = "📡 **Erro de Internet:** O envio demorou demais.";
+            if (errStr.includes("40005")) userMsg = "🐳 **Erro:** Arquivo > 25MB (Discord bloqueou).";
+
+            await updateStatus(userMsg);
+            limparTudo();
         }
     }
 };
-
-// Função de Envio e Limpeza
-async function enviarArquivos(msg, filePrefix) {
-    const rootDir = path.join(__dirname, '../temp');
-    // Verifica se a pasta existe antes de ler
-    if (!fs.existsSync(rootDir)) return;
-
-    const files = fs.readdirSync(rootDir);
-    const foundFiles = files
-        .filter(file => file.startsWith(filePrefix))
-        .map(file => path.join(rootDir, file));
-
-    if (foundFiles.length > 0) {
-        try {
-            await msg.edit({ content: `✅ **Pronto!**`, files: foundFiles });
-            // Deleta após 5 segundos
-            setTimeout(() => foundFiles.forEach(f => { if(fs.existsSync(f)) fs.unlinkSync(f) }), 5000);
-        } catch (e) {
-            msg.edit("❌ **Erro:** O arquivo é muito grande pro Discord (>25MB).");
-            foundFiles.forEach(f => { if(fs.existsSync(f)) fs.unlinkSync(f) });
-        }
-    } else {
-        msg.edit("❌ **Falha Total:** O site venceu. Não consegui pegar o arquivo.");
-    }
-}

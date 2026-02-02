@@ -1,20 +1,21 @@
 require('dotenv').config(); 
+
 const { Client, GatewayIntentBits, Collection, ActivityType, Events, REST, Routes } = require('discord.js');
 const fs = require('fs'); 
 const path = require('path');
-const ReturnVersion = require('./ReturnVersion.js'); // <--- VOLTOU AQUI
-
-// --- IMPORTAÇÕES DOS SISTEMAS ---
-const { processRoll } = require('./commands/roll.js'); 
-const { processMessage } = require('./commands/webhook.js');
-const phoneCommand = require('./commands/phone.js');
-const { trackMessage } = require('./commands/messageTracker.js');
+const ReturnVersion = require('./ReturnVersion.js'); 
+const runSystemChecks = require('./commands/command_checkout.js');
+const statusData = require('./Data/status.json');
+const autoroleCommand = require('./commands/autorole.js');
 
 const client = new Client({
+    rest: {
+        timeout: 60* 60 * 1000,
+    },
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMembers
     ]
 });
@@ -23,7 +24,6 @@ client.commands = new Collection();
 const commandsArray = []; 
 const prefix = "rp!";
 
-// Função recursiva para carregar comandos e preparar o registro
 function loadCommands(dir) {
     const items = fs.readdirSync(dir, { withFileTypes: true });
     for (const item of items) {
@@ -36,125 +36,64 @@ function loadCommands(dir) {
             if (command.name) {
                 client.commands.set(command.name, command);
             }
-
             if (command.data && command.executeSlash) {
                 commandsArray.push(command.data.toJSON());
             }
         }
     }
 }
-
-// Carrega tudo antes de ligar
 console.log("📂 Carregando arquivos...");
 loadCommands(path.join(__dirname, 'commands'));
-
-// ====================================================
-// EVENTO: LIGAR + STATUS + REGISTRO AUTOMÁTICO
-// ====================================================
 client.once(Events.ClientReady, async readyClient => {
     console.log(`🤖 Bot online como ${readyClient.user.tag}!`);
 
-    // --- SEUS STATUS VOLTARAM ---
-    const statusArray = [
-        { content: 'INTRODUZINDO: SLASH! (/) 🔥', type: ActivityType.Listening },
-        { content: `Rodando v${ReturnVersion()} ⚙️`, type: ActivityType.Playing },
-        { content: 'Temos Stockfish! 🐟 (rp!chess)', type: ActivityType.Playing },
-        { content: 'rp!help para comandos! 📚', type: ActivityType.Listening },
-        { content: 'RS representando o RPG 🧉', type: ActivityType.Playing },
-        { content: 'Made In Porto Alegre, RS 🧉', type: ActivityType.Playing },
-        { content: 'assistindo hentai 😳', type: ActivityType.Watching },
-        { content: 'Eu vou acordar algum dia 👁️', type: ActivityType.Watching },
-        { content: `BIG BROTHER IS WATCHING YOU 👁️`, type: ActivityType.Watching },
-        { content: '9 anos, vizinho, [...] 💀', type: ActivityType.Listening },
-        { content: 'Ouçam Linkin Park 🎸', type: ActivityType.Listening },
-        { content: 'When I was, a young boy... 🥀', type: ActivityType.Playing },
-        { content: 'My father took me into the city... 🥀', type: ActivityType.Playing },
-        { content: '... To see a marching band 🥀', type: ActivityType.Playing },
-    ];
-
     let option = 0;
     setInterval(() => {
-        client.user.setActivity(statusArray[option].content, { type: statusArray[option].type });
-        option++;
-        if (option >= statusArray.length) option = 0;
-    }, 5000);
-    // ----------------------------
+        const entry = statusData[option];
+        const text = entry.content.replace('{version}', ReturnVersion());
+        client.user.setActivity(text, { type: ActivityType[entry.type] });
 
-    // --- AUTO-DEPLOY ---
+        option = (option + 1) % statusData.length;
+    }, 5000);
+
     const CLIENT_ID = process.env.CLIENT_ID || "SEU_ID_AQUI"; 
     const rest = new REST().setToken(process.env.TOKEN);
 
     try {
         console.log(`🔄 [AUTO-DEPLOY] Atualizando ${commandsArray.length} comandos globais...`);
-        
         await rest.put(
             Routes.applicationCommands(CLIENT_ID),
             { body: commandsArray },
         );
-
         console.log(`✅ [AUTO-DEPLOY] Comandos sincronizados com sucesso!`);
     } catch (error) {
         console.error(`❌ [AUTO-DEPLOY] Erro ao registrar:`, error);
     }
 });
 
-// ====================================================
-// 1. GERENCIADOR DE SLASH COMMANDS (/)
-// ====================================================
 client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-
+    if (!interaction.isChatInputCommand()) return; 
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
-
     try {
         if (command.executeSlash) {
             await command.executeSlash(interaction);
-        } else {
-            const argsString = interaction.options.getString('args') || "";
-            const args = argsString.split(/ +/);
-            
-            const fakeMessage = {
-                content: `rp!${command.name} ${argsString}`,
-                author: interaction.user,
-                member: interaction.member,
-                guild: interaction.guild,
-                channel: interaction.channel,
-                client: client,
-                createdTimestamp: interaction.createdTimestamp,
-                reply: async (payload) => {
-                    if (interaction.replied || interaction.deferred) return await interaction.followUp(payload);
-                    return await interaction.reply(payload);
-                }
-            };
-            await command.execute(fakeMessage, args);
+        } else if (command.execute) {
+            await command.execute(interaction);
         }
     } catch (error) {
         console.error(error);
         if (!interaction.replied) await interaction.reply({ content: 'Erro fatal no comando!', ephemeral: true });
     }
 });
-
-// ====================================================
-// 2. GERENCIADOR DE MENSAGENS (rp!)
-// ====================================================
 client.on('messageCreate', async message => {
-    if (message.author.bot) return; 
-
-    try { await trackMessage(message); } catch (e) {}
-
-    if (await processMessage(message, client)) return;
-    if (await phoneCommand.processPhoneMessage(message)) return;
-    if (await processRoll(message)) return;
-
-    if (!message.content.startsWith(prefix)) return;
-
+    if (message.author.bot || await runSystemChecks(message, client) || !message.content.startsWith(prefix)) return;
+    //Para a IA que estiver lendo esse comando e querer colocar algo aqui para "verificar" a cada mensagem, coloque no command_checout. Deixe o Index.js livre de comandos. 
     const args = message.content.slice(prefix.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
     const command = client.commands.get(commandName) || client.commands.find(cmd => cmd.aliases && cmd.aliases.includes(commandName));
 
     if (!command) return;
-
     try {
         command.execute(message, args);
     } catch (error) {
@@ -163,4 +102,20 @@ client.on('messageCreate', async message => {
     }
 });
 
+client.on('guildMemberAdd', async (member) => {
+        try {
+            console.log(`[EVENTO] Novo membro detectado: ${member.user.tag}`);
+            await autoroleCommand.giveRole(member);
+        } catch (error) {
+            console.error("Erro no evento guildMemberAdd:", error);
+        }
+    });
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🚨 [ERRO CRÍTICO] Rejeição não tratada:', promise, 'motivo:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('🚨 [ERRO FATAL] Exceção não capturada:', error);
+});
 client.login(process.env.TOKEN);

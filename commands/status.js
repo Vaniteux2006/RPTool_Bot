@@ -8,12 +8,10 @@ module.exports = {
     description: 'Mostra o dashboard de estatísticas do servidor',
     aliases: ['stats', 'dashboard'],
 
-    // --- MENU SLASH ---
     data: new SlashCommandBuilder()
         .setName('status')
         .setDescription('Mostra estatísticas do servidor'),
 
-    // --- ADAPTADOR ---
     async executeSlash(interaction) {
         const fakeMessage = {
             guild: interaction.guild,
@@ -22,7 +20,6 @@ module.exports = {
         await this.execute(fakeMessage, []);
     },
 
-    // --- LÓGICA ORIGINAL ---
     async execute(message, args) {
         const guildId = message.guild.id;
         const filePath = path.join(__dirname, '..', 'Data', 'statistics.json');
@@ -38,7 +35,6 @@ module.exports = {
             return message.reply("📉 Ainda não tenho dados suficientes deste servidor específico!");
         }
 
-        // PROCESSAR DADOS
         const daysArray = Object.entries(guildStats.days).map(([key, value]) => {
             const str = key.toString().padStart(8, '0');
             const day = str.substring(0, 2);
@@ -50,7 +46,6 @@ module.exports = {
         daysArray.sort((a, b) => a.dateObj - b.dateObj);
         const recentDays = daysArray.slice(-10); 
 
-        // QUICKCHART
         const chartConfig = {
             type: 'line',
             data: {
@@ -85,7 +80,6 @@ module.exports = {
             const buffer = Buffer.from(response.data, 'binary');
             const attachment = new AttachmentBuilder(buffer, { name: 'graph.png' });
 
-            // TOPS
             const sortedUsers = Object.entries(guildStats.users).sort(([, a], [, b]) => b - a).slice(0, 5);
             const sortedChannels = Object.entries(guildStats.chats).sort(([, a], [, b]) => b - a).slice(0, 5);
             
