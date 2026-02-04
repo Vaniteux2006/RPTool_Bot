@@ -3,7 +3,6 @@ import os
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Sobe duas pastas para achar o .env
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 

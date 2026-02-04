@@ -1,36 +1,36 @@
 import os
 import sys
 import uvicorn
+import warnings
+import base64 
 import google.generativeai as genai
 from fastapi import FastAPI
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pathlib import Path
 
-# --- CONFIGURAÇÕES DE CAMINHO ---
-# 1. Achar o .env (Sobe python/ -> RPTool/ -> .env)
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
-# 2. Achar os diretórios de comandos
 current_dir = os.path.dirname(os.path.abspath(__file__))
 chess_dir = os.path.join(current_dir, "..", "commands", "chess")
 phone_dir = os.path.join(current_dir, "..", "commands", "phone")
 tupper_dir = os.path.join(current_dir, "..", "commands", "tupper")
+warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
 
-# Adiciona ao Path do Python
 sys.path.append(chess_dir)
 sys.path.append(phone_dir)
 sys.path.append(tupper_dir)
+sys.path.append(current_dir)
 
-# Importações dos Módulos
 from chess_logic import ChessBot 
 from phone_logic import PhoneSystem
 from tupper_logic import TupperBrain
+from quote_engine import render_quote 
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# Inicializa o Gemini
+
 safety_settings = [
     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -41,12 +41,10 @@ model = genai.GenerativeModel('gemini-3-flash-preview', safety_settings=safety_s
 
 app = FastAPI()
 
-# Inicializa os Cérebros
 chess_brain = ChessBot()
 phone_brain = PhoneSystem()
 tupper_brain = TupperBrain()
 
-# --- MODELOS DE DADOS (Pydantic) ---
 class InteractionRequest(BaseModel):
     npc_name: str
     persona: str
@@ -54,7 +52,8 @@ class InteractionRequest(BaseModel):
 
 class ChessRequest(BaseModel):
     fen: str
-    mode: str = "solve"
+    mode: str = "solve" 
+    user_move: str = None 
 
 class PhoneAction(BaseModel):
     action: str 
@@ -80,17 +79,21 @@ class TupperChatRequest(BaseModel):
     tupper_name: str
     context: list[str]
 
-# --- NOVO MODELO PARA MEMÓRIAS ---
 class MemoryRequest(BaseModel):
     uid: str
     tupper_name: str
     memory_text: str
 
-class AnalyticsRequest(BaseModel):
-    period: str
+class QuoteRequest(BaseModel):
+    text: str
+    username: str
+    avatar_url: str
+    user_color: str
+    options: dict
 
+class ResenhaRequest(BaseModel):
+    messages: list[str]
 
-# --- ROTA 1: CHAT GENÉRICO ---
 @app.post("/chat")
 async def chat_endpoint(request: InteractionRequest):
     print(f"[IA] Mensagem para: {request.npc_name}")
@@ -98,7 +101,7 @@ async def chat_endpoint(request: InteractionRequest):
     [INSTRUÇÃO DO SISTEMA]
     {request.persona}
     [CONTEXTO]
-    Responda como {request.npc_name}. Curto e direto.
+    Responda como {request.npc_name}. 
     [USUÁRIO]: {request.user_message}
     [{request.npc_name}]:
     """
@@ -108,12 +111,15 @@ async def chat_endpoint(request: InteractionRequest):
     except Exception as e:
         return {"reply": f"// Erro neural: {str(e)}"}
 
-# --- ROTA 2: XADREZ ---
 @app.post("/chess")
 async def chess_endpoint(request: ChessRequest):
-    return chess_brain.analyze(request.fen)
+    if request.mode == "play":
+        if not request.user_move:
+            return {"error": "Preciso de um movimento para jogar!"}
+        return chess_brain.play_turn(request.fen, request.user_move)
+    else:
+        return chess_brain.analyze(request.fen)
 
-# --- ROTA 3: TELEFONE (COMANDOS) ---
 @app.post("/phone/cmd")
 async def phone_command(request: PhoneAction):
     match request.action:
@@ -134,7 +140,6 @@ async def phone_command(request: PhoneAction):
         case _:
             return {"error": "Comando desconhecido"}
 
-# --- ROTA 4: TELEFONE (TRANSMISSÃO) ---
 @app.post("/phone/transmit")
 async def phone_transmit(request: PhoneMessage):
     result = phone_brain.transmit(
@@ -147,7 +152,6 @@ async def phone_transmit(request: PhoneMessage):
     if result: return result
     return {"status": "ignored"}
 
-# --- ROTA 5: TUPPER AI ---
 @app.post("/tupper/create")
 async def create_persona(request: PersonaRequest):
     return tupper_brain.register_persona(request.uid, request.tupper_name, request.persona)
@@ -156,16 +160,65 @@ async def create_persona(request: PersonaRequest):
 async def chat_tupper(request: TupperChatRequest):
     return tupper_brain.generate_response(request.uid, request.tupper_name, request.context)
 
-# --- ROTA 6: MEMÓRIAS (A QUE FALTAVA!) ---
 @app.post("/tupper/memories")
 async def add_memories(request: MemoryRequest):
-    # Chama a função que você já criou no tupper_logic.py
     return tupper_brain.add_memory(request.uid, request.tupper_name, request.memory_text)
 
+@app.post("/quote/generate")
+async def generate_quote_api(request: QuoteRequest):
+    try:
+        buffer = render_quote(
+            request.text, 
+            request.username, 
+            request.avatar_url, 
+            request.user_color,
+            request.options
+        )
+        img_str = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        return {"image_base64": img_str}
+    except Exception as e:
+        print(f"Erro no Quote: {e}")
+        return {"error": str(e)}
+    
+@app.post("/resenha/check")
+async def check_resenha(request: ResenhaRequest):
+    chat_history = "\n".join(request.messages)
+    
+    prompt = f"""
+    Você é um moderador de chat experiente em gírias de internet e caos.
+    Sua tarefa é analisar as últimas mensagens de um chat e determinar o "Estado de Resenha".
+    
+    [CRITÉRIOS DE ANÁLISE]
+    1. Xingamentos e Tretas: Discussões acaloradas ou xingamentos.
+    2. Desafio à Autoridade: Membros peitando ADMs.
+    3. Caos de Ping: Uso desnecessário de @everyone ou @here.
+    4. Gírias e Memes: Uso intensivo de dialeto da internet.
+    5. Risada Excessiva: Spam de "KKKKK" ou similares.
+    6. Choque/Surpresa: Reações exageradas a algo que aconteceu.
+    7. Tempo: Se tá a muito tempo sem mensagens ou com conversa morna e sem graça
 
-# =======================================================
-# O INICIADOR TEM QUE SER A ÚLTIMA COISA DO ARQUIVO
-# =======================================================
+    [SAÍDA OBRIGATÓRIA]
+    Analise o texto abaixo e retorne APENAS um JSON estrito no seguinte formato:
+    {{
+        "status": "r-00" ou "r-01",
+        "analysis": "Uma frase curta e engraçada justificando a decisão."
+    }}
+
+    Regra: "r-01" é para Resenha Confirmada (Caos/Zueira/Treta). "r-00" é para Não há resenha (Chat parado ou conversa normal).
+
+    [HISTÓRICO DO CHAT]
+    {chat_history}
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        # Limpeza para garantir JSON válido
+        text_resp = response.text.replace('```json', '').replace('```', '').strip()
+        import json
+        return json.loads(text_resp)
+    except Exception as e:
+        print(f"Erro na resenha: {e}")
+        return {"status": "r-00", "analysis": "A IA bugou com tanta resenha."}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

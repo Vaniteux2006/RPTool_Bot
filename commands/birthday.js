@@ -18,7 +18,6 @@ function salvarDB(data) {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
 }
 
-// --- LÓGICA DO PLACAR ---
 async function atualizarPlacar(client, guildId) {
     let db = lerDB();
     const config = db[guildId];
@@ -92,7 +91,6 @@ module.exports = {
     description: 'Gerencia Aniversários (Check, Reset, Add)',
     checkBirthdays, 
 
-    // --- MENU SLASH ---
     data: new SlashCommandBuilder()
         .setName('birthday')
         .setDescription('Sistema de Aniversários')
@@ -115,19 +113,12 @@ module.exports = {
             const data = interaction.options.getString('data');
             const canal = interaction.options.getChannel('canal') || interaction.channel;
 
-            // RECONSTRUÇÃO DA STRING MÁGICA
-            // O código antigo espera: rp!birthday <Nome/User> <Data> <#Canal>
-            // Vamos simular exatamente isso nos args
-            
-            // Removemos o 'add' do args para injetar os dados brutos
             args.length = 0; 
             
-            // Injeta: <@ID> DATA <#CANAL>
             args.push(`<@${pessoa.id}>`);
             args.push(data);
             args.push(`<#${canal.id}>`);
 
-            // Precisamos injetar as menções no fakeMessage
             interaction.mentionsTemp = {
                 users: { first: () => pessoa },
                 channels: { first: () => canal }
@@ -139,24 +130,20 @@ module.exports = {
             member: interaction.member,
             guild: interaction.guild,
             mentions: interaction.mentionsTemp || { users: { first: () => null }, channels: { first: () => null } },
-            // Simulamos o client pro atualizarPlacar usar
             client: interaction.client,
             reply: async (payload) => interaction.reply(payload)
         };
 
-        // Fallback para mentions padrão se não foram injetadas
         if (!fakeMessage.mentions.users.first()) fakeMessage.mentions.users.first = () => null;
         if (!fakeMessage.mentions.channels.first()) fakeMessage.mentions.channels.first = () => null;
 
         await this.execute(fakeMessage, args);
     },
 
-    // --- LÓGICA ORIGINAL ---
     async execute(message, args) {
         const subCommand = args[0] ? args[0].toLowerCase() : null;
         const guildId = message.guild.id;
 
-        // COMANDO: CHECK
         if (subCommand === 'check') {
             const db = lerDB();
             const config = db[guildId];
@@ -184,7 +171,6 @@ module.exports = {
             return message.reply({ embeds: [embed] });
         }
 
-        // COMANDO: RESET
         if (subCommand === 'reset') {
             if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 return message.reply("⛔ **Apenas Administradores podem resetar o sistema de aniversários.**");
@@ -205,12 +191,9 @@ module.exports = {
             return message.reply("💥 **Sistema resetado!** Todos os aniversários deste servidor foram apagados e o placar removido.");
         }
 
-        // COMANDO: ADD
-        // A. Achar o canal (último argumento ou menção)
         const channel = message.mentions.channels.first() || message.guild.channels.cache.get(args[args.length - 1]);
         if (!channel) return message.reply("⚠️ **Erro:** Faltou o canal no final! Ex: `rp!birthday Bruno 15/09 #aniversarios`");
 
-        // B. Achar a data
         const dateRegex = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/;
         let dateIndex = -1;
         let day, month, year = null;
@@ -229,7 +212,6 @@ module.exports = {
         if (dateIndex === -1) return message.reply("⚠️ **Erro:** Data inválida! Use o formato **DD/MM** ou **DD/MM/AAAA**.");
         if (month < 1 || month > 12 || day < 1 || day > 31) return message.reply("⚠️ **Erro:** Data impossível.");
 
-        // C. O que sobrou é o Nome
         const entries = args.filter((_, index) => index !== dateIndex && !args[index].includes(channel.id));
         const nameClean = entries.join(" ").replace(/<@!?\d+>/g, "").trim(); 
         
@@ -242,7 +224,6 @@ module.exports = {
 
         const finalName = nameClean || (mentionedUser ? mentionedUser.username : "Desconhecido");
 
-        // D. Salvar no Banco
         let db = lerDB();
 
         if (!db[guildId]) {

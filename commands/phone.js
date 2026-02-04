@@ -5,7 +5,6 @@ module.exports = {
     name: 'phone',
     description: 'Sistema de Telefone Inter-Servidores',
     
-    // --- ESTRUTURA SLASH ---
     data: new SlashCommandBuilder()
         .setName('phone')
         .setDescription('Telefone Inter-Servidores')
@@ -23,7 +22,6 @@ module.exports = {
         .addSubcommand(sub => sub.setName('group').setDescription('Pede para entrar na chamada em grupo')
              .addStringOption(op => op.setName('alvo').setDescription('ID ou Nome de quem já está na call').setRequired(true))),
 
-    // --- ADAPTADOR SLASH ---
     async executeSlash(interaction) {
         const sub = interaction.options.getSubcommand();
         const args = [sub]; 
@@ -51,7 +49,6 @@ module.exports = {
         await this.execute(fakeMessage, args);
     },
 
-    // --- LÓGICA ORIGINAL (LEGADO) ---
     async execute(message, args) {
         const action = args[0] ? args[0].toLowerCase() : null;
         const serverId = message.guild.id;
@@ -137,7 +134,6 @@ module.exports = {
         }
     },
 
-    // --- LISTENER (CRUCIAL PARA OUVIR MENSAGENS) ---
     async processPhoneMessage(message) {
         if (message.author.bot || message.content.startsWith('rp!') || message.content.startsWith('/')) return false;
         if (message.attachments.size > 0) return false;
@@ -150,7 +146,7 @@ module.exports = {
                 user_name: message.author.username,
                 server_name: message.guild.name,
                 server_id: message.guild.id,
-                channel_id: message.channel.id // MANTIDO O FIX DO ARQUIVO ANTIGO
+                channel_id: message.channel.id 
             };
 
             const response = await fetch('http://127.0.0.1:8000/phone/transmit', {
