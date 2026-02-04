@@ -9,4 +9,6 @@ tuppers.json
 *.exe
 app.rc
 chess_engine
-Data
+Data/*.json
+bin/*.exe
+bin/stockfish_linux
