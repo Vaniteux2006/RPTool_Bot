@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
 import { api } from '../api';
-import { getGuildAIConfig } from './utils/tokenHelper'; // <--- Import atualizado
+import { getGuildAIConfig } from './utils/tokenHelper';
 
 export default {
     name: 'ai',
@@ -15,6 +15,7 @@ export default {
         const msg = interaction.options.getString('mensagem');
         if (!msg) return;
         
+        // DeferReply é importante para a IA ter tempo de pensar sem dar timeout
         await interaction.deferReply(); 
         await this.runAI(interaction, msg);
     },
@@ -27,49 +28,57 @@ export default {
         await this.runAI(loading, userMessage, true); 
     },
 
-    // --- LÓGICA ATUALIZADA ---
     async runAI(target: any, text: string, isEdit = false) {
-        // Tenta pegar o ID do servidor (Funciona tanto pra Slash quanto pra Message)
         const guildId = target.guildId || target.guild?.id;
 
         try {
-            // 1. Busca a CONFIGURAÇÃO (Provider + Key + Model)
             const config = getGuildAIConfig(guildId);
 
             if (!config) {
-                 const errText = "⚠️ Nenhum token configurado para este servidor. Use `rp!token` para doar um.";
+                 const errText = "⚠️ Nenhum token configurado. Use `rp!token` para configurar.";
                  if (isEdit) target.edit(errText); else target.editReply(errText);
                  return;
             }
 
-            // 2. Chama a API passando a config
+            // AQUI O GEMINI-3-FLASH PERMANECE VIVO E INTOCADO DENTRO DA CONFIG
             const replyText = await api.chat(
                 "RPTool", 
                 "Você é um bot assistente de RPG. Seja útil, breve e use gírias de Discord.", 
                 text,
-                config // <--- Passamos o objeto completo agora
+                config
             );
 
             if (isEdit) target.edit(replyText);
             else target.editReply(replyText);
 
         } catch (error: any) {
-            let errText = "❌ Erro neural ou token inválido.";
+            // Log no console só pra você saber o que rolou (não aparece pro usuário)
+            console.error(`[AI Error] ${error.message}`);
 
-            if (error.message?.includes('429') || error.toString().includes('Too Many Requests')) {
-                // Tenta achar números na mensagem de erro (ex: "retry after 30s")
-                const match = error.message?.match(/after (\d+)/) || error.message?.match(/in (\d+)/);
-                const seconds = match ? match[1] : '60'; // Default: 60s
+            let errText = "😵‍💫 **Minha cabeça deu um nó... Tenta de novo?**";
+            const errorMsg = error.message || error.toString();
+
+            // TRATAMENTO DO ERRO 429 (COTA/SPAM)
+            if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Quota exceeded')) {
                 
-                errText = `🔥 **OPA CALMA CALMA CALMA! TÃO ME PEDINDO MUITA COISA! ESPERA SÓ ${seconds} SEGUNDOS!**`;
-            } else if (error.message?.includes('503') || error.toString().includes('Service Unavailable')) {
-                errText = "🤯 **Calma aí que fritei a cabeça. Tô resolvendo uns B.Os, me chama daqui a pouco.**";
+                // Regex melhorado para pegar "retry in 27.05s" ou "after 30s"
+                // O Google manda quebrado (ex: 27.076s), o Math.ceil arredonda pra cima (28s)
+                const match = errorMsg.match(/retry in (\d+(\.\d+)?)/) || errorMsg.match(/after (\d+)/);
+                let seconds = 60; // Padrão de segurança
+
+                if (match) {
+                    seconds = Math.ceil(parseFloat(match[1]));
+                }
+                
+                errText = `🔥 **CALMA AÍ! Muita mensagem pra ler!**\n⏳ *O cérebro fritou... Tenta de novo em **${seconds}s**.*`;
+            
+            } else if (errorMsg.includes('503') || errorMsg.includes('Overloaded')) {
+                errText = "🤯 **Tô processando muita coisa agora... Me dá um minutinho pra respirar!**";
             }
-            // ----
-            console.error(error);
+
+            // Envia a mensagem bonitinha pro usuário
             if (isEdit) target.edit(errText);
             else target.editReply(errText);
-            
         }
     }
 };
