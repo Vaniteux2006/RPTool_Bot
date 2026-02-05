@@ -7,8 +7,6 @@ tuppers.json
 *.o
 *.obj
 *.exe
-app.rc
-chess_engine
 Data/*.json
 bin/*.exe
 bin/stockfish_linux
