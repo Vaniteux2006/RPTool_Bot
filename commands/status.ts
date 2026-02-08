@@ -1,4 +1,11 @@
-import { AttachmentBuilder, EmbedBuilder, SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+import {
+    AttachmentBuilder,
+    EmbedBuilder,
+    SlashCommandBuilder,
+    ChatInputCommandInteraction,
+    Message
+} from 'discord.js';
+
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
@@ -20,44 +27,81 @@ export default {
         await this.execute(fakeMessage, []);
     },
 
-    async execute(message: Message | any, args: string[]) {
+    async execute(message: Message | any) {
         const guildId = message.guild.id;
         const filePath = path.join(__dirname, '../Data/statistics.json');
 
         if (!fs.existsSync(filePath)) {
-            return message.reply("📉 Sem dados ainda. Conversem mais!");
+            return message.reply('📉 Sem dados ainda.');
         }
 
         const rawData = fs.readFileSync(filePath, 'utf-8');
         const globalStats = JSON.parse(rawData);
-        const guildStats = globalStats[guildId]; 
+        const guildStats = globalStats[guildId];
 
         if (!guildStats) {
-            return message.reply("📉 Sem dados para este servidor.");
+            return message.reply('📉 Sem dados para este servidor.');
         }
 
-        // Prepara dados para o gráfico
-        const daysEntries = Object.entries(guildStats.days);
-        // Pega os últimos 7 dias
-        const recentDays = daysEntries.slice(-7); 
-        
-        const labels = recentDays.map(([k]) => {
-            const s = k.toString();
-            return `${s.slice(0,2)}/${s.slice(2,4)}`;
-        });
-        const dataPoints = recentDays.map(([,v]) => v);
+        /* =============================
+           📊 DADOS DAS ÚLTIMAS 24 HORAS
+        ============================== */
 
-        // Gera gráfico via QuickChart
+        const hours = guildStats.hours || {};
+        const hourLabels = Object.keys(hours).sort((a, b) => Number(a) - Number(b));
+        const hourData = hourLabels.map(h => hours[h]);
+
+        const total24h = hourData.reduce((a, b) => a + b, 0);
+
+        const peakHour = hourLabels.reduce((max, h) =>
+            hours[h] > (hours[max] ?? 0) ? h : max
+        , hourLabels[0]);
+
+        const peakText = `${peakHour}:00 até ${String(Number(peakHour) + 1).padStart(2, '0')}:00`;
+
+        /* =============================
+           🏆 TOP 5 USUÁRIOS
+        ============================== */
+
+        const topUsers = Object.entries(guildStats.users || {})
+            .sort((a: any, b: any) => b[1] - a[1])
+            .slice(0, 5);
+
+        const topUsersText = topUsers.length
+            ? await Promise.all(
+                topUsers.map(async ([id, count]: any, i) => {
+                    const user = await message.guild.members.fetch(id).catch(() => null);
+                    const name = user ? user.user.username : `ID ${id}`;
+                    return `**${i + 1}º** - ${name} → \`${count}\``;
+                })
+            ).then(r => r.join('\n'))
+            : 'Sem dados suficientes';
+
+        /* =============================
+           📈 GRÁFICO (LINE SMOOTH)
+        ============================== */
+
         const chartConfig = {
             type: 'line',
             data: {
-                labels: labels,
+                labels: hourLabels.map(h => `${h}:00`),
                 datasets: [{
                     label: 'Mensagens',
-                    data: dataPoints,
-                    borderColor: 'rgb(75, 192, 192)',
-                    fill: false,
+                    data: hourData,
+                    borderColor: 'rgb(88, 101, 242)',
+                    backgroundColor: 'rgba(88, 101, 242, 0.2)',
+                    fill: true,
+                    tension: 0.45, // 🔥 suavidade estilo Statbot
+                    pointRadius: 3
                 }]
+            },
+            options: {
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true }
+                }
             }
         };
 
@@ -65,24 +109,40 @@ export default {
 
         try {
             const response = await axios.get(chartUrl, { responseType: 'arraybuffer' });
-            const buffer = Buffer.from(response.data, 'binary');
-            const attachment = new AttachmentBuilder(buffer, { name: 'graph.png' });
-
-            const totalMsgs = Object.values(guildStats.users).reduce((a: any, b: any) => a + b, 0);
+            const buffer = Buffer.from(response.data);
+            const attachment = new AttachmentBuilder(buffer, { name: 'status.png' });
 
             const embed = new EmbedBuilder()
-                .setColor(0x7289da)
-                .setTitle(`📊 Status de ${message.guild.name}`)
+                .setColor(0x5865F2)
+                .setTitle(`📊 Estatísticas - ${message.guild.name}`)
                 .addFields(
-                    { name: '📈 Total Rastreado', value: `\`${totalMsgs}\` mensagens`, inline: false }
+                    {
+                        name: '📨 Total (últimas 24h)',
+                        value: `\`${total24h}\` mensagens`,
+                        inline: false
+                    },
+                    {
+                        name: '🔥 Horário de Pico',
+                        value: peakText,
+                        inline: false
+                    },
+                    {
+                        name: '🏆 Top Usuários',
+                        value: topUsersText,
+                        inline: false
+                    }
                 )
-                .setImage('attachment://graph.png');
+                .setImage('attachment://status.png')
+                .setFooter({ text: 'Atualizado automaticamente' });
 
-            await message.reply({ embeds: [embed], files: [attachment] });
+            await message.reply({
+                embeds: [embed],
+                files: [attachment]
+            });
 
-        } catch (e) {
-            console.error("Erro ao gerar gráfico:", e);
-            message.reply("📊 Estatísticas carregadas, mas o gráfico falhou.");
+        } catch (err) {
+            console.error(err);
+            message.reply('❌ Erro ao gerar gráfico.');
         }
     }
 };

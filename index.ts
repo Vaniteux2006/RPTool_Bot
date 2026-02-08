@@ -52,9 +52,8 @@ function loadCommands(dir: string) {
             if (item.name.includes('quote_engine')) continue;
 
             try {
-                // Importação dinâmica
-                const command = require(fullPath);
-                const cmdData = command.default || command; // Suporte ES6/CommonJS
+                 const imported = require(fullPath);
+                 const cmdData = imported.default || imported.command || imported; 
 
                 if (cmdData.name) {
                     client.commands.set(cmdData.name, cmdData);

@@ -11,5 +11,5 @@ export interface Command {
     aliases?: string[];
     data?: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder;
     executeSlash?: (interaction: ChatInputCommandInteraction) => Promise<void>;
-    execute: (message: Message | any, args: string[]) => Promise<void>; // 'any' no message para compatibilidade com o fakeMessage do ai.ts
+    execute: (message: Message | any, args: string[]) => Promise<void>; 
 }

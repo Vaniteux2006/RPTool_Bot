@@ -1,507 +1,784 @@
 import { 
     Message, 
-    AttachmentBuilder, 
+    MessageCollector, 
+    TextChannel, 
+    AttachmentBuilder,
+    Webhook,
     ActionRowBuilder, 
     ButtonBuilder, 
-    ButtonStyle, 
-    EmbedBuilder, 
-    TextChannel, 
-    ComponentType,
-    MessageCollector,
-    Client 
-} from 'discord.js';
-import fs from 'fs';
-import path from 'path';
-import { api } from '../api'; 
-import { getGuildAIConfig } from './utils/tokenHelper'; // <--- Import novo
+    ButtonStyle,
+    ComponentType
+} from "discord.js";
+import { Command } from "../interfaces/Command";
+import { TupperModel } from "../models/TupperSchema"; 
+import axios from 'axios';
 
-// --- CONFIGURAÇÕES E TIPOS ---
+// =====================================================================
+// HELPER: Extrai nome inteligente (com ou sem aspas/crases)
+// =====================================================================
+const extractName = (content: string, commandName: string) => {
+    // Localiza o subcomando na mensagem (ex: "create")
+    const cmdIndex = content.toLowerCase().indexOf(commandName.toLowerCase());
+    if (cmdIndex === -1) return null;
 
-const DATA_DIR = path.join(__dirname, '../Data');
-const DEFAULT_AVATAR = "https://media.discordapp.net/attachments/1459362898127098014/1459399809025703988/doguinho.png?ex=6963237c&is=6961d1fc&hm=7ea6574e5b4cc8904ba7547339c89c3874e6955bff8c72973a1aa8090422305b&=&format=webp&quality=lossless";
+    const rawArgs = content.slice(cmdIndex + commandName.length).trim();
 
-interface Tupper {
-    id: number;
-    name: string;
-    brackets: string[]; 
-    avatar_url: string;
-    banner?: string;
-    posts: number;
-    birthday?: string;
-    created_at: string;
-    last_used: string;
-    ai_enabled: boolean;
-    persona: string;
-    long_term_memories: string[];
-}
+    // Regex: Nome (Aspas "", '', `` ou palavra) + Resto Opcional
+    const match = rawArgs.match(/^("([^"]+)"|'([^']+)'|`([^`]+)`|(\S+))(\s+(.+))?$/);
+    
+    if (!match) return null;
 
-interface UserData {
-    tuppers: Tupper[];
-    nextId: number;
-}
+    return {
+        name: match[2] || match[3] || match[4] || match[5], 
+        rest: match[7]?.trim() || "" 
+    };
+};
 
-interface AISession {
-    userId: string;
-    tupperId: number;
-    tupperName: string;
-    channelId: string;
-    buffer: string[];
-    timer: NodeJS.Timeout | null;
-    delay: number; 
-}
+// Helper de limpeza de wrapper (`text` -> text)
+const cleanWrapper = (str: string) => {
+    if ((str.startsWith('`') && str.endsWith('`')) || 
+        (str.startsWith('"') && str.endsWith('"')) || 
+        (str.startsWith("'") && str.endsWith("'"))) {
+        return str.slice(1, -1);
+    }
+    return str;
+};
 
-const activeSessions: { [channelId: string]: AISession } = {};
-
-// (Função getGuildToken local REMOVIDA daqui)
-
-// --- CLASSE PRINCIPAL ---
-
-export default {
-    name: 'tul',
-    description: 'Sistema completo de Tuppers e Roleplay IA',
-    aliases: ['tupper', 't'],
-
-    // --- UTILITÁRIOS ---
-
-    getFilePath(userId: string) {
-        if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-        return path.join(DATA_DIR, `tupper_${userId}.json`);
-    },
-
-    loadData(userId: string): UserData {
-        const filePath = this.getFilePath(userId);
-        if (!fs.existsSync(filePath)) {
-            return { tuppers: [], nextId: 1 };
+// =====================================================================
+// COMANDO PRINCIPAL
+// =====================================================================
+export const command: Command = {
+    name: "tul",
+    description: "Gerencia seus Tuppers (Personagens)",
+    aliases: ["tupper", "char", "t"],
+    execute: async (message: Message | any, args: string[]) => {
+        
+        if (!args[0]) {
+            return message.reply(`
+**Comandos do RPTool Tupper:**
+\`create, list, delete, avatar, prefix, name, edit\`
+\`ai, persona, memories, gaslight, forget, insert, end\`
+\`group, duo, solo, import, export, purge, birthday\`
+Use \`rp!help tul\` para detalhes.
+            `);
         }
-        try {
-            return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        } catch (e) {
-            console.error(`Erro ao ler tupper_${userId}.json`, e);
-            return { tuppers: [], nextId: 1 };
-        }
-    },
 
-    saveData(userId: string, data: UserData) {
-        fs.writeFileSync(this.getFilePath(userId), JSON.stringify(data, null, 4));
-    },
-
-    parseArgs(args: string[]): string[] {
-        const fullText = args.join(' ');
-        const regex = /"([^"]+)"|(\S+)/g;
-        const result: string[] = [];
-        let match;
-        while ((match = regex.exec(fullText)) !== null) {
-            result.push(match[1] || match[2]);
-        }
-        return result;
-    },
-
-    // --- EXECUÇÃO ---
-
-    async execute(message: Message, rawArgs: string[]) {
-        const args = this.parseArgs(rawArgs);
-        if (args.length === 0) return message.reply("⚠️ Subcomando necessário. Use `create`, `list`, `insert`, etc.");
-
-        const command = args[0].toLowerCase();
+        const action = args[0].toLowerCase();
         const userId = message.author.id;
-        const data = this.loadData(userId);
 
-        switch (command) {
-            case 'create': case 'criar':
-                await this.handleCreate(message, args, data);
-                break;
-            case 'delete': case 'deletar':
-                await this.handleDelete(message, args, data);
-                break;
-            case 'list': case 'lista':
-                await this.handleList(message, args, data);
-                break;
-            case 'avatar':
-                await this.handleAvatar(message, args, data);
-                break;
-            case 'rename': case 'renomear':
-                await this.handleRename(message, args, data);
-                break;
-            case 'prefix': case 'prefixo': 
-                await this.handlePrefix(message, args, data);
-                break;
-            case 'find': case 'procurar':
-                await this.handleFind(message, args, data);
-                break;
-            case 'import': case 'importar':
-                await this.handleImport(message, data);
-                break;
-            case 'export': case 'exportar':
-                await this.handleExport(message, data);
-                break;
-            case 'purge':
-                await this.handlePurge(message, userId);
-                break;
-            case 'edit': case 'editar':
-                await this.handleEdit(message, args, data);
-                break;
-            case 'ai': case 'ia':
-                await this.handleConfigAI(message, args, data);
-                break;
-            case 'insert': case 'inserir':
-                await this.handleInsert(message, args, data);
-                break;
-            case 'end': case 'sair':
-                await this.handleEnd(message);
-                break;
-            case 'delay':
-                await this.handleDelay(message, args);
-                break;
-            default:
-                message.reply(`❌ Comando desconhecido: \`${command}\`.`);
-        }
-    },
-
-    // --- HANDLERS BÁSICOS ---
-
-    async handleCreate(message: Message, args: string[], data: UserData) {
-        if (args.length < 3) return message.reply('⚠️ Uso: `rp!tul create "Nome" prefixo:text`');
-        const name = args[1];
-        const rawBrackets = args[2];
-        let brackets = rawBrackets.includes('text') ? rawBrackets.split('text') : [`${rawBrackets}:`, ""];
-        
-        const newTupper: Tupper = {
-            id: data.nextId++,
-            name: name,
-            brackets: brackets,
-            avatar_url: message.attachments.first() ? message.attachments.first()!.url : DEFAULT_AVATAR,
-            posts: 0,
-            created_at: new Date().toISOString(),
-            last_used: new Date().toISOString(),
-            ai_enabled: false,
-            persona: `Você é ${name}.`,
-            long_term_memories: []
-        };
-
-        data.tuppers.push(newTupper);
-        this.saveData(message.author.id, data);
-        message.reply(`✅ Tupper **${name}** criado! Prefixo: \`${brackets[0]}texto${brackets[1]}\``);
-    },
-
-    async handleDelete(message: Message, args: string[], data: UserData) {
-        const index = data.tuppers.findIndex(t => t.name.toLowerCase() === args[1]?.toLowerCase());
-        if (index === -1) return message.reply("❌ Tupper não encontrado.");
-        data.tuppers.splice(index, 1);
-        this.saveData(message.author.id, data);
-        message.reply("🗑️ Tupper deletado.");
-    },
-
-    async handleList(message: Message, args: string[], data: UserData) {
-        if (!data.tuppers.length) return message.reply("Você não tem Tuppers.");
-        let desc = data.tuppers.map(t => `**${t.name}** | Pre: \`${t.brackets[0]}text${t.brackets[1]}\``).join('\n');
-        if (desc.length > 4000) desc = desc.substring(0, 4000) + "...";
-        message.reply({ embeds: [new EmbedBuilder().setTitle(`Tuppers de ${message.author.username}`).setDescription(desc).setColor(0x00AE86)] });
-    },
-
-    async handleAvatar(message: Message, args: string[], data: UserData) {
-        const tupper = data.tuppers.find(t => t.name.toLowerCase() === args[1]?.toLowerCase());
-        if (!tupper) return message.reply("❌ Tupper não encontrado.");
-        if (message.attachments.size > 0) {
-            tupper.avatar_url = message.attachments.first()!.url;
-            this.saveData(message.author.id, data);
-            message.reply("✅ Avatar atualizado!");
-        } else {
-            message.reply({ embeds: [new EmbedBuilder().setTitle(tupper.name).setImage(tupper.avatar_url)] });
-        }
-    },
-
-    async handleRename(message: Message, args: string[], data: UserData) {
-        const tupper = data.tuppers.find(t => t.name.toLowerCase() === args[1]?.toLowerCase());
-        if (!tupper) return message.reply("❌ Tupper não encontrado.");
-        tupper.name = args[2];
-        this.saveData(message.author.id, data);
-        message.reply(`✅ Renomeado para **${args[2]}**.`);
-    },
-
-    async handlePrefix(message: Message, args: string[], data: UserData) {
-        const tupper = data.tuppers.find(t => t.name.toLowerCase() === args[1]?.toLowerCase());
-        if (!tupper) return message.reply("❌ Tupper não encontrado.");
-        const raw = args[2];
-        tupper.brackets = raw.includes('text') ? raw.split('text') : [`${raw}:`, ""];
-        this.saveData(message.author.id, data);
-        message.reply("✅ Prefixo atualizado.");
-    },
-
-    async handleFind(message: Message, args: string[], data: UserData) {
-        const found = data.tuppers.filter(t => t.name.toLowerCase().includes(args[1]?.toLowerCase()));
-        if (!found.length) return message.reply("❌ Nada encontrado.");
-        message.reply(`🔍 **Resultados:**\n${found.map(t => t.name).join('\n')}`);
-    },
-
-    async handleImport(message: Message, data: UserData) {
-        const attachment = message.attachments.first();
-        if (!attachment) return message.reply("⚠️ Anexe um JSON.");
         try {
-            const res = await fetch(attachment.url);
-            const json = await res.json();
-            const list = json.tuppers || (Array.isArray(json) ? json : []);
-            
-            let count = 0;
-            for (const t of list) {
-                data.tuppers.push({
-                    id: data.nextId++,
-                    name: t.name || "Sem Nome",
-                    brackets: t.brackets || ["", ""],
-                    avatar_url: t.avatar_url || DEFAULT_AVATAR,
-                    posts: t.posts || 0,
-                    created_at: new Date().toISOString(),
-                    last_used: new Date().toISOString(),
-                    ai_enabled: false,
-                    persona: `Você é ${t.name}.`,
-                    long_term_memories: []
-                });
-                count++;
-            }
-            this.saveData(message.author.id, data);
-            message.reply(`✅ Importados **${count}** tuppers.`);
-        } catch (e) { message.reply("❌ Erro no JSON."); }
-    },
+            switch (action) {
 
-    async handleExport(message: Message, data: UserData) {
-        const filePath = this.getFilePath(message.author.id);
-        if (fs.existsSync(filePath)) {
-            message.reply({ content: "📂 Backup:", files: [new AttachmentBuilder(filePath, { name: 'tuppers.json' })] });
-        } else {
-            message.reply("Sem dados.");
-        }
-    },
+                case "create": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted || !extracted.rest) return message.reply("⚠️ Uso: `rp!tul create \"Nome\" prefixo:text`");
 
-    async handlePurge(message: Message, userId: string) {
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder().setCustomId('purge_no').setLabel('Cancelar').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('purge_yes').setLabel('SIM, APAGAR').setStyle(ButtonStyle.Danger)
-        );
-        const res = await message.reply({ content: "⚠️ **Cuidado!** Apagar TUDO?", components: [row] });
-        const collector = res.createMessageComponentCollector({ componentType: ComponentType.Button, time: 15000 });
-
-        collector.on('collect', async i => {
-            if (i.user.id !== userId) return i.reply({ content: "Sai fora!", ephemeral: true });
-            if (i.customId === 'purge_yes') {
-                this.saveData(userId, { tuppers: [], nextId: 1 });
-                await i.update({ content: "💥 Tudo apagado.", components: [] });
-            } else {
-                await i.update({ content: "Cancelado.", components: [] });
-            }
-        });
-    },
-
-    async handleEdit(message: Message, args: string[], data: UserData) {
-        const newContent = args.slice(1).join(" ");
-        if (!newContent) return message.reply("⚠️ Texto necessário.");
-
-        const channel = message.channel as TextChannel;
-        const messages = await channel.messages.fetch({ limit: 15 });
-        const targetMsg = messages.find(m => m.webhookId && data.tuppers.some(t => t.name === m.author.username));
-        
-        if (!targetMsg) return message.reply("❌ Mensagem não encontrada.");
-
-        const webhooks = await channel.fetchWebhooks();
-        const webhook = webhooks.find(w => w.id === targetMsg.webhookId);
-        
-        if (webhook) {
-            await webhook.editMessage(targetMsg.id, { content: newContent });
-            message.delete().catch(() => {});
-        } else {
-            message.reply("❌ Webhook inacessível.");
-        }
-    },
-
-    // --- IA & INSERT ---
-
-    async handleConfigAI(message: Message, args: string[], data: UserData) {
-        const tupper = data.tuppers.find(t => t.name.toLowerCase() === args[1]?.toLowerCase());
-        if (!tupper) return message.reply("❌ Tupper não encontrado.");
-
-        await message.reply(`🧠 **Configurando Persona de ${tupper.name}**\nEnvie mensagens descrevendo o personagem.\nEnvie **End** para finalizar.`);
-        
-        const channel = message.channel as TextChannel;
-        
-        const collector = channel.createMessageCollector({ 
-            filter: m => m.author.id === message.author.id, 
-            idle: 300_000 
-        });
-
-        const personaParts: string[] = [];
-
-        collector.on('collect', m => {
-            if (m.content.trim().toLowerCase() === 'end') {
-                collector.stop('finished');
-            } else {
-                personaParts.push(m.content);
-            }
-        });
-
-        collector.on('end', (collected, reason) => {
-            if (reason === 'finished' && personaParts.length > 0) {
-                tupper.persona = personaParts.join('\n');
-                tupper.ai_enabled = true;
-                this.saveData(message.author.id, data);
-                channel.send(`✅ Persona salva! Use \`insert\` para começar.`);
-            } else {
-                channel.send("Cancelado.");
-            }
-        });
-    },
-
-    async handleInsert(message: Message, args: string[], data: UserData) {
-        const tupper = data.tuppers.find(t => t.name.toLowerCase() === args[1]?.toLowerCase());
-        if (!tupper) return message.reply("❌ Tupper não encontrado.");
-        if (!tupper.ai_enabled) return message.reply("⚠️ Ative a IA com `rp!tul ai` antes.");
-
-        if (activeSessions[message.channel.id]) clearInterval(activeSessions[message.channel.id].timer!);
-
-        const session: AISession = {
-            userId: message.author.id,
-            tupperId: tupper.id,
-            tupperName: tupper.name,
-            channelId: message.channel.id,
-            buffer: [],
-            timer: null,
-            delay: 60
-        };
-
-        activeSessions[message.channel.id] = session;
-        message.reply(`🤖 **${tupper.name}** inserido! Respondendo a cada 60s.`);
-        
-        this.startAILoop(session, message.client);
-    },
-
-    startAILoop(session: AISession, client: Client) {
-        session.timer = setInterval(async () => {
-            if (session.buffer.length > 0) {
-                // 1. Prepara os dados
-                const contextMessages = [...session.buffer];
-                session.buffer = [];
-
-                const freshData = this.loadData(session.userId);
-                const tupper = freshData.tuppers.find(t => t.id === session.tupperId);
-                if (!tupper) return;
-
-                const channel = await client.channels.fetch(session.channelId) as TextChannel;
-                if (!channel) return;
-
-                // --- PEGANDO CONFIGURAÇÃO CORRETAMENTE ---
-                const guildId = channel.guild.id; 
-                const aiConfig = getGuildAIConfig(guildId); 
-                // -----------------------------------------
-
-                const memoriesList = (tupper.long_term_memories || []).map(m => `- ${m}`).join('\n');
-                const chatLog = contextMessages.join('\n');
-
-                const fullPrompt = `
-                Você está interpretando o personagem: ${tupper.name}.
-                
-                [PERSONA]
-                ${tupper.persona}
-
-                [MEMÓRIAS]
-                ${memoriesList || "Nenhuma."}
-
-                [MENSAGENS RECENTES]
-                ${chatLog}
-
-                [INSTRUÇÕES]
-                1. Se a conversa não for com você ou não houver nada relevante para dizer, retorne APENAS: [NO_REPLY]
-                2. Caso contrário, responda como o personagem.
-                3. Se descobrir um fato novo importante sobre o usuário, adicione no final: [MEMORY: fato]
-                `;
-
-                if (channel.sendTyping) await channel.sendTyping();
-                
-                try {
-                    // MUDANÇA: Passando o objeto de config (pode ser undefined, a API trata o erro)
-                    const aiResponseRaw = await api.generateRaw(fullPrompt, aiConfig);
+                    const { name, rest } = extracted;
                     
-                    let finalReply = aiResponseRaw.trim();
+                    const attachment = message.attachments.first();
+                    let patternRaw = rest;
 
-                    if (finalReply.includes("[NO_REPLY]")) return;
+                    // Remove URL se estiver no texto
+                    const urlInText = args.find(a => a.startsWith("http"));
+                    if (urlInText) patternRaw = patternRaw.replace(urlInText, "").trim();
 
-                    if (finalReply.includes("[MEMORY:")) {
-                        const parts = finalReply.split("[MEMORY:");
-                        finalReply = parts[0].trim();
-                        const newMemory = parts[1].replace("]", "").trim();
+                    const avatarUrl = attachment ? attachment.url : urlInText;
+                    if (!avatarUrl) return message.reply("❌ Erro: Precisa de imagem (anexo ou link).");
 
-                        if (newMemory && (!tupper.long_term_memories || !tupper.long_term_memories.includes(newMemory))) {
-                            if (!tupper.long_term_memories) tupper.long_term_memories = [];
-                            tupper.long_term_memories.push(newMemory);
-                            this.saveData(session.userId, freshData);
-                            console.log(`[IA] Memória salva: ${newMemory}`);
-                        }
+                    if (!patternRaw.includes("text")) return message.reply("⚠️ O padrão precisa ter **`text`**. Ex: `nome:text`");
+
+                    const parts = patternRaw.split("text");
+                    const prefix = cleanWrapper(parts[0].trim());
+                    const suffix = cleanWrapper(parts.slice(1).join("text").trim());
+
+                    const exists = await TupperModel.findOne({ adminId: userId, name: name });
+                    if (exists) return message.reply("❌ Já existe um tupper com esse nome!");
+
+                    await TupperModel.create({
+                        adminId: userId, name, prefix, suffix, avatar: avatarUrl, createdAt: new Date()
+                    });
+
+                    let msg = `✅ Tupper **${name}** criado!\nExemplo: \`${prefix}Oi${suffix}\``;
+                    return message.reply(msg);
+                }
+
+                case "delete": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper? `rp!tul delete \"Nome\"`");
+
+                    const deleted = await TupperModel.findOneAndDelete({ adminId: userId, name: extracted.name });
+                    if (!deleted) return message.reply("Tupper não encontrado.");
+                    return message.reply(`🗑️ Tupper **${extracted.name}** deletado.`);
+                }
+
+                case "avatar": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper? `rp!tul avatar \"Nome\"`");
+
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+
+                    const attachment = message.attachments.first();
+                    // Se tiver resto no extracted, pode ser o link
+                    const newAvatar = attachment ? attachment.url : (extracted.rest.startsWith("http") ? extracted.rest : null);
+
+                    if (!newAvatar) return message.reply(`🖼️ Avatar atual de **${tupper.name}**: ${tupper.avatar}`);
+
+                    tupper.avatar = newAvatar;
+                    await tupper.save();
+                    return message.reply("✅ Avatar atualizado!");
+                }
+
+                case "name":
+                case "rename": {
+                    // Rename é chato pq tem 2 nomes. Vamos usar o regex manual aqui.
+                    // rp!tul rename "Velho" "Novo"
+                    const rawArgs = message.content.slice(message.content.toLowerCase().indexOf(action) + action.length).trim();
+                    const match = rawArgs.match(/^("([^"]+)"|'([^']+)'|`([^`]+)`|(\S+))\s+("([^"]+)"|'([^']+)'|`([^`]+)`|(\S+))$/);
+
+                    if (!match) return message.reply("Uso: `rp!tul rename \"Antigo\" \"Novo\"`");
+
+                    const oldName = match[2] || match[3] || match[4] || match[5];
+                    // O segundo nome começa no grupo 6, então os subgrupos são 7,8,9,10
+                    const newName = match[7] || match[8] || match[9] || match[10];
+
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: oldName });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+
+                    tupper.name = newName;
+                    await tupper.save();
+                    return message.reply(`✅ Renomeado para **${newName}**.`);
+                }
+
+                case "prefix":
+                case "prefixo": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted || !extracted.rest) return message.reply("Uso: `rp!tul prefix \"Nome\" novo:text`");
+
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply(`❌ Tupper **${extracted.name}** não encontrado.`);
+
+                    if (!extracted.rest.includes("text")) return message.reply("⚠️ Precisa ter **`text`**. Ex: `k!text`");
+
+                    const parts = extracted.rest.split("text");
+                    tupper.prefix = cleanWrapper(parts[0].trim());
+                    tupper.suffix = cleanWrapper(parts.slice(1).join("text").trim());
+
+                    await tupper.save();
+                    return message.reply(`✅ Novo padrão: \`${tupper.prefix}Oi${tupper.suffix}\``);
+                }
+
+                case "list": {
+                    // 1. Identifica o alvo (Usuário mencionado, ID ou o próprio autor)
+                    let targetId = userId;
+                    // Se o primeiro argumento for menção ou ID, atualiza o targetId
+                    if (message.mentions.users.first()) {
+                        targetId = message.mentions.users.first()!.id;
+                    } else if (args[1] && args[1].length > 15) {
+                        targetId = args[1];
                     }
 
-                    if (finalReply.length > 0) {
-                        await this.sendAsWebhook(channel, tupper, finalReply);
-                    }
+                    // 2. Busca e Filtros
+                    const query = { $or: [ { adminId: targetId }, { duoIds: targetId } ] };
+                    const totalDocs = await TupperModel.countDocuments(query);
+                    if (totalDocs === 0) return message.reply("📭 Nenhum tupper encontrado.");
 
-                } catch (e: any) {
-                    console.error("Erro no loop IA:", e.message);
-
-                    // --- DETECÇÃO DE ERROS ---
-                    const errorMsg = e.message || e.toString();
-
-                    if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
-                         const match = errorMsg.match(/after (\d+)/) || errorMsg.match(/in (\d+)/);
-                         const seconds = match ? match[1] : '60';
-                         channel.send(`🔥 **OPA CALMA CALMA CALMA! TÃO ME PEDINDO MUITA COISA! ESPERA SÓ ${seconds} SEGUNDOS!**`);
-                         return; // Pula a vez, não mata
-                    }
-
-                    if (errorMsg.includes('503') || errorMsg.includes('Service Unavailable')) {
-                        channel.send("🤯 **Calma aí que fritei a cabeça. Tô resolvendo uns B.Os, me chama daqui a pouco.**");
-                        return; // Pula a vez, não mata
-                    }
-                    // -------------------------
-                    
-                    if (session.buffer.length === 0) {
-                        let finalError = "⚠️ **Erro de IA:** Ocorreu um problema ao gerar resposta.";
-                        if (errorMsg.includes("API Key")) finalError = "⚠️ **Erro de IA:** Nenhum token configurado para este servidor.";
+                    // 3. Função para Gerar o Embed de uma Página
+                    const generateEmbed = async (page: number) => {
+                        const pageSize = 5; // Reduzi pra 5 pra caber mais info sem poluir
+                        const skip = (page - 1) * pageSize;
                         
-                        channel.send(finalError);
-                        clearInterval(session.timer!); 
+                        // Busca os tuppers dessa página
+                        const tuppers = await TupperModel.find(query).skip(skip).limit(pageSize);
+                        
+                        const totalPages = Math.ceil(totalDocs / pageSize);
+
+                        // Monta a string da lista
+                        const listStr = tuppers.map(t => {
+                            const isOwner = t.adminId === targetId;
+                            const icon = isOwner ? "👑" : "🤝";
+                            const aiStatus = t.ai.enabled ? "🤖 [IA ON]" : "";
+                            
+                            // Datas bonitinhas
+                            const created = t.createdAt ? t.createdAt.toLocaleDateString('pt-BR') : "Desconhecido";
+                            const bday = t.realBirthday ? ` | 🎉 ${t.realBirthday.getDate()}/${t.realBirthday.getMonth() + 1}` : "";
+
+                            return `**${icon} ${t.name}** ${aiStatus}
+> 🗣️ **Padrão:** \`${t.prefix}text${t.suffix}\`
+> 💬 **Msgs:** ${t.messageCount}
+> 📂 **Grupo:** ${t.group || "Nenhum"}
+> 📅 **Criado:** ${created}${bday}
+> 🖼️ [Ver Avatar](${t.avatar})`;
+                        }).join("\n\n");
+
+                        return {
+                            embeds: [{
+                                title: `📒 Lista de Tuppers (${page}/${totalPages})`,
+                                description: listStr,
+                                color: 0xFFFF00, // Amarelo Bob Esponja 🧽
+                                footer: { text: `Total de Tuppers: ${totalDocs}` },
+                                thumbnail: { url: tuppers[0]?.avatar } // Mostra avatar do primeiro como destaque (opcional)
+                            }],
+                            totalPages
+                        };
+                    };
+
+                    // 4. Envia a Primeira Página
+                    let currentPage = 1;
+                    const { embeds, totalPages } = await generateEmbed(currentPage);
+                    
+                    // Se só tiver 1 página, não precisa de botões
+                    if (totalPages === 1) {
+                        return message.channel.send({ embeds });
+                    }
+
+                    // Cria Botões
+                    const row = new ActionRowBuilder<ButtonBuilder>()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setCustomId('prev_page')
+                                .setLabel('⬅️ Anterior')
+                                .setStyle(ButtonStyle.Primary)
+                                .setDisabled(true), // Começa desativado
+                            new ButtonBuilder()
+                                .setCustomId('next_page')
+                                .setLabel('Próximo ➡️')
+                                .setStyle(ButtonStyle.Primary)
+                        );
+
+                    const msg = await message.channel.send({ embeds, components: [row] });
+
+                    // 5. Coletor de Interações (Botões)
+                    const collector = msg.createMessageComponentCollector({ 
+                        componentType: ComponentType.Button, 
+                        time: 60000 // Botões funcionam por 1 minuto
+                    });
+
+                    collector.on('collect', async (i) => {
+                        if (i.user.id !== userId) {
+                            return i.reply({ content: "🚫 Só quem pediu a lista pode mexer.", ephemeral: true });
+                        }
+
+                        if (i.customId === 'prev_page' && currentPage > 1) currentPage--;
+                        if (i.customId === 'next_page' && currentPage < totalPages) currentPage++;
+
+                        const newData = await generateEmbed(currentPage);
+
+                        // Atualiza estado dos botões
+                        row.components[0].setDisabled(currentPage === 1);
+                        row.components[1].setDisabled(currentPage === totalPages);
+
+                        await i.update({ embeds: newData.embeds, components: [row] });
+                    });
+
+                    collector.on('end', () => {
+                        // Desativa botões quando o tempo acaba
+                        row.components.forEach(b => b.setDisabled(true));
+                        msg.edit({ components: [row] }).catch(() => {});
+                    });
+                    
+                    break;
+                }
+
+                case "ai": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper? `rp!tul ai \"Nome\"`");
+                    
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+
+                    message.reply(`📝 **Configurando IA para ${tupper.name}**\nEnvie a PERSONALIDADE. Digite **END** pra acabar.`);
+                    const collector = new MessageCollector(message.channel as TextChannel, { filter: m => m.author.id === userId, time: 300000 });
+                    let personaText = "";
+                    collector.on('collect', m => {
+                        if (m.content.trim() === "END") collector.stop("finished");
+                        else personaText += m.content + "\n";
+                    });
+                    collector.on('end', async (_, reason) => {
+                        if (reason === "finished") {
+                            tupper.ai.enabled = true;
+                            tupper.ai.persona = personaText;
+                            await tupper.save();
+                            message.channel.send(`🤖 IA Ativada para **${tupper.name}**!`);
+                        }
+                    });
+                    break;
+                }
+
+                case "insert": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper? `rp!tul insert \"Nome\"`");
+
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+                    if (!tupper.ai.enabled) return message.reply("IA não configurada. Use `rp!tul ai` antes.");
+
+                    tupper.ai.activeChannelId = message.channel.id;
+                    await tupper.save();
+                    return message.reply(`🤖 **${tupper.name}** inserido no canal.`);
+                }
+                
+                // End não precisa de nome, é global pro canal
+                case "end": {
+                    const tupper = await TupperModel.findOne({ adminId: userId, "ai.activeChannelId": message.channel.id });
+                    if (!tupper) return message.reply("Nenhum tupper seu ativo aqui.");
+                    tupper.ai.activeChannelId = null;
+                    await tupper.save();
+                    return message.reply(`💤 **${tupper.name}** saiu.`);
+                }
+
+                case "memories": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper?");
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+                    
+                    const list = tupper.ai.memories.map(m => `🆔 \`${m.id}\`: ${m.content.substring(0, 50)}...`).join("\n");
+                    return message.channel.send(`🧠 **Memórias de ${tupper.name}:**\n${list || "Vazio."}`);
+                }
+
+                case "gaslight": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper?");
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+
+                    message.reply("🧠 **Escreva a memória falsa (END para sair):**");
+                    const collector = new MessageCollector(message.channel as TextChannel, { filter: m => m.author.id === userId, time: 60000 });
+                    let mem = "";
+                    collector.on('collect', m => { if (m.content === "END") collector.stop("done"); else mem += m.content + " "; });
+                    collector.on('end', async (_, r) => {
+                        if (r === "done") {
+                            tupper.ai.memories.push({ id: Date.now().toString(36), content: mem });
+                            await tupper.save();
+                            message.channel.send("🧠 Memória implantada.");
+                        }
+                    });
+                    break;
+                }
+
+                case "forget": {
+                    // rp!tul forget "Nome" ID
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted || !extracted.rest) return message.reply("Uso: `rp!tul forget \"Nome\" ID_MEMORIA`");
+                    
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+
+                    const initial = tupper.ai.memories.length;
+                    tupper.ai.memories = tupper.ai.memories.filter(m => m.id !== extracted.rest);
+                    if (tupper.ai.memories.length === initial) return message.reply("Memória não achada.");
+
+                    await tupper.save();
+                    return message.reply("🧠 Esquecido.");
+                }
+
+                case "alzheimer": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper?");
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+                    
+                    tupper.ai.memories = [];
+                    await tupper.save();
+                    return message.reply(`🤯 **${tupper.name}** esqueceu tudo.`);
+                }
+
+                case "puppet": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper?");
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+
+                    tupper.ai.enabled = false;
+                    tupper.ai.activeChannelId = null;
+                    await tupper.save();
+                    return message.reply(`🧵 **${tupper.name}** virou fantoche.`);
+                }
+
+                // === DUO / SOLO / GROUP / BIRTHDAY ===
+
+                case "duo": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper?");
+                    const targetUser = message.mentions.users.first();
+                    if (!targetUser) return message.reply("Marque alguém!");
+
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Não achado ou sem permissão.");
+                    if (tupper.ai.enabled) return message.reply("🚫 IA não pode ser Duo.");
+
+                    if (!tupper.duoIds.includes(targetUser.id)) {
+                        tupper.duoIds.push(targetUser.id);
+                        await tupper.save();
+                    }
+                    return message.reply(`🤝 **${tupper.name}** compartilhado com ${targetUser.username}!`);
+                }
+
+                case "solo": {
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted) return message.reply("Qual tupper?");
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Não achado ou sem permissão.");
+
+                    tupper.duoIds = [];
+                    await tupper.save();
+                    return message.reply(`🔒 **${tupper.name}** é só seu agora.`);
+                }
+
+                case "birthday": {
+                    // rp!tul birthday "Nome" 12/05
+                    const extracted = extractName(message.content, args[0]);
+                    if (!extracted || !extracted.rest) return message.reply("Uso: `rp!tul birthday \"Nome\" DD/MM`");
+                    
+                    const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                    if (!tupper) return message.reply("Tupper não encontrado.");
+
+                    const [d, m, y] = extracted.rest.split("/").map(Number);
+                    if (!d || !m) return message.reply("Data inválida.");
+                    tupper.realBirthday = new Date(y || 2000, m - 1, d);
+                    await tupper.save();
+                    return message.reply(`🎂 Aniversário de **${tupper.name}** salvo!`);
+                }
+
+                case "group": {
+                    // Subcomandos: list, create, add, remove (membro), delete (grupo inteiro)
+                    const sub = args[1]?.toLowerCase();
+                    
+                    if (!sub) return message.reply("Uso: `list`, `create`, `add`, `remove`, `delete`.");
+
+                    // === LISTAR GRUPOS ===
+                    if (sub === "list") {
+                        const groups = await TupperModel.distinct("group", { adminId: userId });
+                        const validGroups = groups.filter(g => g); // Remove nulos
+                        if (validGroups.length === 0) return message.reply("Você não tem nenhum grupo.");
+                        return message.reply(`📂 **Seus Grupos:**\n${validGroups.join("\n")}`);
+                    }
+
+                    // === CRIAR GRUPO ===
+                    if (sub === "create") {
+                        const rawArgs = message.content.slice(message.content.toLowerCase().indexOf("create") + 6).trim();
+                        const match = rawArgs.match(/^("([^"]+)"|'([^']+)'|`([^`]+)`|(\S+))\s+("([^"]+)"|'([^']+)'|`([^`]+)`|(\S+))$/);
+
+                        if (!match) return message.reply("Uso: `rp!tul group create \"Novo Grupo\" \"Nome do Tupper\"`");
+
+                        const gName = match[2] || match[3] || match[4] || match[5];
+                        const tName = match[7] || match[8] || match[9] || match[10];
+
+                        const tupper = await TupperModel.findOne({ adminId: userId, name: tName });
+                        if (!tupper) return message.reply(`❌ Tupper **${tName}** não encontrado.`);
+
+                        tupper.group = gName;
+                        await tupper.save();
+
+                        return message.reply(`✨ Grupo **${gName}** criado e **${tupper.name}** adicionado a ele!`);
+                    }
+                    
+                    // === ADICIONAR AO GRUPO ===
+                    if (sub === "add") {
+                        const rawArgs = message.content.slice(message.content.toLowerCase().indexOf("add") + 3).trim();
+                        const match = rawArgs.match(/^("([^"]+)"|'([^']+)'|`([^`]+)`|(\S+))\s+("([^"]+)"|'([^']+)'|`([^`]+)`|(\S+))$/);
+                        
+                        if (!match) return message.reply("Uso: `rp!tul group add \"NomeGrupo\" \"NomeTupper\"`");
+                        
+                        const gName = match[2] || match[3] || match[4] || match[5];
+                        const tName = match[7] || match[8] || match[9] || match[10];
+
+                        const groupExists = await TupperModel.findOne({ adminId: userId, group: gName });
+                        if (!groupExists) return message.reply(`⚠️ O grupo **${gName}** não existe.`);
+
+                        const tupper = await TupperModel.findOne({ adminId: userId, name: tName });
+                        if (!tupper) return message.reply(`❌ Tupper **${tName}** não encontrado.`);
+                        
+                        tupper.group = gName;
+                        await tupper.save();
+                        return message.reply(`📂 **${tupper.name}** adicionado ao grupo **${gName}**.`);
+                    }
+
+                    // === REMOVER MEMBRO DO GRUPO ===
+                    if (sub === "remove") {
+                        const extracted = extractName(message.content, sub);
+                        if (!extracted) return message.reply(`Uso: \`rp!tul group remove "NomeTupper"\``);
+
+                        const tupper = await TupperModel.findOne({ adminId: userId, name: extracted.name });
+                        if (!tupper) return message.reply("Tupper não encontrado.");
+
+                        const oldGroup = tupper.group;
+                        if (!oldGroup) return message.reply("Esse tupper nem está em grupo.");
+
+                        tupper.group = null;
+                        await tupper.save();
+
+                        return message.reply(`🌧️ **${tupper.name}** saiu do grupo **${oldGroup}**.`);
+                    }
+
+                    // === DELETAR GRUPO INTEIRO ===
+                    if (sub === "delete") {
+                        // rp!tul group delete "NomeGrupo"
+                        const extracted = extractName(message.content, sub);
+                        if (!extracted) return message.reply(`Uso: \`rp!tul group delete "NomeDoGrupo"\``);
+                        
+                        const groupName = extracted.name;
+
+                        // Verifica se o grupo existe (tem pelo menos um membro)
+                        const members = await TupperModel.find({ adminId: userId, group: groupName });
+                        
+                        if (members.length === 0) return message.reply(`❌ Grupo **${groupName}** não encontrado.`);
+
+                        // Remove a etiqueta de grupo de todos os membros
+                        await TupperModel.updateMany(
+                            { adminId: userId, group: groupName },
+                            { $set: { group: null } }
+                        );
+
+                        return message.reply(`🗑️ Grupo **${groupName}** dissolvido. Os ${members.length} membros agora estão sem grupo.`);
+                    }
+
+                    return message.reply("Comando inválido.");
+                }
+
+                case "find":
+                case "info": {
+                    // rp!tul find "Nome"
+                    // Usa nosso helper extractName, mas aqui o argumento é o BUSCA
+                    const extracted = extractName(message.content, args[0]);
+                    const searchTerm = extracted ? extracted.name : args.slice(1).join(" ");
+
+                    if (!searchTerm) return message.reply("Quem você quer achar? `rp!tul find \"Nome\"`");
+
+                    // Busca FLEXÍVEL (Case insensitive, parte do nome)
+                    // Procura em TODOS os usuários (removemos o filtro adminId)
+                    const tuppers = await TupperModel.find({ 
+                        name: { $regex: searchTerm, $options: "i" } 
+                    }).limit(5); // Limita a 5 pra não floodar se for termo genérico
+
+                    if (tuppers.length === 0) return message.reply(`❌ Nenhum tupper encontrado com **"${searchTerm}"**.`);
+
+                    if (tuppers.length > 1) {
+                        // Se achou vários, lista resumida
+                        const list = tuppers.map(t => `• **${t.name}** (Dono: <@${t.adminId}>)`).join("\n");
+                        return message.reply(`🔍 Encontrei vários:\n${list}\n*Seja mais específico!*`);
+                    }
+
+                    // Se achou UM SÓ, mostra ficha completa
+                    const t = tuppers[0];
+                    
+                    // Tenta pegar o user do Discord pra mostrar nome/tag
+                    let ownerName = `<@${t.adminId}>`;
+                    try {
+                        const user = await message.client.users.fetch(t.adminId);
+                        ownerName = `${user.username} (\`${user.id}\`)`;
+                    } catch (e) {}
+
+                    const created = t.createdAt ? t.createdAt.toLocaleDateString('pt-BR') : "Desconhecido";
+                    const bday = t.realBirthday ? `${t.realBirthday.getDate()}/${t.realBirthday.getMonth() + 1}` : "Não definido";
+                    const aiStatus = t.ai.enabled ? "✅ Ativa" : "❌ Desligada";
+
+                    return message.channel.send({
+                        embeds: [{
+                            title: `🔎 Ficha de: ${t.name}`,
+                            color: 0x00FF00, // Verde Matrix
+                            thumbnail: { url: t.avatar },
+                            fields: [
+                                { name: "👑 Dono", value: ownerName, inline: true },
+                                { name: "💬 Padrão", value: `\`${t.prefix}text${t.suffix}\``, inline: true },
+                                { name: "📊 Mensagens", value: `${t.messageCount}`, inline: true },
+                                { name: "📂 Grupo", value: t.group || "Nenhum", inline: true },
+                                { name: "📅 Criado em", value: created, inline: true },
+                                { name: "🎂 Aniversário", value: bday, inline: true },
+                                { name: "🤖 Status IA", value: aiStatus, inline: true },
+                            ],
+                            image: { url: t.avatar } // Avatar grande no final também
+                        }]
+                    });
+                }
+
+                // Import/Export/Purge/Edit mantivemos simples pois não usam nome complexo (exceto Edit que não recebe args de nome)
+                case "import": {
+                    const attachment = message.attachments.first();
+                    if (!attachment?.name?.endsWith(".json")) return message.reply("Anexe o arquivo `.json` do Tupperbox.");
+
+                    try {
+                        const res = await axios.get(attachment.url);
+                        const data = res.data;
+                        
+                        if (!data.tuppers || !Array.isArray(data.tuppers)) {
+                            return message.reply("❌ O arquivo não parece ser um backup válido do Tupperbox.");
+                        }
+
+                        let count = 0;
+                        for (const t of data.tuppers) {
+                            // 1. Data de Criação (Prioriza created_at, se não tiver usa agora)
+                            const createdAt = t.created_at ? new Date(t.created_at) : new Date();
+
+                            // 2. Aniversário (Birthday)
+                            // Tupperbox manda "YYYY-MM-DD" ou null. Precisamos converter pra Date.
+                            let realBirthday: Date | null = null;
+                            if (t.birthday) {
+                                // Tenta parsear a data. Pode vir "2000-05-12T..." ou só data
+                                const bDate = new Date(t.birthday);
+                                if (!isNaN(bDate.getTime())) {
+                                    realBirthday = bDate;
+                                }
+                            }
+
+                            // 3. Posts (Contador de mensagens)
+                            const messageCount = typeof t.posts === 'number' ? t.posts : 0;
+
+                            await TupperModel.updateOne(
+                                { adminId: userId, name: t.name },
+                                {
+                                    adminId: userId,
+                                    name: t.name,
+                                    // Pega os brackets (se não tiver, deixa vazio)
+                                    prefix: Array.isArray(t.brackets) ? t.brackets[0] || "" : "",
+                                    suffix: Array.isArray(t.brackets) ? t.brackets[1] || "" : "",
+                                    avatar: t.avatar_url || "", // Garante string vazia se nulo
+                                    
+                                    // Sincronização Completa
+                                    messageCount: messageCount,
+                                    createdAt: createdAt,
+                                    realBirthday: realBirthday,
+                                    
+                                    // Preserva dados existentes se não vierem no import
+                                    // (Ex: se vc já configurou IA ou Grupo no RPTool, não perde)
+                                },
+                                { upsert: true } // Cria se não existir, atualiza se existir
+                            );
+                            count++;
+                        }
+                        return message.reply(`📦 **${count}** tuppers importados com sucesso!\n✅ Datas, mensagens e aniversários sincronizados.`);
+                    } catch (err) {
+                        console.error(err);
+                        return message.reply("❌ Erro ao processar o arquivo JSON.");
                     }
                 }
+
+                case "export": {
+                    const tuppers = await TupperModel.find({ adminId: userId });
+                    const json = JSON.stringify({ tuppers }, null, 2);
+                    const buffer = Buffer.from(json, 'utf-8');
+                    const att = new AttachmentBuilder(buffer, { name: 'tuppers.json' });
+                    return message.reply({ content: "📦 Backup:", files: [att] });
+                }
+
+                case "purge": {
+                    // Aviso de Perigo
+                    const dangerEmbed = {
+                        title: "⚠️ PERIGO: ZONA DE DESTRUIÇÃO",
+                        description: "Você está prestes a **APAGAR TODOS** os seus tuppers.\nEssa ação é irreversível.\n\nTem certeza absoluta?",
+                        color: 0xFF0000, // Vermelho Sangue
+                        footer: { text: "Você tem 15 segundos para decidir." }
+                    };
+
+                    const row = new ActionRowBuilder<ButtonBuilder>()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setCustomId('purge_confirm')
+                                .setLabel('🔥 SIM, APAGAR TUDO')
+                                .setStyle(ButtonStyle.Danger), // Botão Vermelho
+                            new ButtonBuilder()
+                                .setCustomId('purge_cancel')
+                                .setLabel('❌ Cancelar')
+                                .setStyle(ButtonStyle.Secondary) // Botão Cinza
+                        );
+
+                    const msg = await message.reply({ embeds: [dangerEmbed], components: [row] });
+
+                    // Coletor (Só o dono da mensagem pode clicar)
+                    const collector = msg.createMessageComponentCollector({ 
+                        componentType: ComponentType.Button, 
+                        time: 15000 // 15 segundos pra pensar
+                    });
+
+                    collector.on('collect', async (i) => {
+                        if (i.user.id !== userId) {
+                            return i.reply({ content: "🚫 Saia daí! Esse botão não é pra você.", ephemeral: true });
+                        }
+
+                        if (i.customId === 'purge_confirm') {
+                            await TupperModel.deleteMany({ adminId: userId });
+                            await i.update({ 
+                                content: "🔥 **KABOOM!** Todos os seus tuppers foram transformados em poeira cósmica.", 
+                                embeds: [], 
+                                components: [] 
+                            });
+                            collector.stop("deleted");
+                        } else {
+                            await i.update({ 
+                                content: "✅ Operação cancelada. Seus tuppers estão salvos.", 
+                                embeds: [], 
+                                components: [] 
+                            });
+                            collector.stop("cancelled");
+                        }
+                    });
+
+                    collector.on('end', (_, reason) => {
+                        if (reason !== "deleted" && reason !== "cancelled") {
+                            // Se o tempo acabou, desativa os botões
+                            const disabledRow = new ActionRowBuilder<ButtonBuilder>()
+                                .addComponents(
+                                    row.components[0].setDisabled(true),
+                                    row.components[1].setDisabled(true)
+                                );
+                            msg.edit({ content: "⏰ Tempo esgotado.", components: [disabledRow] }).catch(() => {});
+                        }
+                    });
+                    
+                    break;
+                }
+
+                case "edit": {
+                    const newText = args.slice(1).join(" ");
+                    if (!newText) return message.reply("Digite o novo texto.");
+                    
+                    const myTuppers = await TupperModel.find({ adminId: userId });
+                    const myNames = myTuppers.map(t => t.name);
+                    const msgs = await message.channel.messages.fetch({ limit: 10 });
+                    const target = msgs.find(m => m.webhookId && myNames.includes(m.author.username));
+                    
+                    if (!target) return message.reply("Nenhuma msg recente sua.");
+                    const hooks = await (message.channel as TextChannel).fetchWebhooks();
+                    const hook = hooks.find(w => w.id === target.webhookId);
+                    
+                    if (hook) {
+                        await hook.editMessage(target.id, { content: newText });
+                        message.delete().catch(() => {});
+                    } else return message.reply("Erro no webhook.");
+                    break;
+                }
+
+                default:
+                    message.reply("Comando desconhecido.");
             }
-        }, session.delay * 1000);
-    },
 
-    async handleEnd(message: Message) {
-        if (activeSessions[message.channel.id]) {
-            clearInterval(activeSessions[message.channel.id].timer!);
-            delete activeSessions[message.channel.id];
-            message.reply("🛑 Tupper removido.");
-        } else {
-            message.reply("Ninguém inserido aqui.");
-        }
-    },
-
-    async handleDelay(message: Message, args: string[]) {
-        const session = activeSessions[message.channel.id];
-        if (!session) return message.reply("Ninguém inserido aqui.");
-        const sec = parseInt(args[1]);
-        if (isNaN(sec) || sec < 5) return message.reply("Mínimo 5s.");
-        
-        session.delay = sec;
-        clearInterval(session.timer!);
-        this.startAILoop(session, message.client);
-        message.reply(`⏱️ Delay: ${sec}s.`);
-    },
-
-    async sendAsWebhook(channel: TextChannel, tupper: Tupper, content: string) {
-        const webhooks = await channel.fetchWebhooks();
-        let webhook = webhooks.find(w => w.owner?.id === channel.client.user?.id);
-        if (!webhook) webhook = await channel.createWebhook({ name: 'RPTool Proxy', avatar: channel.client.user?.displayAvatarURL() });
-        
-        await webhook.send({ content, username: tupper.name, avatarURL: tupper.avatar_url });
-    },
-
-    onMessage(message: Message) {
-        if (activeSessions[message.channel.id] && !message.author.bot) {
-            activeSessions[message.channel.id].buffer.push(`[${message.author.username}]: ${message.content}`);
+        } catch (error) {
+            console.error(error);
+            message.reply("❌ Erro interno.");
         }
     }
 };
+
+// =========================================================
+// FUNÇÃO DE IA DO CHECKOUT
+// =========================================================
+export async function handleAIMessage(message: Message): Promise<boolean> {
+    if (message.content.startsWith("rp!")) return false;
+    const aiTupper = await TupperModel.findOne({ "ai.enabled": true, "ai.activeChannelId": message.channel.id });
+    if (!aiTupper) return false;
+
+    const channel = message.channel as TextChannel; 
+    await channel.sendTyping().catch(() => {}); 
+
+    try {
+        const memories = aiTupper.ai.memories.map(m => m.content).join("\n");
+        // Aqui vai a chamada real da API depois
+        const responseText = `[IA ${aiTupper.name}]: Ouvi "${message.content}"`;
+        await channel.send(`**${aiTupper.name}:** ${responseText}`);
+        return true; 
+    } catch (error) {
+        console.error("Erro na IA:", error);
+        return false;
+    }
+}
