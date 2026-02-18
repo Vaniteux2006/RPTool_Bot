@@ -1,6 +1,6 @@
 import { Message, PermissionFlagsBits } from 'discord.js';
 import { Command } from '../interfaces/Command';
-import { BlockedWordsModel } from '../models/ServerStats';
+import ServerStats, { BlockedWordsModel } from '../models/ServerStats';
 import { loadBlockedWords } from './messageTracker';
 
 export default {
@@ -17,8 +17,8 @@ export default {
         const action = args[0]?.toLowerCase();
         const word = args[1]?.toLowerCase();
 
-        if (!action || !['add', 'remove', 'list'].includes(action)) {
-            return message.reply("Uso: `rp!ignorar add <palavra>`, `rp!ignorar remove <palavra>` ou `rp!ignorar list`");
+        if (!action || !['add', 'remove', 'list', 'clean'].includes(action)) {
+            return message.reply("Uso: `rp!ignorar add <palavra>`, `remove <palavra>`, `list`, ou `clean`");
         }
 
         if (action === 'list') {
@@ -26,6 +26,28 @@ export default {
             const words = doc?.words || [];
             if (words.length === 0) return message.reply("Nenhuma palavra está sendo ignorada.");
             return message.reply(`🛑 **Palavras ignoradas:** \`${words.join(', ')}\``);
+        }
+
+        // 🟢 O EFEITO THANOS: Apaga as palavras do passado
+        if (action === 'clean') {
+            const doc = await BlockedWordsModel.findOne({ guildId });
+            const words = doc?.words || [];
+            if (words.length === 0) return message.reply("A lista negra está vazia. Não há o que limpar.");
+
+            await message.reply("🧹 **Efeito Thanos:** Apagando palavras bloqueadas do histórico de todos os dias... 🫰");
+
+            const unsetObj: any = {};
+            for (const w of words) {
+                unsetObj[`words.${w}`] = ""; // Prepara o comando para deletar a chave do banco
+            }
+
+            // O $unset vai fisicamente no MongoDB e deleta essas palavras do passado
+            await ServerStats.updateMany(
+                { guildId },
+                { $unset: unsetObj }
+            );
+
+            return message.reply("✨ **Limpeza temporal concluída!** As palavras ignoradas foram apagadas do passado, presente e futuro.");
         }
 
         if (!word) return message.reply("Especifique a palavra!");
@@ -36,8 +58,8 @@ export default {
                 { $addToSet: { words: word } },
                 { upsert: true }
             );
-            await loadBlockedWords(guildId); 
-            return message.reply(`✅ A palavra **${word}** foi adicionada à lista de ignoradas!`);
+            await loadBlockedWords(guildId);
+            return message.reply(`✅ A palavra **${word}** foi adicionada à lista! (Para sumir com as antigas, use \`rp!ignorar clean\`)`);
         }
 
         if (action === 'remove') {
@@ -45,7 +67,7 @@ export default {
                 { guildId },
                 { $pull: { words: word } }
             );
-            await loadBlockedWords(guildId); 
+            await loadBlockedWords(guildId);
             return message.reply(`✅ A palavra **${word}** foi removida da lista de ignoradas!`);
         }
     }
