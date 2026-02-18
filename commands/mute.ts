@@ -11,7 +11,6 @@ function parseDuration(str: string): number | null {
         'y': 31536000000, 'ano': 31536000000, 'anos': 31536000000
     };
     
-    // Suporte a mês (aproximado)
     units['mês'] = 2592000000;
     units['meses'] = 2592000000;
 
@@ -20,7 +19,6 @@ function parseDuration(str: string): number | null {
     const value = parseInt(match[1]);
     const unitStr = match[2].trim().toLowerCase();
     
-    // Busca a unidade (default minutos se vazio)
     const multiplier = unitStr ? units[unitStr] || units[unitStr.replace(/s$/, '')] : 60000;
     
     return multiplier ? value * multiplier : null;
@@ -41,7 +39,7 @@ export default {
         const timeStr = interaction.options.getString('tempo') || "";
         const ms = parseDuration(timeStr);
 
-        if (!ms || ms > 2419200000) { // Limite hard do Discord ~28 dias
+        if (!ms || ms > 2419200000) { 
             return interaction.reply({ content: 'Tempo inválido ou maior que 28 dias.', ephemeral: true });
         }
         if (!target) return interaction.reply("Usuário não encontrado.");

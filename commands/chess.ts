@@ -4,7 +4,6 @@ import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
-// --- LÓGICA DO XADREZ (NATIVO COM EVAL) ---
 
 interface ChessResult {
     fen: string;
@@ -27,7 +26,7 @@ class ChessBot {
     private initEngine() {
         const isWin = process.platform === 'win32';
         const binName = isWin ? 'stockfish.exe' : 'stockfish';
-        const binPath = path.join(process.cwd(), 'bin', binName);
+        const binPath = path.join(process.cwd(), binName);
 
         if (!fs.existsSync(binPath)) {
             console.error(`❌ [XADREZ] Executável não encontrado em: ${binPath}`);
@@ -40,7 +39,7 @@ class ChessBot {
 
             this.send("uci");
             this.send("isready");
-            this.send("setoption name Skill Level value 5"); // Nível 5 (Equilibrado)
+            this.send("setoption name Skill Level value 5");
             
             console.log(`♟️ [XADREZ] Engine nativa iniciada (${binName})`);
 
@@ -62,13 +61,12 @@ class ChessBot {
             const proc = this.process!;
             let lastEval: string | null = null;
             
-            const turn = fen.split(' ')[1]; // 'w' ou 'b'
+            const turn = fen.split(' ')[1]; 
 
             const listener = (data: Buffer) => {
                 const lines = data.toString().split('\n');
                 for (const line of lines) {
                     
-                    // Captura a avaliação
                     if (line.startsWith('info') && line.includes('score')) {
                         const parts = line.split(' ');
                         const scoreIndex = parts.indexOf('score');
@@ -85,7 +83,6 @@ class ChessBot {
                         }
                     }
 
-                    // Captura o movimento final
                     if (line.startsWith('bestmove')) {
                         const parts = line.split(' ');
                         const move = parts[1];
@@ -109,11 +106,10 @@ class ChessBot {
         let move;
 
         try {
-            // Tenta fazer o movimento
             move = chess.move(user_move_san);
             if (!move) throw new Error("Lance ilegal");
         } catch (e) {
-            // Se der erro, formata o nome do movimento para exibir no erro
+
             const moveName = typeof user_move_san === 'string' 
                 ? user_move_san 
                 : `${user_move_san.from}${user_move_san.to}`;
@@ -126,11 +122,11 @@ class ChessBot {
                 fen: chess.fen(), 
                 game_over: true, 
                 result: this.getResult(chess), 
-                player_move: move.san // Usa move.san (String) para corrigir o erro de tipo
+                player_move: move.san 
             };
         }
 
-        // Vez da Engine
+
         const engineData = await this.getBestMove(chess.fen());
 
         if (engineData.move) {
@@ -140,7 +136,7 @@ class ChessBot {
                 bot_move: botMove.san,
                 game_over: chess.isGameOver(),
                 result: chess.isGameOver() ? this.getResult(chess) : undefined,
-                player_move: move.san, // Usa move.san aqui também
+                player_move: move.san, 
                 evaluation: engineData.eval || "0.00"
             };
         } else {
@@ -157,7 +153,6 @@ class ChessBot {
 
 const chessBot = new ChessBot();
 
-// --- COMANDO DISCORD ---
 
 export default {
     name: 'chess',
@@ -222,7 +217,6 @@ export default {
             return message.reply({ embeds: [embed] });
         }
 
-        // --- MOVE ---
         if (action === 'move') {
             if (!session) return message.reply("⚠️ Sem jogo ativo. Use `rp!chess start`.");
             if (!move) return message.reply("⚠️ Digite o lance. Ex: `rp!chess e4`");
@@ -237,7 +231,6 @@ export default {
 
             let result = await chessBot.play_turn(session.fen, sanitizedMove);
 
-            // Fallback para UCI (g1f3) se falhar
             if (result.error) {
                 if (move.match(/^[a-h][1-8][a-h][1-8]$/)) {
                     const from = move.substring(0, 2);
@@ -245,7 +238,7 @@ export default {
                     const uciResult = await chessBot.play_turn(session.fen, { from, to });
                     
                     if (!uciResult.error) {
-                        result = uciResult; // Deu certo com UCI
+                        result = uciResult; 
                     } else {
                         return message.reply(`❌ ${result.error}`);
                     }

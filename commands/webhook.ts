@@ -1,81 +1,65 @@
 import { Message, TextChannel, Webhook } from "discord.js";
-import { TupperModel, ITupper } from "../models/TupperSchema";
+import { OCModel, IOC } from "../models/OCSchema";
+import ServerStats from "../models/ServerStats";
 
-export async function handleTupperMessage(message: Message) {
+export async function handleOCMessage(message: Message) {
     if (message.author.bot) return;
-    if (!message.guild) return; // Só funciona em servidores
+    if (!message.guild) return;
 
     const content = message.content;
-    const myTuppers = await TupperModel.find({
+    const myOCs = await OCModel.find({
         $or: [
             { adminId: message.author.id },
             { duoIds: message.author.id }
         ]
     });
 
-    if (!myTuppers.length) return;
+    if (!myOCs.length) return;
 
-    // 2. Verifica qual deles deu match no texto
-    let match: ITupper | null = null;
+    let match: IOC | null = null;
     let cleanContent = "";
 
-    // Ordena por tamanho do prefixo (do maior pro menor) pra evitar conflito de "k" e "ka"
-    myTuppers.sort((a, b) => b.prefix.length - a.prefix.length);
+    myOCs.sort((a, b) => b.prefix.length - a.prefix.length);
 
-    for (const tupper of myTuppers) {
-        // Lógica de Brackets (Prefixo ... Sufixo)
-        const hasPrefix = tupper.prefix ? content.startsWith(tupper.prefix) : true;
-        const hasSuffix = tupper.suffix ? content.endsWith(tupper.suffix) : true;
+    for (const oc of myOCs) {
+        const hasPrefix = oc.prefix ? content.startsWith(oc.prefix) : true;
+        const hasSuffix = oc.suffix ? content.endsWith(oc.suffix) : true;
 
-        if (hasPrefix && hasSuffix && (tupper.prefix || tupper.suffix)) {
-            match = tupper;
-            // Remove prefixo e sufixo
+        if (hasPrefix && hasSuffix && (oc.prefix || oc.suffix)) {
+            match = oc;
             cleanContent = content.substring(
-                tupper.prefix.length, 
-                content.length - tupper.suffix.length
+                oc.prefix.length, 
+                content.length - oc.suffix.length
             ).trim();
             break; 
         }
     }
 
     if (!match) return;
-
-    // =========================================================
-    // CHECAGEM DE CONFLITO (O MAIS ANTIGO GANHA) 🏆
-    // =========================================================
-    // Agora checamos se ALGUÉM MAIS no servidor tem esse mesmo prefixo
-    // e se o tupper dele é mais velho que o meu.
     
-    const conflicts = await TupperModel.find({ 
+    const conflicts = await OCModel.find({ 
         prefix: match.prefix, 
         suffix: match.suffix,
-        _id: { $ne: match._id } // Não sou eu
+        _id: { $ne: match._id } 
     });
 
     if (conflicts.length > 0) {
-        // Filtra: O dono do conflito está nesse servidor?
-        const guildMembers = message.guild.members.cache; // Cache rápido
+        const guildMembers = message.guild.members.cache; 
         
         for (const rival of conflicts) {
-            // Se o rival tá no server (Admin ou Duo)
             const rivalIsHere = guildMembers.has(rival.adminId) || rival.duoIds.some(id => guildMembers.has(id));
             
             if (rivalIsHere) {
-                // Rival está aqui. Quem é mais velho?
                 if (rival.createdAt < match.createdAt) {
-                    // O rival é mais antigo. Eu perco.
                     console.log(`Conflito: ${match.name} perdeu para ${rival.name} (Mais antigo)`);
-                    return; // Não envia nada
+                    return; 
                 }
             }
         }
     }
 
-    // =========================================================
-    // ENVIO DO WEBHOOK
-    // =========================================================
     try {
-        message.delete().catch(() => {}); // Apaga a msg original
+        message.delete().catch(() => {}); 
 
         const channel = message.channel as TextChannel;
         const webhooks = await channel.fetchWebhooks();
@@ -83,7 +67,7 @@ export async function handleTupperMessage(message: Message) {
 
         if (!webhook) {
             webhook = await channel.createWebhook({
-                name: 'RPTool Proxy',
+                name: 'RPTool OC Proxy',
                 avatar: message.client.user?.displayAvatarURL()
             });
         }
@@ -92,12 +76,20 @@ export async function handleTupperMessage(message: Message) {
             content: cleanContent,
             username: match.name,
             avatarURL: match.avatar,
-            files: Array.from(message.attachments.values()) // Repassa anexos
+            files: Array.from(message.attachments.values()) 
         });
 
-        // Incrementa contador
         match.messageCount += 1;
         match.save();
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        const hour = new Date().getUTCHours();
+        
+        ServerStats.findOneAndUpdate(
+            { guildId: message.guild.id, date: dateStr, hour },
+            { $inc: { [`users.${match._id.toString()}`]: 1 } }, 
+            { upsert: true }
+        ).catch(() => {});
 
     } catch (e) {
         console.error("Erro no webhook:", e);

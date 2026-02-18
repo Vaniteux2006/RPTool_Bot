@@ -1,16 +1,14 @@
 import { SlashCommandBuilder, EmbedBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
-import fs from 'fs';
-import path from 'path';
-// CORREÇÃO: Importando do jeito TS e sem extensão .js
 import ReturnVersion from '../ReturnVersion'; 
 
 export default {
     name: 'version',
-    description: 'Mostra a versão atual do sistema',
+    description: 'Mostra a versão atual do sistema e os créditos.',
+    aliases: ['creditos', 'credits', 'info'], 
 
     data: new SlashCommandBuilder()
         .setName('version')
-        .setDescription('Mostra a versão do sistema'),
+        .setDescription('Mostra a versão do sistema e os créditos da equipe'),
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
         const embed = this.getEmbed();
@@ -23,25 +21,17 @@ export default {
     },
 
     getEmbed() {
-        const versionPath = path.join(__dirname, '../Data/version.json');
-        let versionData = { current_display: "Desconhecida" };
-
-        try {
-            if (fs.existsSync(versionPath)) {
-                const rawData = fs.readFileSync(versionPath, 'utf-8');
-                versionData = JSON.parse(rawData);
-            }
-        } catch (error) {
-            console.error("Erro ao ler versão:", error);
-        }
-
-        // Chama a função importada
         const displayVer = ReturnVersion();
 
         return new EmbedBuilder()
             .setColor(0x00FFFF)
-            .setTitle('🤖 Versão do Sistema')
-            .setDescription(`Atualmente operando na build:\n# \`${displayVer}\``)
+            .setTitle('🤖 RPTool - Versão e Créditos')
+            .setDescription(`Atualmente operando na build:\n# \`${displayVer}\`\n\nEste projeto épico foi forjado por estas lendas:`)
+            .addFields(
+                { name: '👑 Fundador, Idealizador & Dev', value: '> **vaniteux_reborn**', inline: false },
+                { name: '💻 Co-Fundador & Dev', value: '> **mr.ivanol**', inline: false },
+                { name: '🎨 Ilustrador (Avatar)', value: '> **skieeeell**', inline: false }
+            )
             .setFooter({ text: 'TypeScript Update 🚀' });
     }
 };

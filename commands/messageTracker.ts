@@ -28,7 +28,6 @@ export default async function trackMessage(message: Message) {
 
     let globalStats: GlobalStats = {};
     
-    // Garante diretório
     if (!fs.existsSync(dataPath)) fs.mkdirSync(dataPath, { recursive: true });
 
     if (fs.existsSync(statsFile)) {
@@ -51,19 +50,15 @@ export default async function trackMessage(message: Message) {
     const guildStats = globalStats[guildId];
 
     const userId = message.author.id;
-    // @ts-ignore: Propriedade 'name' pode não existir em DM, mas validamos guild antes
     const chatName = (message.channel as any).name || message.channel.id; 
     const dateKey = getCurrentDateInt();
 
-    // Contagem User
     if (!guildStats.users[userId]) guildStats.users[userId] = 0;
     guildStats.users[userId] += 1;
 
-    // Contagem Chat
     if (!guildStats.chats[chatName]) guildStats.chats[chatName] = 0;
     guildStats.chats[chatName] += 1;
 
-    // Contagem Dia
     const dateKeyStr = dateKey.toString();
     if (!guildStats.days[dateKeyStr]) guildStats.days[dateKeyStr] = 0;
     guildStats.days[dateKeyStr] += 1;

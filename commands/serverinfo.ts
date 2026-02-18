@@ -41,19 +41,16 @@ export default {
 
         const owner = await guild.fetchOwner();
         
-        // Cache pode estar incompleto, ideal seria fetch() se precisar precisão, mas mantive filter para rapidez
         const textChannels = guild.channels.cache.filter((c: any) => c.type === ChannelType.GuildText).size;
         const voiceChannels = guild.channels.cache.filter((c: any) => c.type === ChannelType.GuildVoice).size;
         const totalChannels = textChannels + voiceChannels;
         
-        // Bans precisam de fetch, se der erro (sem perm), assume 0
         let banCount = 0;
         try {
              const bans = await guild.bans.fetch();
              banCount = bans.size;
         } catch (e) { banCount = 0; }
 
-        // Lógica do Ancião (exclui bots e o dono)
         const members = await guild.members.fetch();
         const oldMember = members
             .filter((m: GuildMember) => !m.user.bot && m.id !== guild.ownerId)

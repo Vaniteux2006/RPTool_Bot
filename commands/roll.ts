@@ -21,7 +21,6 @@ export default {
             reply: async (payload: any) => interaction.reply(payload)
         };
         
-        // Se falhar no Slash, a gente avisa
         const success = await this.processRoll(fakeMessage, formula);
         if (!success) {
             await interaction.reply({ content: "⚠️ Formato inválido. Use algo como `1d20+5`.", ephemeral: true });
@@ -30,23 +29,19 @@ export default {
 
     async execute(message: Message, args: string[]) {
         const formula = args.join("");
-        // Se falhar no comando de texto explícito (rp!roll), a gente avisa
         const success = await this.processRoll(message, formula);
         if (!success) {
             await message.reply("⚠️ Formato inválido. Use algo como `1d20+5`.");
         }
     },
 
-    // A lógica agora é silenciosa: se não for dado, apenas retorna false
     async processRoll(message: Message | any, formulaInput: string): Promise<boolean> {
         const regexDado = /^\s*(\d+)?d(\d+)(\s*[-+*/]\s*\d+)?\s*$/i;
         
-        // Garante que estamos testando uma string válida
         if (!formulaInput) return false;
         
         const match = formulaInput.match(regexDado);
 
-        // Se não for formato de dado, sai quietinho (o command_checkout agradece)
         if (!match) return false;
 
         let qtd = match[1] ? parseInt(match[1]) : 1;
@@ -85,11 +80,10 @@ export default {
             if (operador === '/') totalFinal = Math.floor(totalFinal / valorMod);
         }
 
-        // Cor baseada na sorte (apenas para d20 simples)
         let corFinal = 0x0099FF;
         if (lados === 20 && qtd === 1) {
-            if (resultados[0] === 20) corFinal = 0xFFD700; // Crítico
-            else if (resultados[0] === 1) corFinal = 0x990000; // Falha
+            if (resultados[0] === 20) corFinal = 0xFFD700; 
+            else if (resultados[0] === 1) corFinal = 0x990000; 
         }
 
         let listaStr = resultados.join(', ');

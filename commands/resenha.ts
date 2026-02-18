@@ -11,7 +11,6 @@ export default {
         .setDescription('Analisa se o chat está em estado de Resenha (r-01) ou Paz (r-00)'),
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
-        // Cria um objeto fakeMessage para reutilizar a lógica
         const fakeMessage: any = {
             channel: interaction.channel,
             guild: interaction.guild,
@@ -24,9 +23,8 @@ export default {
     async execute(message: Message | any, args: string[]) {
         if (!message.channel) return;
 
-        // 1. Verificação de Token (Segurança)
         const guildId = message.guild?.id;
-        const config = getGuildAIConfig(guildId);
+        const config = await getGuildAIConfig(guildId);
 
         if (!config) {
             return message.reply("⚠️ **Sem Token:** Ninguém configurou uma IA para este servidor ainda. Use `rp!token`.");
@@ -35,10 +33,8 @@ export default {
         const loading = await message.reply("👀 **Lendo as últimas 100 mensagens para julgar vocês...**");
 
         try {
-            // 2. Coleta 100 mensagens (Agora pega contexto suficiente)
             const messages = await message.channel.messages.fetch({ limit: 100 });
             
-            // Formata para a IA entender quem falou o quê
             const history = messages.reverse()
                 .filter((m: Message) => !m.content.startsWith('rp!') && !m.author.bot) // Ignora comandos e bots
                 .map((m: Message) => `[${m.author.username}]: ${m.content}`)
@@ -49,7 +45,6 @@ export default {
                 return loading.edit ? loading.edit(msgCurta) : message.reply(msgCurta);
             }
 
-            // 3. O Prompt Definitivo (Baseado nas suas regras)
             const prompt = `
             Atue como um juiz de "Resenha" (Caos/Zoeira) para um chat de Discord.
             Analise o histórico abaixo e classifique o estado atual.
@@ -76,13 +71,10 @@ export default {
             {"status": "r-00" ou "r-01", "analysis": "Uma frase curta, ácida e informal em português explicando o motivo."}
             `;
 
-            // 4. Chama a API
             const rawText = await api.generateRaw(prompt, config);
 
-            // 5. Tratamento do JSON
             let result;
             try {
-                // Limpa possíveis blocos ```json ... ``` que o Gemini gosta de mandar
                 const cleanText = rawText.replace(/```json|```/g, '').trim();
                 result = JSON.parse(cleanText);
             } catch (jsonError) {
@@ -90,16 +82,14 @@ export default {
                 result = { status: "r-00", analysis: "A IA ficou confusa com a bagunça de vocês e falhou no JSON." };
             }
 
-            // 6. Exibição do Resultado
-            let statusEmoji = "💤"; // Dormindo/Calmo
-            let color = 0x3498db; // Azul (Calmo)
+            let statusEmoji = "💤";
+            let color = 0x3498db; 
 
             if (result.status === "r-01") {
-                statusEmoji = "🔥"; // Fogo/Caos
-                color = 0xe74c3c; // Vermelho (Perigo)
+                statusEmoji = "🔥"; 
+                color = 0xe74c3c; 
             }
 
-            // Monta a resposta final
             const finalText = `## Status: \`${result.status}\` ${statusEmoji}\n> 📝 **Veredito:** ${result.analysis}`;
 
             if (loading.edit) loading.edit(finalText);
@@ -108,7 +98,6 @@ export default {
         } catch (e: any) {
             console.error(e);
             
-            // --- Sistema Anti-Afobação (Erro 429/503) ---
             const errorMsg = e.message || e.toString();
             let finalMsg = "❌ Falha na análise tática. (Erro de API)";
 

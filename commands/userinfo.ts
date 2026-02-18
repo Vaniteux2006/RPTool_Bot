@@ -41,7 +41,6 @@ export default {
             return message.reply(targetUser.displayAvatarURL({ size: 1024, extension: 'png' }));
         }
         
-        // Busca membro completo
         let targetMember: GuildMember | undefined;
         try {
             targetMember = await message.guild.members.fetch(targetUser.id);
@@ -51,7 +50,6 @@ export default {
 
         if (!targetMember) return;
 
-        // Calcula Rank de Antiguidade
         const members = await message.guild.members.fetch();
         const sortedMembers = members
             .sort((a: GuildMember, b: GuildMember) => (a.joinedTimestamp || 0) - (b.joinedTimestamp || 0))
@@ -67,7 +65,6 @@ export default {
             .map(r => `<@&${r.id}>`) 
             .join(', ') || "Nenhum cargo";
 
-        // Truncar roles se for muito grande para o embed
         const finalRoles = roles.length > 1024 ? roles.substring(0, 1020) + "..." : roles;
 
         const embed = new EmbedBuilder()

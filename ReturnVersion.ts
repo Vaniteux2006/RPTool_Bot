@@ -13,5 +13,5 @@ export default function ReturnVersion(): string {
     } catch (e) {
         console.error("⚠️ [ReturnVersion] Não foi possível ler a versão.");
     }
-    return "1.0.0";
+    return "1.4";
 }

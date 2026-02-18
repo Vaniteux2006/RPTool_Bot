@@ -1,6 +1,5 @@
 import 'dotenv/config';
 
-// Hack para garantir que o fetch funcione em qualquer versão do Node
 declare const fetch: any;
 
 async function listGoogleModels() {
@@ -14,7 +13,6 @@ async function listGoogleModels() {
     console.log("📡 Perguntando ao Google: 'O que eu posso usar?'...\n");
 
     try {
-        // Chama a API direta do Google para listar modelos (GET /models)
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
         const data = await response.json();
 
@@ -31,13 +29,10 @@ async function listGoogleModels() {
         console.log("✅ Lista Oficial de Modelos Disponíveis para sua Chave:");
         console.log("======================================================");
 
-        // Filtra e exibe
         data.models.forEach((model: any) => {
-            // Mostra apenas modelos que geram texto (ignora embeddings se quiser limpar, 
-            // mas vou deixar tudo já que vc pediu "o que o google responder")
             
             const capabilities = model.supportedGenerationMethods.join(", ");
-            console.log(`📦 NOME: ${model.name.replace('models/', '')}`); // Remove o prefixo 'models/' pra ficar limpo
+            console.log(`📦 NOME: ${model.name.replace('models/', '')}`); 
         });
 
     } catch (error) {

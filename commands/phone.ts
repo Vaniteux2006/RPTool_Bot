@@ -1,32 +1,41 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message, Client } from 'discord.js';
-
-// --- LÓGICA DO SISTEMA DE TELEFONE (Antigo phone_logic.ts) ---
+import { PhoneRegistryModel } from '../models/Outros'; 
 
 interface PhoneServer {
     channelId: string;
     marker?: string;
     status: 'idle' | 'ringing' | 'connected' | 'voting';
-    partnerId?: string; // ID do servidor com quem está falando
-    groupVotes?: Set<string>; // IDs de quem votou sim
+    partnerId?: string; 
+    groupVotes?: Set<string>; 
 }
 
 class PhoneSystem {
-    // Armazena estado: ServerID -> Dados
     private servers: Map<string, PhoneServer> = new Map();
+    public isInitialized = false;
 
-    register(serverId: string, channelId: string, marker?: string) {
-        this.servers.set(serverId, {
-            channelId,
-            marker,
-            status: 'idle'
-        });
-        return { msg: "Telefone instalado com sucesso!" };
+    async init() {
+        if (this.isInitialized) return;
+        const regs = await PhoneRegistryModel.find({});
+        for (const reg of regs) {
+            this.servers.set(reg.serverId, { channelId: reg.channelId, marker: reg.marker, status: 'idle' });
+        }
+        console.log(`📞 [Telefone] ${regs.length} linhas ativas carregadas do MongoDB.`);
+        this.isInitialized = true;
     }
 
-    turn_off(serverId: string) {
+    async register(serverId: string, channelId: string, marker?: string) {
+        this.servers.set(serverId, { channelId, marker, status: 'idle' });
+        await PhoneRegistryModel.findOneAndUpdate(
+            { serverId }, { serverId, channelId, marker }, { upsert: true }
+        );
+        return { msg: "Telefone instalado e sincronizado na nuvem com sucesso!" };
+    }
+
+    async turn_off(serverId: string) {
         if (this.servers.has(serverId)) {
             this.servers.delete(serverId);
-            return { msg: "Telefone desinstalado/desligado." };
+            await PhoneRegistryModel.deleteOne({ serverId });
+            return { msg: "Telefone desinstalado permanentemente." };
         }
         return { error: "Não há telefone registrado aqui." };
     }
@@ -36,22 +45,16 @@ class PhoneSystem {
         if (!origin) return { error: "Você precisa dar /phone register primeiro." };
         if (origin.status !== 'idle') return { error: "Linha ocupada." };
 
-        // Busca alvo por ID ou Nome (Marker)
         let targetId: string | undefined;
         let target: PhoneServer | undefined;
 
-        // Tenta achar por ID exato
         if (this.servers.has(targetIdentifier)) {
             targetId = targetIdentifier;
             target = this.servers.get(targetId);
-        } 
-        // Se não, procura pelo nome/marker
-        else {
+        } else {
             for (const [sId, sData] of this.servers.entries()) {
                 if (sData.marker && sData.marker.toLowerCase() === targetIdentifier.toLowerCase()) {
-                    targetId = sId;
-                    target = sData;
-                    break;
+                    targetId = sId; target = sData; break;
                 }
             }
         }
@@ -60,53 +63,33 @@ class PhoneSystem {
         if (targetId === originId) return { error: "Você não pode ligar para si mesmo." };
         if (target.status !== 'idle') return { status: 'busy', msg: "O número discado está ocupado." };
 
-        // Inicia a chamada
-        origin.status = 'ringing';
-        origin.partnerId = targetId;
-        
-        target.status = 'ringing';
-        target.partnerId = originId;
+        origin.status = 'ringing'; origin.partnerId = targetId;
+        target.status = 'ringing'; target.partnerId = originId;
 
-        return { 
-            status: 'ringing', 
-            target_channel: target.channelId 
-        };
+        return { status: 'ringing', target_channel: target.channelId };
     }
 
     accept(serverId: string) {
         const me = this.servers.get(serverId);
-        if (!me || me.status !== 'ringing' || !me.partnerId) {
-            return { error: "Ninguém está te ligando." };
-        }
+        if (!me || me.status !== 'ringing' || !me.partnerId) return { error: "Ninguém está te ligando." };
 
         const partner = this.servers.get(me.partnerId);
         if (!partner) {
-            me.status = 'idle';
-            return { error: "A chamada caiu." };
+            me.status = 'idle'; return { error: "A chamada caiu." };
         }
-
-        me.status = 'connected';
-        partner.status = 'connected';
-
-        return { 
-            status: 'connected', 
-            partners: [partner.channelId] // Lista de canais para avisar
-        };
+        me.status = 'connected'; partner.status = 'connected';
+        return { status: 'connected', partners: [partner.channelId] };
     }
 
     decline(serverId: string) {
         const me = this.servers.get(serverId);
         if (!me || me.status !== 'ringing' || !me.partnerId) return { error: "Nada para recusar." };
 
-        const partnerId = me.partnerId;
-        const partner = this.servers.get(partnerId);
-
-        me.status = 'idle';
-        me.partnerId = undefined;
+        const partner = this.servers.get(me.partnerId);
+        me.status = 'idle'; me.partnerId = undefined;
 
         if (partner) {
-            partner.status = 'idle';
-            partner.partnerId = undefined;
+            partner.status = 'idle'; partner.partnerId = undefined;
             return { status: 'declined', target_channel: partner.channelId };
         }
         return { msg: "Chamada recusada." };
@@ -118,141 +101,79 @@ class PhoneSystem {
 
         const partnerId = me.partnerId;
         const notifyList = [];
+        me.status = 'idle'; me.partnerId = undefined;
 
-        // Reseta eu
-        me.status = 'idle';
-        me.partnerId = undefined;
-
-        // Reseta o parceiro
         if (partnerId) {
             const partner = this.servers.get(partnerId);
             if (partner) {
-                partner.status = 'idle';
-                partner.partnerId = undefined;
+                partner.status = 'idle'; partner.partnerId = undefined;
                 notifyList.push(partner.channelId);
             }
         }
-
         return { status: 'ended', notify_channels: notifyList };
     }
 
     transmit(originId: string, originChannelId: string, content: string, user: string, serverName: string) {
         const me = this.servers.get(originId);
-        
-        // Valida se está conectado e se está falando do canal certo
-        if (!me || me.status !== 'connected' || !me.partnerId || me.channelId !== originChannelId) {
-            return null; // Ignora
-        }
+        if (!me || me.status !== 'connected' || !me.partnerId || me.channelId !== originChannelId) return null;
 
         const partner = this.servers.get(me.partnerId);
         if (!partner) return null;
-
-        return {
-            msg: `📞 **[${serverName}] ${user}:** ${content}`,
-            targets: [partner.channelId]
-        };
-    }
-
-    request_group_join(requesterId: string, targetIdentifier: string) {
-        return { error: "Chamadas em grupo em manutenção na versão TS." };
+        return { msg: `📞 **[${serverName}] ${user}:** ${content}`, targets: [partner.channelId] };
     }
 }
 
-// Instância Local (Singleton do Arquivo)
 const phoneSystem = new PhoneSystem();
-
-// --- FUNÇÕES AUXILIARES ---
 
 async function notifyServer(client: Client, channelId: string, text: string) {
     try {
         const channel = await client.channels.fetch(channelId);
-        if (channel && channel.isTextBased()) {
-            await (channel as any).send(text);
-        }
-    } catch (e) { console.error(`Erro ao notificar ${channelId}:`, e); }
+        if (channel && channel.isTextBased()) await (channel as any).send(text);
+    } catch (e) {}
 }
-
-// --- COMANDO ---
 
 export default {
     name: 'phone',
     description: 'Sistema de Telefone Inter-Servidores',
-    
-    data: new SlashCommandBuilder()
-        .setName('phone')
-        .setDescription('Telefone Inter-Servidores')
-        .addSubcommand(sub => 
-            sub.setName('call')
-                .setDescription('Liga para um servidor')
-                .addStringOption(op => op.setName('alvo').setDescription('ID ou Nome do servidor').setRequired(true)))
-        .addSubcommand(sub => 
-            sub.setName('register')
-                .setDescription('Instala o telefone neste canal')
-                .addStringOption(op => op.setName('nome').setDescription('Nome público do local').setRequired(false)))
+    data: new SlashCommandBuilder().setName('phone').setDescription('Telefone Inter-Servidores')
+        .addSubcommand(sub => sub.setName('call').setDescription('Liga para um servidor').addStringOption(op => op.setName('alvo').setDescription('ID ou Nome do servidor').setRequired(true)))
+        .addSubcommand(sub => sub.setName('register').setDescription('Instala o telefone neste canal').addStringOption(op => op.setName('nome').setDescription('Nome público do local').setRequired(false)))
         .addSubcommand(sub => sub.setName('accept').setDescription('Atende uma chamada'))
         .addSubcommand(sub => sub.setName('decline').setDescription('Recusa uma chamada'))
-        .addSubcommand(sub => sub.setName('end').setDescription('Desliga a chamada'))
-        .addSubcommand(sub => sub.setName('group').setDescription('Pede para entrar na chamada em grupo')
-             .addStringOption(op => op.setName('alvo').setDescription('ID ou Nome de quem já está na call').setRequired(true))),
+        .addSubcommand(sub => sub.setName('end').setDescription('Desliga a chamada')),
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
         const sub = interaction.options.getSubcommand();
         const args = [sub]; 
+        const alvo = interaction.options.getString('alvo') || interaction.options.getString('nome');
+        if (alvo) args.push(alvo); 
 
-        if (sub === 'call' || sub === 'group') {
-            const alvo = interaction.options.getString('alvo');
-            if (alvo) args.push(alvo); 
-        }
-        else if (sub === 'register') {
-            const nome = interaction.options.getString('nome');
-            if (nome) args.push(nome);
-        }
-
-        // Fake Message para reaproveitar lógica
         const fakeMessage: any = {
-            content: `rp!phone ${args.join(' ')}`,
-            author: interaction.user,
-            guild: interaction.guild,
-            channel: interaction.channel,
-            client: interaction.client, 
-            reply: async (payload: any) => {
-                if (interaction.replied || interaction.deferred) return interaction.followUp(payload);
-                return interaction.reply(payload);
-            }
+            content: `rp!phone ${args.join(' ')}`, author: interaction.user, guild: interaction.guild,
+            channel: interaction.channel, client: interaction.client, 
+            reply: async (payload: any) => interaction.replied || interaction.deferred ? interaction.followUp(payload) : interaction.reply(payload)
         };
-
         await this.execute(fakeMessage, args);
     },
 
     async execute(message: Message | any, args: string[]) {
+        await phoneSystem.init();
+
         const action = args[0] ? args[0].toLowerCase() : null;
         const serverId = message.guild?.id;
-        const validActions = ['register', 'call', 'group', 'accept', 'decline', 'end', 'off'];
-
-        if (!action || !validActions.includes(action)) {
-            return message.reply("📱 **Telefone:** Use `register, call, group, accept, decline, end`.");
-        }
 
         let data: any = {};
-
         try {
             switch (action) {
                 case 'register':
                     const marker = args[1] ? args.slice(1).join(" ") : undefined;
-                    data = phoneSystem.register(serverId, message.channel.id, marker);
+                    data = await phoneSystem.register(serverId, message.channel.id, marker); 
                     break;
                 case 'off':
-                    data = phoneSystem.turn_off(serverId);
+                    data = await phoneSystem.turn_off(serverId); 
                     break;
                 case 'call':
-                    const targetCall = args.slice(1).join(" ");
-                    if (!targetCall) return message.reply("⚠️ Digite o ID ou Nome.");
-                    data = phoneSystem.call(serverId, targetCall);
-                    break;
-                case 'group':
-                    const targetGroup = args.slice(1).join(" ");
-                    if (!targetGroup) return message.reply("⚠️ Digite o ID ou Nome.");
-                    data = phoneSystem.request_group_join(serverId, targetGroup);
+                    data = phoneSystem.call(serverId, args.slice(1).join(" "));
                     break;
                 case 'accept':
                     data = phoneSystem.accept(serverId);
@@ -263,12 +184,13 @@ export default {
                 case 'end':
                     data = phoneSystem.end_call(serverId);
                     break;
+                default:
+                    return message.reply("📱 **Telefone:** Use `register, call, accept, decline, end`.");
             }
 
             if (data.error) return message.reply(`❌ **Erro:** ${data.error}`);
             
-            if (data.status === 'busy') message.reply(data.msg);
-            else if (data.status === 'ringing') {
+            if (data.status === 'ringing') {
                 message.reply(`📞 **Chamando...**`);
                 if (data.target_channel) notifyServer(message.client, data.target_channel, `📞 **TRIM TRIM!** O servidor **${message.guild.name}** está ligando!\nDigite \`/phone accept\` para atender.`);
             }
@@ -284,9 +206,7 @@ export default {
                 message.reply("🚫 **Chamada Recusada.**");
                 if (data.target_channel) notifyServer(message.client, data.target_channel, `🚫 **${message.guild.name}** recusou a chamada.`);
             }
-            else if (data.msg) {
-                message.reply(`📱 ${data.msg}`);
-            }
+            else if (data.msg) message.reply(`📱 ${data.msg}`);
 
         } catch (e) {
             console.error(e);
@@ -295,21 +215,13 @@ export default {
     },
 
     async processPhoneMessage(message: Message): Promise<boolean> {
+        await phoneSystem.init(); 
         if (message.author.bot || message.content.startsWith('rp!') || message.content.startsWith('/')) return false;
         if (!message.guild) return false;
 
-        const result = phoneSystem.transmit(
-            message.guild.id,
-            message.channel.id,
-            message.content,
-            message.author.username,
-            message.guild.name
-        );
-
+        const result = phoneSystem.transmit(message.guild.id, message.channel.id, message.content, message.author.username, message.guild.name);
         if (result && result.targets) {
-            result.targets.forEach((channelId: string) => {
-                notifyServer(message.client, channelId, result.msg);
-            });
+            result.targets.forEach((cId: string) => notifyServer(message.client, cId, result.msg));
             return true;
         }
         return false;

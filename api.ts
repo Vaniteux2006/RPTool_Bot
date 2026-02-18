@@ -1,13 +1,11 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import { AIConfig } from './commands/utils/tokenHelper'; // Importe a interface
+import { AIConfig } from './commands/utils/tokenHelper';
 
 class RPToolAPI {
     
     constructor() {
         console.log("🚀 [API HÍBRIDA] Sistema de IA inicializado.");
     }
-
-    // --- CHAT / IA ---
 
     async chat(npcName: string, persona: string, userMessage: string, config?: AIConfig): Promise<string> {
         if (!config) return "❌ Erro: Nenhum token configurado para este servidor.";
@@ -47,12 +45,10 @@ class RPToolAPI {
         }
     }
 
-    // --- PROVEDORES ---
-
     private async generateGemini(config: AIConfig, prompt: string): Promise<string> {
         const genAI = new GoogleGenerativeAI(config.key);
         const model = genAI.getGenerativeModel({
-            model: config.model, // Usa o modelo escolhido pelo usuário!
+            model: config.model, 
             safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -66,7 +62,6 @@ class RPToolAPI {
     }
 
     private async generateOpenAI(config: AIConfig, prompt: string): Promise<string> {
-        // Implementação simples via fetch para não obrigar instalar a lib 'openai' agora
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {

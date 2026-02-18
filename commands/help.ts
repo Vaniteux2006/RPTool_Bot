@@ -31,120 +31,200 @@ export default {
         
         const pages = [
             {
-                title: '🛠️ Utilidades & Info',
-                description: 'Ferramentas gerais e informações do servidor.',
+                title: '🛠️ Utilidades & Informações',
+                description: 'Ferramentas gerais, status do servidor e utilitários.',
                 fields: [
                     { 
-                        name: '🎂 Aniversários (Birthday)', 
+                        name: '🔍 Informações', 
+                        value: `**${p}serverinfo**\n` +
+                               `├─ \`geral\` • Dados gerais, membros e ancião\n` +
+                               `└─ \`photo\` • Envia apenas o ícone do servidor\n` +
+                               `**${p}userinfo [@user]**\n` +
+                               `├─ \`info\` • Ficha completa, datas e rank de entrada\n` +
+                               `└─ \`photo\` • Envia a foto de perfil do usuário` 
+                    },
+                    { 
+                        name: '📊 Estatísticas (Status)', 
+                        value: `**${p}status**\n` +
+                               `├─ \`[vazio]\` • Dashboard de atividade dos últimos 15 dias\n` +
+                               `├─ \`rank user\` • Top 5 usuários mais ativos (Gráfico)\n` +
+                               `├─ \`rank channel\` • Top 5 canais mais ativos (Gráfico)\n` +
+                               `├─ \`rank words\` • Top 15 palavras mais usadas\n` +
+                               `└─ \`[@user|#canal|"OC"]\` • Gráfico específico do alvo` 
+                    },
+                    {
+                        name: '🧮 Ferramentas de Desenvolvedor',
+                        value: `**${p}math [expressão]** • Resolve equações (Wolfram Alpha)\n` +
+                               `**${p}console [código]** • Roda código JS em Sandbox\n` +
+                               `**${p}helloworld** • Teste de latência (Ping)\n` +
+                               `**${p}version** • Versão atual e créditos da equipe`
+                    }
+                ]
+            },
+            {
+                title: '🛡️ Moderação & Administração',
+                description: 'Gerenciamento de usuários, chat e sistemas de entrada.',
+                fields: [
+                    { 
+                        name: '🚫 Punições & Castigos', 
+                        value: `**${p}ban [@user/ID] [motivo]** • Bane (dentro ou fora do server)\n` +
+                               `**${p}unban [ID]** • Remove o banimento\n` +
+                               `**${p}kick [@user] [motivo]** • Expulsa do servidor\n` +
+                               `**${p}mute [@user] [tempo]** • Dá timeout (Ex: 10m, 1d)\n` +
+                               `**${p}unmute [@user]** • Tira do castigo imediatamente`
+                    },
+                    { 
+                        name: '🧹 Gerenciamento de Chat', 
+                        value: `**${p}clear [1-100]** • Limpa mensagens do chat\n` +
+                               `**${p}welcome**\n` +
+                               `├─ \`#canal\` • Define onde caem os registros\n` +
+                               `├─ \`change [msg]\` • Muda texto de entrada (Aceita {user})\n` +
+                               `├─ \`change <leave|kick|ban> [msg]\` • Altera outras msgs\n` +
+                               `└─ \`end\` • Desliga e reseta o sistema` 
+                    },
+                    { 
+                        name: '🏷️ Cargos & Utilitários', 
+                        value: `**${p}reaction [ID_Msg] [@Cargo] [Emoji]** • Cargo por reação\n` +
+                               `**${p}autorole**\n` +
+                               `├─ \`add [@cargo]\` • Cargo automático pra novatos\n` +
+                               `├─ \`del [@cargo]\` • Remove da lista\n` +
+                               `└─ \`list\` • Mostra configuração atual\n` +
+                               `**${p}fatos [@user] [qtd]** • Maratona de conhecimento (Admin)` 
+                    }
+                ]
+            },
+            {
+                title: '🎭 Personagens Originais (OCs)',
+                description: 'Criação, edição e organização de Tuppers.',
+                fields: [
+                    { 
+                        name: '👤 Criação e Identidade', 
+                        value: `**${p}oc create ["Nome"] [prefixo:text]** • Cria um novo OC\n` +
+                               `**${p}oc name ["Antigo"] ["Novo"]** • Renomeia o OC\n` +
+                               `**${p}oc avatar ["Nome"] [img/link]** • Altera a foto\n` +
+                               `**${p}oc prefix ["Nome"] [novo:text]** • Muda o gatilho\n` +
+                               `**${p}oc birthday ["Nome"] [DD/MM]** • Define o aniversário` 
+                    },
+                    { 
+                        name: '📁 Gerenciamento Geral', 
+                        value: `**${p}oc list** • Lista seus OCs (com botões de navegação)\n` +
+                               `**${p}oc find ["Nome"]** • Ficha resumida do OC\n` +
+                               `**${p}oc edit [novo texto]** • Edita a última msg enviada\n` +
+                               `**${p}oc delete ["Nome"]** • Apaga um OC específico\n` +
+                               `**${p}oc purge** • ⚠️ Apaga TODOS os seus OCs de uma vez\n` +
+                               `**${p}oc duo/solo ["Nome"] [@user]** • Divide controle do OC` 
+                    },
+                    {
+                        name: '🗂️ Organização & Backups',
+                        value: `**${p}oc group**\n` +
+                               `├─ \`create ["Grupo"] ["OC"]\` • Cria grupo e já add OC\n` +
+                               `├─ \`add ["Grupo"] ["OC"]\` • Põe OC no grupo\n` +
+                               `├─ \`remove ["OC"]\` • Tira do grupo\n` +
+                               `├─ \`delete ["Grupo"]\` • Exclui o grupo\n` +
+                               `└─ \`list\` • Lista seus grupos criados\n` +
+                               `**${p}oc import** • Puxa seus OCs de um JSON (Tupperbox)\n` +
+                               `**${p}oc export** • Gera um JSON com todos os seus OCs`
+                    },
+                    {
+                        name: '📖 Wiki do OC',
+                        value: `**${p}oc wiki ["Nome"]** • Abre a Wiki interativa do OC\n` +
+                               `├─ \`bio/intro\` • Escreve a introdução principal\n` +
+                               `├─ \`add ["Tópico"]\` • Cria nova página de Lore\n` +
+                               `├─ \`edit/remove ["Tópico"]\` • Edita ou apaga tópico\n` +
+                               `├─ \`extra ["Chave"] ["Valor"]\` • Add info curta (Ex: Idade)\n` +
+                               `├─ \`emoji ["Tópico"] [Emoji]\` • Muda ícone do menu\n` +
+                               `└─ \`ref ["NomeReferência"]\` • Linka com Wiki de outro OC`
+                    }
+                ]
+            },
+            {
+                title: '🤖 Inteligência Artificial (IA)',
+                description: 'Motores de pensamento, NPCs e IA interpretativa.',
+                fields: [
+                    { 
+                        name: '⚙️ Configuração & Utilitários', 
+                        value: `**${p}token** • Painel PV pra gerenciar APIs (Gemini/OpenAI)\n` +
+                               `**${p}ai [texto]** • Conversa rápida com NPC padrão\n` +
+                               `**${p}resume [data]->[data]** • IA resume a história do RP\n` +
+                               `**${p}resenha** • IA avalia o nível de caos/zoeira do chat` 
+                    },
+                    { 
+                        name: '🧠 IA dos OCs (Persona & Ação)', 
+                        value: `**${p}oc ai ["Nome"]** • Define a Persona da IA do OC\n` +
+                               `**${p}oc insert ["Nome"] [auto]** • IA começa a observar/falar\n` +
+                               `**${p}oc delay ["Nome"] [segundos]** • Espera no modo auto\n` +
+                               `**${p}oc end** • Tira o OC com IA do canal\n` +
+                               `**${p}oc puppet ["Nome"]** • Desliga a IA (volta a manual)` 
+                    },
+                    { 
+                        name: '💭 Memórias e Manipulação', 
+                        value: `**${p}oc memories ["Nome"]** • Lista memórias aprendidas\n` +
+                               `**${p}oc gaslight ["Nome"]** • Implanta memória nova/falsa\n` +
+                               `**${p}oc forget ["Nome"] [ID]** • Apaga memória específica\n` +
+                               `**${p}oc alzheimer ["Nome"]** • Zera todas as memórias da IA` 
+                    }
+                ]
+            },
+            {
+                title: '🎲 Sistemas RPG & Mundo',
+                description: 'Rolagem de dados, Fichas, Clima e Eventos.',
+                fields: [
+                    { 
+                        name: '📋 Fichas Universais', 
+                        value: `**${p}ficha**\n` +
+                               `├─ \`create new\` • Cria Template com tags (|string|, |if|)\n` +
+                               `├─ \`check [#canal]\` • Define canal de avaliação (Aprovar)\n` +
+                               `├─ \`hall [#canal]\` • Define canal das fichas aprovadas\n` +
+                               `├─ \`oc on ["Prefixo: |prefix|"]\` • Integra ficha com OCs\n` +
+                               `├─ \`edit\` • Vê o template de ficha atual\n` +
+                               `├─ \`end ["Nome"]\` • Deleta uma ficha específica\n` +
+                               `├─ \`purge\` • Expulsa todas as fichas aprovadas\n` +
+                               `└─ \`reset\` • Formata o sistema inteiro de fichas` 
+                    },
+                    { 
+                        name: '🕰️ Tempo e Clima', 
+                        value: `**${p}time**\n` +
+                               `├─ \`[#canal]\` • Cria relógio sincronizado com a vida real\n` +
+                               `├─ \`set [Nome] [Data] [Hora]\` • Cria motor de tempo custom\n` +
+                               `├─ \`skip [Nome] [Tempo]\` • Avança tempo do RP\n` +
+                               `├─ \`delete [Nome]\` • Apaga relógio\n` +
+                               `└─ \`list\` • Ver relógios ativos\n` +
+                               `**${p}clima**\n` +
+                               `├─ \`[Local]\` • Consulta temp real no mundo\n` +
+                               `├─ \`[#canal]\` • Vê clima do relógio RP ativo\n` +
+                               `├─ \`sync [Relógio] [Local]\` • Sincroniza relógio RP com IRL\n` +
+                               `├─ \`force [Relógio] [Condição]\` • Muda clima na marra\n` +
+                               `└─ \`def\` • Lista climas padrão do sistema` 
+                    },
+                    {
+                        name: '🎉 Eventos & Dados',
                         value: `**${p}birthday**\n` +
-                               `├─ \`add [user] [data]\` • Adiciona niver (Ex: 15/09)\n` +
-                               `├─ \`check\` • Vê lista de aniversariantes\n` +
-                               `└─ \`reset\` • Reseta o sistema (Admin)` 
-                    },
-                    { 
-                        name: '📥 Downloader (DL)', 
-                        value: `**${p}dl [link]**\n` +
-                               `└─ Baixa vídeos (TikTok, Insta, YT).` 
-                    },
-                    {
-                        name: '📊 Informações',
-                        value: `**${p}serverinfo** • Dados do Servidor e Ícone\n` +
-                               `**${p}userinfo [user]** • Ficha do Usuário\n` +
-                               `**${p}status** • Dashboard de atividade`
-                    },
-                    {
-                        name: '🧮 Outros',
-                        value: `**${p}math [conta]** • Calculadora (Ex: 2+2*4)\n` +
-                               `**${p}version** • Versão do Bot\n` +
-                               `**${p}helloworld** • Ping`
+                               `├─ \`[#canal]\` • Instala painel automático de eventos\n` +
+                               `├─ \`add [DD/MM]\` • Adiciona evento/niver (aceita em lote)\n` +
+                               `└─ \`list\` • Mostra calendário completo do servidor\n` +
+                               `**${p}roll [fórmula]** • Rola dados (Ex: 1d20+5, 4d6)`
                     }
                 ]
             },
             {
-                title: '🛡️ Administração',
-                description: 'Comandos de moderação e configuração.',
+                title: '🎮 Diversão & Social',
+                description: 'Minigames e interações imersivas.',
                 fields: [
                     { 
-                        name: '🚫 Punições', 
-                        value: `**${p}ban [user] [motivo]** • Banir usuário\n` +
-                               `**${p}kick [user] [motivo]** • Expulsar usuário\n` +
-                               `**${p}unban [id]** • Desbanir pelo ID`
-                    },
-                    { 
-                        name: '🤫 Castigos (Mute)', 
-                        value: `**${p}mute [user] [tempo]**\n` +
-                               `└─ Silencia temporariamente. (Ex: 10m, 2h, 1d)\n` +
-                               `**${p}unmute [user]**\n` +
-                               `└─ Remove o castigo imediatamente.` 
-                    },
-                    { 
-                        name: '🏷️ Cargos Automáticos (Autorole)', 
-                        value: `**${p}autorole**\n` +
-                               `├─ \`add [cargo]\` • Define cargo de entrada\n` +
-                               `├─ \`del [cargo]\` • Remove da configuração\n` +
-                               `└─ \`check\` • Vê configuração atual` 
-                    }
-                ]
-            },
-            {
-                title: '🎭 Tuppers & IA',
-                description: 'Criação de personagens e Inteligência Artificial.',
-                fields: [
-                    { 
-                        name: '📝 Gerenciar Personagens (Create)', 
-                        value: `**${p}create**\n` +
-                               `├─ \`new "Nome" [prefix]\` • Cria personagem simples\n` +
-                               `├─ \`ai "Nome" [prefix]\` • Cria personagem com IA\n` +
-                               `├─ \`avatar "Nome" [img]\` • Muda a foto\n` +
-                               `├─ \`list\` • Lista seus personagens\n` +
-                               `├─ \`export\` • Baixa backup (JSON)\n` +
-                               `└─ \`delete "Nome"\` • Apaga um personagem` 
-                    },
-                    { 
-                        name: '📥 Inserir no Chat (Insert)', 
-                        value: `**${p}insert**\n` +
-                               `├─ \`start "Nome"\` • Invoca personagem\n` +
-                               `├─ \`start "Nome" auto\` • Modo automático (IA)\n` +
-                               `├─ \`delay [segundos]\` • Tempo de resposta IA\n` +
-                               `├─ \`memories "Nome"\` • Adiciona memórias\n` +
-                               `└─ \`end\` • Remove personagem do chat` 
-                    },
-                    {
-                        name: '🤖 Conversa Rápida',
-                        value: `**${p}ai [texto]** • Fala com o Bot padrão`
-                    }
-                ]
-            },
-            {
-                title: '🎲 Diversão & Social',
-                description: 'Jogos e interações entre servidores.',
-                fields: [
-                    { 
-                        name: '☎️ Telefone (Phone)', 
+                        name: '☎️ Telefone Inter-Servidores', 
                         value: `**${p}phone**\n` +
-                               `├─ \`call [ID]\` • Liga para outro server\n` +
-                               `├─ \`register\` • Instala o telefone no canal\n` +
-                               `├─ \`accept\` • Atende chamada\n` +
-                               `└─ \`end\` • Desliga chamada` 
+                               `├─ \`register [Nome]\` • Instala a linha telefônica no canal\n` +
+                               `├─ \`call [ID/Nome]\` • Disca para outro servidor\n` +
+                               `├─ \`accept\` / \`decline\` • Atende/Recusa chamada recebida\n` +
+                               `├─ \`end\` • Desliga a chamada ativa\n` +
+                               `└─ \`off\` • Desinstala o telefone do servidor` 
                     },
                     { 
-                        name: '♟️ Xadrez (Chess)', 
+                        name: '♟️ Xadrez contra Stockfish', 
                         value: `**${p}chess**\n` +
-                               `├─ \`start [cor]\` • Inicia jogo vs Stockfish\n` +
-                               `├─ \`jogar [lance]\` • Faz movimento (Ex: e4)\n` +
-                               `└─ \`solve [fen]\` • Analisa posição` 
-                    },
-                    { 
-                        name: '🎲 Dados & Quotes', 
-                        value: `**${p}roll [fórmula]**\n` +
-                               `└─ Rola dados (Ex: 2d20+5)\n` +
-                               `**Quote (Citação)**\n` +
-                               `└─ Responda msg com: \`@RPTool anota\`` 
-                    },
-                    { 
-                        name: '👀 Averiguador de Resenha', 
-                        value: `**${p}resenha**\n` +
-                               `└─ averigua possível resenha 👁️` 
+                               `├─ \`start\` • Inicia uma nova partida\n` +
+                               `├─ \`move [lance]\` • Faz lance na partida (Ex: e4, Nf3)\n` +
+                               `└─ \`fen\` • Pega o código FEN da posição atual` 
                     }
                 ]
             }
@@ -158,14 +238,14 @@ export default {
                 .setTitle(page.title)
                 .setDescription(page.description)
                 .addFields(page.fields)
-                .setFooter({ text: `Página ${pageIndex + 1} de ${pages.length}` })
+                .setFooter({ text: `Página ${pageIndex + 1} de ${pages.length} • Use os botões abaixo para navegar` })
                 .setColor(0x0099FF);
         };
 
         const generateButtons = (pageIndex: number) => {
             return new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder().setCustomId('prev').setLabel('⬅️').setStyle(ButtonStyle.Primary).setDisabled(pageIndex === 0),
-                new ButtonBuilder().setCustomId('next').setLabel('➡️').setStyle(ButtonStyle.Primary).setDisabled(pageIndex === pages.length - 1)
+                new ButtonBuilder().setCustomId('prev').setLabel('⬅️ Anterior').setStyle(ButtonStyle.Primary).setDisabled(pageIndex === 0),
+                new ButtonBuilder().setCustomId('next').setLabel('Próximo ➡️').setStyle(ButtonStyle.Primary).setDisabled(pageIndex === pages.length - 1)
             );
         };
 
@@ -183,7 +263,7 @@ export default {
         collector.on('collect', async (i: ButtonInteraction) => {
             const userId = isSlash ? (target as ChatInputCommandInteraction).user.id : (target as Message).author.id;
             if (i.user.id !== userId) {
-                return i.reply({ content: "❌ Use seu próprio `/help`!", ephemeral: true });
+                return i.reply({ content: "❌ Ei! Esse menu pertence a outra pessoa. Use `/help` para abrir o seu.", ephemeral: true });
             }
 
             if (i.customId === 'prev' && currentPage > 0) currentPage--;
@@ -193,6 +273,14 @@ export default {
                 embeds: [generateEmbed(currentPage)],
                 components: [generateButtons(currentPage)]
             });
+        });
+        
+        collector.on('end', () => {
+            const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId('prev').setLabel('⬅️ Anterior').setStyle(ButtonStyle.Primary).setDisabled(true),
+                new ButtonBuilder().setCustomId('next').setLabel('Próximo ➡️').setStyle(ButtonStyle.Primary).setDisabled(true)
+            );
+            sentMessage.edit({ components: [disabledRow] }).catch(() => {});
         });
     }
 };

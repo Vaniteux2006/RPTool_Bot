@@ -1,15 +1,18 @@
 import 'dotenv/config'; 
-import { Client, GatewayIntentBits, Collection, ActivityType, Events, REST, Routes, Partials } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, ActivityType, Events, REST, Routes, Partials, AuditLogEvent, EmbedBuilder } from 'discord.js';
 import fs from 'fs'; 
 import path from 'path';
+import { getAverageColor } from 'fast-average-color-node';
+import { WelcomeModel } from './models/Outros';
 
-// --- IMPORTS ATUALIZADOS (TS) ---
 import ReturnVersion from './ReturnVersion'; 
 import runSystemChecks from './command_checkout'; 
+import runInteractionChecks from './interaction_checkout';
 import autoroleCommand from './commands/autorole'; 
-import statusData from './Data/status.json';
+import { BotStatusModel } from './models/Outros';
+import timeCommand from './commands/time';
+import { handleReactionAdd, handleReactionRemove } from './reactionListener';
 
-// Interface para o Client Customizado
 interface CustomClient extends Client {
     commands: Collection<string, any>;
 }
@@ -21,11 +24,14 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.DirectMessages
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.GuildMessageReactions
     ],
     partials: [
         Partials.Channel,
-        Partials.Message  
+        Partials.Message,
+        Partials.Reaction, 
+        Partials.User      
     ]
 }) as CustomClient;
 
@@ -33,7 +39,6 @@ client.commands = new Collection();
 const commandsArray: any[] = []; 
 const prefix = "rp!";
 
-// Função recursiva para carregar comandos .ts e .js (se sobrarem)
 function loadCommands(dir: string) {
     if (!fs.existsSync(dir)) return;
 
@@ -43,12 +48,8 @@ function loadCommands(dir: string) {
         if (item.isDirectory()) {
             loadCommands(fullPath);
         } else if (item.name.endsWith('.ts') || item.name.endsWith('.js')) { 
-            // Ignora arquivos de definição e o checkout (já importado manualmente)
             if (item.name.endsWith('.d.ts')) continue;
             if (item.name.includes('command_checkout')) continue; 
-            if (item.name.includes('tupper_logic')) continue;
-            if (item.name.includes('chess_logic')) continue;
-            if (item.name.includes('phone_logic')) continue;
             if (item.name.includes('quote_engine')) continue;
 
             try {
@@ -75,20 +76,27 @@ loadCommands(path.join(__dirname, 'commands'));
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`🤖 Bot online como ${readyClient.user.tag}!`);
 
-    // Sistema de Status Rotativo
-    let option = 0;
-    setInterval(() => {
-        const entry = statusData[option];
-        const text = entry.content.replace('{version}', ReturnVersion());
-        const typeKey = entry.type as keyof typeof ActivityType;
-        
-        client.user?.setActivity(text, { type: ActivityType[typeKey] });
-        option = (option + 1) % statusData.length;
-    }, 10000); // 10 segundos
+    const updateStatus = async () => {
+        try {
+            const statuses = await BotStatusModel.find({});
+            if (statuses.length > 0) {
+                const entry = statuses[Math.floor(Math.random() * statuses.length)];
+                const text = entry.content.replace('{version}', ReturnVersion());
+                const typeKey = entry.type as keyof typeof ActivityType;
+                
+                client.user?.setActivity(text, { type: ActivityType[typeKey] });
+            }
+        } catch (e) {
+            console.error("Erro ao puxar status do banco:", e);
+        }
+    };
 
-    // Registro de Slash Commands
+    updateStatus(); 
+    setInterval(updateStatus, 15000); 
+
     const CLIENT_ID = process.env.CLIENT_ID || readyClient.user.id;
     const TOKEN = process.env.TOKEN;
+    await timeCommand.checkAndRestoreClocks(client);
 
     if (TOKEN) {
         const rest = new REST().setToken(TOKEN);
@@ -105,18 +113,19 @@ client.once(Events.ClientReady, async (readyClient) => {
     }
 });
 
-// Handler de Slash Commands
 client.on(Events.InteractionCreate, async (interaction) => {
+    if (await runInteractionChecks(interaction, client)) return;
     if (!interaction.isChatInputCommand()) return; 
     
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
     
+    console.log(`⚡ [SLASH] /${interaction.commandName} | User: ${interaction.user.tag} | Server: ${interaction.guild?.name ?? "DM"} (${interaction.guild?.id ?? "DM"})`);
+    
     try {
         if (command.executeSlash) {
             await command.executeSlash(interaction);
         } else if (command.execute) {
-            // Fallback
             await command.execute(interaction, []); 
         }
     } catch (error) {
@@ -127,9 +136,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
-// Handler de Mensagens (Legacy + Sistemas)
 client.on('messageCreate', async (message) => {
-    // Roda verificação de sistemas (Tupper, Dados, etc)
+
     if (message.author.bot || await runSystemChecks(message, client)) return;
     
     if (!message.content.startsWith(prefix)) return;
@@ -138,6 +146,8 @@ client.on('messageCreate', async (message) => {
     const commandName = args.shift()?.toLowerCase();
 
     if (!commandName) return;
+    
+    console.log(`📝 [CMD] ${commandName} | User: ${message.author.tag} | Server: ${message.guild?.name ?? "DM"} (${message.guild?.id ?? "DM"})`);
 
     const command = client.commands.get(commandName) || client.commands.find((cmd: any) => cmd.aliases && cmd.aliases.includes(commandName));
 
@@ -150,16 +160,89 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Evento: Novo Membro (Autorole)
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+    await handleReactionAdd(reaction, user);
+});
+
+client.on(Events.MessageReactionRemove, async (reaction, user) => {
+    await handleReactionRemove(reaction, user);
+});
+
 client.on('guildMemberAdd', async (member) => {
+    try { await autoroleCommand.giveRole(member); } catch (e) {}
+
     try {
-        await autoroleCommand.giveRole(member);
+        const config = await WelcomeModel.findOne({ guildId: member.guild.id });
+        if (!config || !config.channelId) return;
+        const channel = member.guild.channels.cache.get(config.channelId);
+        if (!channel || !channel.isTextBased()) return;
+
+        let msg = config.joinMsg.replace(/{user}/g, `<@${member.id}>`)
+                                .replace(/{server}/g, member.guild.name)
+                                .replace(/{count}/g, member.guild.memberCount.toString());
+
+        let embedColor = 0x5865F2; 
+        try {
+            const url = member.user.displayAvatarURL({ extension: 'png', size: 256 });
+            const color = await getAverageColor(url);
+            embedColor = parseInt(color.hex.replace('#', ''), 16);
+        } catch (e) {}
+
+        const embed = new EmbedBuilder()
+            .setColor(embedColor)
+            .setDescription(msg)
+            .setThumbnail(member.user.displayAvatarURL()); 
+
+        await (channel as any).send({ embeds: [embed] });
     } catch (error) {
-        console.error("Erro no Autorole:", error);
+        console.error("Erro no Welcome:", error);
     }
 });
 
-// Tratamento de Erros Globais
+client.on('guildMemberRemove', async (member) => {
+    try {
+        const config = await WelcomeModel.findOne({ guildId: member.guild.id });
+        if (!config || !config.channelId) return;
+        const channel = member.guild.channels.cache.get(config.channelId);
+        if (!channel || !channel.isTextBased()) return;
+
+        const banLogs = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberBanAdd }).catch(()=>null);
+        const banLog = banLogs?.entries.first();
+        let isBan = false;
+        if (banLog && banLog.target.id === member.id && Date.now() - banLog.createdTimestamp < 5000) isBan = true;
+
+        const kickLogs = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberKick }).catch(()=>null);
+        const kickLog = kickLogs?.entries.first();
+        let isKick = false;
+        if (!isBan && kickLog && kickLog.target.id === member.id && Date.now() - kickLog.createdTimestamp < 5000) isKick = true;
+
+        let rawMsg = config.leaveMsg;
+        let embedColor = 0x1A2B4C;
+
+        if (isBan) {
+            rawMsg = config.banMsg;
+            embedColor = 0xFF0000; 
+        } else if (isKick) {
+            rawMsg = config.kickMsg;
+            embedColor = 0xFFFFFF;
+        }
+
+        let msg = rawMsg.replace(/{user}/g, `**${member.user.username}**`)
+                        .replace(/{server}/g, member.guild.name)
+                        .replace(/{count}/g, member.guild.memberCount.toString());
+
+        const embed = new EmbedBuilder()
+            .setColor(embedColor)
+            .setDescription(msg)
+            .setThumbnail(member.user.displayAvatarURL());
+
+        await (channel as any).send({ embeds: [embed] });
+    } catch (error) {
+        console.error("Erro no Leave/Kick/Ban:", error);
+    }
+});
+
+
 process.on('unhandledRejection', (reason, promise) => {
     console.error('🚨 [ERRO CRÍTICO] Rejeição:', reason);
 });
