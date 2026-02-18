@@ -7,6 +7,6 @@ python_api/__pycache__/
 *.o
 *.obj
 *.exe
-app.rc
-chess_engine
-Data
+Data/*.json
+bin/*.exe
+bin/stockfish_linux
