@@ -36,7 +36,9 @@ exports.default = {
                             `├─ \`rank user\` • Top 5 usuários mais ativos (Gráfico)\n` +
                             `├─ \`rank channel\` • Top 5 canais mais ativos (Gráfico)\n` +
                             `├─ \`rank words\` • Top 15 palavras mais usadas\n` +
-                            `└─ \`[@user|#canal|"OC"]\` • Gráfico específico do alvo`
+                            `└─ \`[@user|#canal|"OC"]\` • Gráfico específico do alvo` +
+                            `**${p}ignorar**\n` +
+                            `└─ \`[vazio]\` • Ignora uma palavra no rank words`
                     },
                     {
                         name: '🧮 Ferramentas de Desenvolvedor',

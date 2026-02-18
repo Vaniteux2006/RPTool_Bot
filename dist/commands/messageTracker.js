@@ -1,61 +1,80 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.loadBlockedWords = loadBlockedWords;
 exports.default = trackMessage;
-const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
-const dataPath = path_1.default.join(__dirname, '../Data');
-const statsFile = path_1.default.join(dataPath, 'statistics.json');
-function getCurrentDateInt() {
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
-    return parseInt(`${day}${month}${year}`);
+const ServerStats_1 = __importStar(require("../models/ServerStats"));
+const blockedWordsCache = new Map();
+async function loadBlockedWords(guildId) {
+    const doc = await ServerStats_1.BlockedWordsModel.findOne({ guildId });
+    if (doc) {
+        blockedWordsCache.set(guildId, new Set(doc.words));
+    }
+    else {
+        blockedWordsCache.set(guildId, new Set());
+    }
+    return blockedWordsCache.get(guildId);
 }
 async function trackMessage(message) {
-    if (!message.guild)
+    if (!message.guild || message.author.bot || message.content.startsWith('rp!'))
         return;
     const guildId = message.guild.id;
-    let globalStats = {};
-    if (!fs_1.default.existsSync(dataPath))
-        fs_1.default.mkdirSync(dataPath, { recursive: true });
-    if (fs_1.default.existsSync(statsFile)) {
-        try {
-            const rawData = fs_1.default.readFileSync(statsFile, 'utf-8');
-            globalStats = JSON.parse(rawData);
-        }
-        catch (error) {
-            console.error("Erro ao ler statistics.json:", error);
-        }
-    }
-    if (!globalStats[guildId]) {
-        globalStats[guildId] = {
-            users: {},
-            chats: {},
-            days: {}
-        };
-    }
-    const guildStats = globalStats[guildId];
     const userId = message.author.id;
-    const chatName = message.channel.name || message.channel.id;
-    const dateKey = getCurrentDateInt();
-    if (!guildStats.users[userId])
-        guildStats.users[userId] = 0;
-    guildStats.users[userId] += 1;
-    if (!guildStats.chats[chatName])
-        guildStats.chats[chatName] = 0;
-    guildStats.chats[chatName] += 1;
-    const dateKeyStr = dateKey.toString();
-    if (!guildStats.days[dateKeyStr])
-        guildStats.days[dateKeyStr] = 0;
-    guildStats.days[dateKeyStr] += 1;
+    const channelId = message.channel.id;
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const hour = now.getHours();
+    const rawWords = message.content.toLowerCase().match(/\b[\wáéíóúâêôãõçü]{3,}\b/g) || [];
+    let blocklist = blockedWordsCache.get(guildId);
+    if (!blocklist) {
+        blocklist = await loadBlockedWords(guildId);
+    }
+    const validWords = rawWords.filter(w => !blocklist.has(w) &&
+        !w.includes('http') &&
+        !w.includes('tenor') &&
+        !w.includes('https'));
+    const incData = { total: 1 };
+    incData[`users.${userId}`] = 1;
+    incData[`channels.${channelId}`] = 1;
+    for (const word of validWords) {
+        incData[`words.${word}`] = 1;
+    }
     try {
-        fs_1.default.writeFileSync(statsFile, JSON.stringify(globalStats, null, 4));
+        await ServerStats_1.default.findOneAndUpdate({ guildId, date: dateStr, hour }, { $inc: incData }, { upsert: true, setDefaultsOnInsert: true });
     }
     catch (e) {
-        console.error("Erro ao salvar estatísticas:", e);
+        console.error("Erro ao salvar estatísticas no MongoDB:", e);
     }
 }

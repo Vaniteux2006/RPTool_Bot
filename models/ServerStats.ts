@@ -18,9 +18,15 @@ const statSchema = new mongoose.Schema({
     total: { type: Number, default: 0 },
     users: { type: Map, of: Number, default: {} },
     channels: { type: Map, of: Number, default: {} },
-    words: { type: Map, of: Number, default: {} } // 
+    words: { type: Map, of: Number, default: {} }
 });
 
 statSchema.index({ guildId: 1, date: 1, hour: 1 }, { unique: true });
 
+const BlockedWordsSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    words: { type: [String], default: [] }
+});
+
+export const BlockedWordsModel = statusConnection.model('BlockedWords', BlockedWordsSchema);
 export default statusConnection.model('ServerStats', statSchema);
