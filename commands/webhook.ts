@@ -125,8 +125,6 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
 
     // Disparo dos Webhooks
     try {
-        message.delete().catch(() => {}); 
-
         let targetChannel = message.channel;
         let threadId: string | undefined = undefined;
 
@@ -147,6 +145,8 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
             });
         }
 
+        const filesToSend = Array.from(message.attachments.values()).map(attachment => attachment.url);
+
         for (let i = 0; i < validMessages.length; i++) {
             const item = validMessages[i];
             const match = item.oc;
@@ -155,7 +155,7 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
                 content: sanitizeOutput(item.cleanContent) || "\u200B", 
                 username: match.name,
                 avatarURL: match.avatar,
-                files: i === 0 ? Array.from(message.attachments.values()) : [], 
+                files: i === 0 ? filesToSend : [], 
                 threadId: threadId 
             });
 
@@ -171,6 +171,8 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
                 { upsert: true }
             ).catch(() => {});
         }
+
+        message.delete().catch(() => {});
 
         return true;
 
