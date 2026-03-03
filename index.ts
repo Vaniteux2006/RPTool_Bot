@@ -13,6 +13,19 @@ import { BotStatusModel } from './models/Outros';
 import timeCommand from './commands/time';
 import { handleReactionAdd, handleReactionRemove } from './reactionListener';
 
+const stockfishPath = '/home/node/stockfish'; 
+
+try {
+    if (fs.existsSync(stockfishPath)) {
+        fs.chmodSync(stockfishPath, 0o755);
+        console.log('♟️ [XADREZ] Permissão de execução concedida ao Stockfish com sucesso!');
+    } else {
+        console.log('⚠️ [XADREZ] Arquivo do Stockfish não encontrado no caminho:', stockfishPath);
+    }
+} catch (error) {
+    console.error('❌ [XADREZ] Erro ao tentar dar permissão ao Stockfish:', error);
+}
+
 interface CustomClient extends Client {
     commands: Collection<string, any>;
 }
