@@ -2,6 +2,15 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'disco
 import { api } from '../api';
 import { getGuildAIConfig } from './utils/tokenHelper';
 
+
+function sanitizeOutput(text: string): string {
+    if (!text) return text;
+    return text
+        .replace(/@everyone/g, '@everyоne')
+        .replace(/@here/g, '@hеre')         
+        .replace(/<@&(\d+)>/g, '<@&\u200b$1>'); 
+}
+
 export default {
     name: 'resenha',
     description: 'Analisa o nível de caos e resenha do chat',
@@ -71,12 +80,33 @@ export default {
             {"status": "r-00" ou "r-01", "analysis": "Uma frase curta, ácida e informal em português explicando o motivo."}
             `;
 
-            const rawText = await api.generateRaw(prompt, config);
+            let rawText = await api.generateRaw(prompt, config);
+            let maxRetries = 1;
+
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                try {
+                    rawText = await api.generateRaw(prompt, config);
+                    if (rawText.includes('503') || rawText.includes('high demand')) throw new Error('503');
+                    break;
+                } catch (error: any) {
+                    const errorMsg = error.message || error.toString();
+                    if ((errorMsg.includes('503') || errorMsg.includes('Overloaded')) && attempt < maxRetries) {
+                        if (loading.edit) loading.edit("🔥 **ERRO 503: Servidores fritando!** 🍟\nDeu ruim na leitura da resenha, tentando de novo em 5 segundos...");
+                        await new Promise(resolve => setTimeout(resolve, 5000));
+                        continue;
+                    }
+                    throw error;
+                }
+            }
 
             let result;
             try {
                 const cleanText = rawText.replace(/```json|```/g, '').trim();
                 result = JSON.parse(cleanText);
+                
+                if (result.analysis) {
+                    result.analysis = sanitizeOutput(result.analysis);
+                }
             } catch (jsonError) {
                 console.error("Erro parse JSON:", rawText);
                 result = { status: "r-00", analysis: "A IA ficou confusa com a bagunça de vocês e falhou no JSON." };
@@ -101,6 +131,10 @@ export default {
             const errorMsg = e.message || e.toString();
             let finalMsg = "❌ Falha na análise tática. (Erro de API)";
 
+            if (errorMsg.includes('GoogleGenerativeAI Error') && errorMsg.includes('was blocked')) {
+                finalMsg = "⚠️ **Algo no teu texto passou totalmente dos limites e a IA não gostou. Toma cuidado aí.**";
+            }
+
             if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
                 const match = errorMsg.match(/after (\d+)/) || errorMsg.match(/in (\d+)/);
                 const seconds = match ? match[1] : '60';
@@ -108,7 +142,6 @@ export default {
             } else if (errorMsg.includes('503')) {
                 finalMsg = "🤯 **Serviço indisponível. A IA foi de base temporariamente.**";
             }
-            // ---------------------------------------------
 
             if (loading.edit) loading.edit(finalMsg);
         }

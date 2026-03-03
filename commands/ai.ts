@@ -2,6 +2,14 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'disco
 import { api } from '../api';
 import { getGuildAIConfig } from './utils/tokenHelper';
 
+function sanitizeOutput(text: string): string {
+    if (!text) return text;
+    return text
+        .replace(/@everyone/g, '@everyоne') 
+        .replace(/@here/g, '@hеre')        
+        .replace(/<@&(\d+)>/g, '<@&\u200b$1>'); 
+}
+
 export default {
     name: 'ai',
     description: 'Conversa com um NPC via IA',
@@ -32,27 +40,47 @@ export default {
 
         try {
             const config = await getGuildAIConfig(guildId);
-
             if (!config) {
                  const errText = "⚠️ Nenhum token configurado. Use `rp!token` para configurar.";
                  if (isEdit) target.edit(errText); else target.editReply(errText);
                  return;
             }
 
-            const replyText = await api.chat(
-                "RPTool", 
-                "Você é um bot assistente de RPG engraçadão da galera. Seja útil, breve e use gírias de Discord.", 
-                text,
-                config
-            );
+            let replyText = "";
+            let maxRetries = 1; // 1 tentativa extra
 
-            if (replyText.includes('503') || replyText.includes('high demand') || replyText.includes('Service Unavailable')) {
-                const msgFrita = "🔥 **ERRO: ESTÃO FRITANDO OS SERVIDORES!** 🍟\nAlta demanda na IA do Google (Erro 503). Espera um pouquinho que já esfria.";
-                
-                if (isEdit) target.edit(msgFrita);
-                else target.editReply(msgFrita);
-                return;
+            // --- SISTEMA DE RETRY ---
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                try {
+                    replyText = await api.chat(
+                        "RPTool", 
+                        "Você é um bot assistente de RPG engraçadão da galera. Seja útil, breve e use gírias de Discord.", 
+                        text,
+                        config
+                    );
+                    
+                    // Se a API retornar o 503 em texto (às vezes acontece sem dar throw)
+                    if (replyText.includes('503') || replyText.includes('high demand') || replyText.includes('Service Unavailable')) {
+                        throw new Error('503');
+                    }
+                    
+                    break; // Se deu certo, quebra o loop
+                } catch (error: any) {
+                    const errorMsg = error.message || error.toString();
+                    if ((errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) && attempt < maxRetries) {
+                        const retryMsg = "🔥 **ERRO 503: Servidores fritando!** 🍟\nEspera aí, a IA vai tentar de novo em 5 segundos...";
+                        if (isEdit) target.edit(retryMsg); else target.editReply(retryMsg);
+                        
+                        // Espera 5 segundos
+                        await new Promise(resolve => setTimeout(resolve, 5000));
+                        continue; // Tenta de novo
+                    }
+                    throw error; // Se não for 503 ou se já tentou 2 vezes, joga pro catch principal
+                }
             }
+            // ------------------------
+
+            replyText = sanitizeOutput(replyText);
 
             if (isEdit) target.edit(replyText);
             else target.editReply(replyText);
@@ -62,6 +90,10 @@ export default {
 
             let errText = "😵‍💫 **Minha cabeça deu um nó... Tenta de novo?**";
             const errorMsg = error.message || error.toString();
+
+            if (errorMsg.includes('GoogleGenerativeAI Error') && errorMsg.includes('was blocked')) {
+                errText = "⚠️ **Algo no teu texto passou totalmente dos limites e a IA não gostou. Toma cuidado aí.**";
+            }
 
             if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Quota exceeded')) {
                 
