@@ -42,15 +42,16 @@ export default {
             const config = await getGuildAIConfig(guildId);
             if (!config) {
                  const errText = "⚠️ Nenhum token configurado. Use `rp!token` para configurar.";
-                 if (isEdit) target.edit(errText); else target.editReply(errText);
+                 if (isEdit) await target.edit(errText); else await target.editReply(errText);
                  return;
             }
 
             let replyText = "";
-            let maxRetries = 1; // 1 tentativa extra
+            let attempt = 1;
+            let success = false;
 
-            // --- SISTEMA DE RETRY ---
-            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            // --- SISTEMA DE RETRY INFINITO PARA 503 ---
+            while (!success) {
                 try {
                     replyText = await api.chat(
                         "RPTool", 
@@ -59,31 +60,31 @@ export default {
                         config
                     );
                     
-                    // Se a API retornar o 503 em texto (às vezes acontece sem dar throw)
+                    // Se a API retornar o 503 em texto
                     if (replyText.includes('503') || replyText.includes('high demand') || replyText.includes('Service Unavailable')) {
                         throw new Error('503');
                     }
                     
-                    break; // Se deu certo, quebra o loop
+                    success = true; // Quebra o loop se deu certo
                 } catch (error: any) {
                     const errorMsg = error.message || error.toString();
-                    if ((errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) && attempt < maxRetries) {
-                        const retryMsg = "🔥 **ERRO 503: Servidores fritando!** 🍟\nEspera aí, a IA vai tentar de novo em 5 segundos...";
-                        if (isEdit) target.edit(retryMsg); else target.editReply(retryMsg);
+                    if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
+                        const retryMsg = `🔥 **ERRO 503: Servidores fritando!** 🍟\nEspera aí, a IA vai tentar de novo em 5 segundos... (Tentativa ${attempt})`;
+                        if (isEdit) await target.edit(retryMsg); else await target.editReply(retryMsg);
                         
-                        // Espera 5 segundos
                         await new Promise(resolve => setTimeout(resolve, 5000));
-                        continue; // Tenta de novo
+                        attempt++;
+                    } else {
+                        throw error; // Se não for 503, joga pro catch principal
                     }
-                    throw error; // Se não for 503 ou se já tentou 2 vezes, joga pro catch principal
                 }
             }
             // ------------------------
 
             replyText = sanitizeOutput(replyText);
 
-            if (isEdit) target.edit(replyText);
-            else target.editReply(replyText);
+            if (isEdit) await target.edit(replyText);
+            else await target.editReply(replyText);
 
         } catch (error: any) {
             console.error(`[AI Error] ${error.message}`);
@@ -94,31 +95,25 @@ export default {
             if (errorMsg.includes('GoogleGenerativeAI Error') && errorMsg.includes('was blocked')) {
                 errText = "⚠️ **Algo no teu texto passou totalmente dos limites e a IA não gostou. Toma cuidado aí.**";
             }
-
-            if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Quota exceeded')) {
-                
+            else if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Quota')) {
                 const limitMatch = errorMsg.match(/limit:\s*(\d+)/i);
                 
                 if (errorMsg.includes('Quota') || limitMatch) {
                     const limitAmount = limitMatch ? limitMatch[1] : "várias";
-                    errText = `🛑 **ERRO! LIMITE ATINGIDO!** Você pode ter apenas **${limitAmount}** mensagens por dia. Volte amanhã nesse mesmo horário, ou use \`rp!token\` pra mudar de API.`;
+                    errText = `🛑 **ERRO! LIMITE ATINGIDO!** A IA estourou a cota de **${limitAmount}** requisições. Use \`rp!token\` pra mudar de API.`;
                 } else {
                     const match = errorMsg.match(/retry in (\d+(\.\d+)?)/) || errorMsg.match(/after (\d+)/);
                     let seconds = 60; 
-
-                    if (match) {
-                        seconds = Math.ceil(parseFloat(match[1]));
-                    }
+                    if (match) seconds = Math.ceil(parseFloat(match[1]));
                     
                     errText = `🔥 **CALMA AÍ! Muita mensagem pra ler!**\n⏳ *O cérebro fritou... Tenta de novo em **${seconds}s**.*`;
                 }
-            
             } else if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
                 errText = "🔥 **ERRO: ESTÃO FRITANDO OS SERVIDORES!** 🍟\nAlta demanda na IA do Google (Erro 503). Espera um pouquinho que já esfria.";
             }
 
-            if (isEdit) target.edit(errText);
-            else target.editReply(errText);
+            if (isEdit) await target.edit(errText);
+            else await target.editReply(errText);
         }
     }
 };

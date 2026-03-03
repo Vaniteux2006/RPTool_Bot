@@ -38,6 +38,7 @@ function parseCustomDate(dateStr: string): Date | null {
     const minutes = match[5] ? parseInt(match[5]) : 0;
     return new Date(year, month, day, hours, minutes);
 }
+
 function parseAIJSON(text: string): any {
     try {
         const clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -163,8 +164,30 @@ export const command: Command = {
 { "topicos": ["assunto 1"], "sintese": "O que aconteceu (1 parágrafo)", "participantes": ["A fez algo"] }
 Log:\n${chunkLog.substring(0, 25000)}`;
 
-                let rawAIResponse = await chamarIAResumo(promptJSON, aiConfig);
+                let rawAIResponse = "";
+                let attempt = 1;
+                let success = false;
+
+                // LOOP DE TENTATIVAS PARA O BLOCO (Contra Erro 503)
+                while (!success) {
+                    try {
+                        rawAIResponse = await chamarIAResumo(promptJSON, aiConfig);
+                        success = true;
+                    } catch (error: any) {
+                        const errorMsg = error.response?.data?.error?.message || error.message || error.toString();
+                        if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
+                            await loadMsg.edit(`🔥 **Servidores lotados (Erro 503)!**\n🔄 Tentando de novo parte ${i + 1} (Tentativa ${attempt})...`);
+                            await new Promise(resolve => setTimeout(resolve, 5000)); // Espera 5 segundos
+                            attempt++;
+                        } else {
+                            // Se for outro erro (429, safety, etc), joga pro try-catch principal
+                            throw error; 
+                        }
+                    }
+                }
+
                 allSummariesData.push(parseAIJSON(rawAIResponse));
+                
                 if (i === 0 && chunks.length > 1) {
                     const timeTaken = Date.now() - startTimeChunk;
                     const etaMs = timeTaken * (chunks.length - 1);
@@ -266,25 +289,24 @@ Log:\n${chunkLog.substring(0, 25000)}`;
                     const supersummaryPrompt = `Sintetize estes resumos em uma narrativa única.\n${JSON.stringify(allSummariesData)}\nResponda ESTRITAMENTE em JSON:\n{ "arco_geral": "História inteira", "conclusoes": ["A levou a B"] }`;
 
                     let rawSuperResponse = "";
-                    let maxRetries = 1;
+                    let attempt = 1;
                     let success = false;
 
-                    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                    // LOOP DE TENTATIVAS PARA O SUPER RESUMO
+                    while (!success) {
                         try {
                             rawSuperResponse = await chamarIAResumo(supersummaryPrompt, aiConfig);
                             success = true;
-                            break;
                         } catch (error: any) {
                             const errorMsg = error.response?.data?.error?.message || error.message || error.toString();
-                            if ((errorMsg.includes('503') || errorMsg.includes('Overloaded')) && attempt < maxRetries) {
-                                await finalMsg.edit({ content: "🔥 **ERRO 503!** 🍟 Servidores lotados. A tentar compilar de novo em 5 segundos..." });
-                                await new Promise(resolve => setTimeout(resolve, 5000));
-                                await finalMsg.edit({ content: "⏳ **A tentar compilar o Resumo Definitivo novamente...** 🌟" });
-                                continue;
+                            if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
+                                await finalMsg.edit({ content: `🔥 **ERRO 503!** 🍟 Servidores lotados.\n🔄 Tentando compilar o Resumo Definitivo de novo (Tentativa ${attempt})...` });
+                                await new Promise(resolve => setTimeout(resolve, 5000)); // Espera 5 segundos
+                                attempt++;
+                            } else {
+                                await finalMsg.edit({ content: "❌ Erro ao gerar o Super Resumo. (Falha na IA ou bloqueio de conteúdo)", components: [getButtons(currentPage)] });
+                                break; // Interrompe o while em caso de falha não-503
                             }
-
-                            await finalMsg.edit({ content: "❌ Erro ao gerar o Super Resumo. (Falha na IA)", components: [getButtons(currentPage)] });
-                            break;
                         }
                     }
 
@@ -314,13 +336,11 @@ Log:\n${chunkLog.substring(0, 25000)}`;
 
             collector.on('end', () => { finalMsg.edit({ components: [] }).catch(() => { }); });
 
-            // 🚨 TRATAMENTO DE ERROS DA IA (Estilo ai.ts)
         } catch (error: any) {
             console.error(error);
             const errorMsg = error.response?.data?.error?.message || error.message || error.toString();
             let errText = "❌ Erro ao puxar mensagens ou contatar a IA.";
 
-            // NOVA VERIFICAÇÃO DE BLOQUEIO
             if (errorMsg.includes('GoogleGenerativeAI Error') && errorMsg.includes('was blocked')) {
                 errText = "⚠️ **Algo no teu texto passou totalmente dos limites e a IA não gostou. Toma cuidado aí.**";
             }
@@ -333,7 +353,7 @@ Log:\n${chunkLog.substring(0, 25000)}`;
                     errText = `🔥 **CALMA AÍ!** A IA foi bloqueada por spam (Rate Limit). Tente novamente em instantes.`;
                 }
             } else if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
-                errText = "🔥 **ERRO: ESTÃO FRITANDO OS SERVIDORES! 🍟** Alta demanda na IA do Google. Espera um pouquinho.";
+                errText = "🔥 **ERRO: ESTÃO FRITANDO OS SERVIDORES! 🍟** Alta demanda na IA do Google. Tente mais tarde.";
             }
 
             await loadMsg.edit(errText);

@@ -51,7 +51,7 @@ export default {
 
             if (history.length < 50) {
                 const msgCurta = "❌ **Pouca conversa.** O chat está morto, nem preciso de IA pra saber que NÃO HÁ RESENHA 💀.";
-                return loading.edit ? loading.edit(msgCurta) : message.reply(msgCurta);
+                return loading.edit ? await loading.edit(msgCurta) : await message.reply(msgCurta);
             }
 
             const prompt = `
@@ -80,24 +80,31 @@ export default {
             {"status": "r-00" ou "r-01", "analysis": "Uma frase curta, ácida e informal em português explicando o motivo."}
             `;
 
-            let rawText = await api.generateRaw(prompt, config);
-            let maxRetries = 1;
+            let rawText = "";
+            let attempt = 1;
+            let success = false;
 
-            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            // --- SISTEMA DE RETRY INFINITO PARA 503 ---
+            while (!success) {
                 try {
                     rawText = await api.generateRaw(prompt, config);
-                    if (rawText.includes('503') || rawText.includes('high demand')) throw new Error('503');
-                    break;
+                    if (rawText.includes('503') || rawText.includes('high demand')) {
+                        throw new Error('503');
+                    }
+                    success = true;
                 } catch (error: any) {
                     const errorMsg = error.message || error.toString();
-                    if ((errorMsg.includes('503') || errorMsg.includes('Overloaded')) && attempt < maxRetries) {
-                        if (loading.edit) loading.edit("🔥 **ERRO 503: Servidores fritando!** 🍟\nDeu ruim na leitura da resenha, tentando de novo em 5 segundos...");
+                    if (errorMsg.includes('503') || errorMsg.includes('Overloaded')) {
+                        const retryMsg = `🔥 **ERRO 503: Servidores fritando!** 🍟\nDeu ruim na leitura da resenha, tentando de novo em 5 segundos... (Tentativa ${attempt})`;
+                        if (loading.edit) await loading.edit(retryMsg);
                         await new Promise(resolve => setTimeout(resolve, 5000));
-                        continue;
+                        attempt++;
+                    } else {
+                        throw error; // Passa adiante se for outro erro
                     }
-                    throw error;
                 }
             }
+            // ------------------------
 
             let result;
             try {
@@ -122,8 +129,8 @@ export default {
 
             const finalText = `## Status: \`${result.status}\` ${statusEmoji}\n> 📝 **Veredito:** ${result.analysis}`;
 
-            if (loading.edit) loading.edit(finalText);
-            else message.reply(finalText);
+            if (loading.edit) await loading.edit(finalText);
+            else await message.reply(finalText);
 
         } catch (e: any) {
             console.error(e);
@@ -134,16 +141,15 @@ export default {
             if (errorMsg.includes('GoogleGenerativeAI Error') && errorMsg.includes('was blocked')) {
                 finalMsg = "⚠️ **Algo no teu texto passou totalmente dos limites e a IA não gostou. Toma cuidado aí.**";
             }
-
-            if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
+            else if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Quota')) {
                 const match = errorMsg.match(/after (\d+)/) || errorMsg.match(/in (\d+)/);
                 const seconds = match ? match[1] : '60';
                 finalMsg = `🔥 **CALMA AÍ! Muita mensagem pra ler! O cérebro fritou. Tenta daqui ${seconds}s.**`;
-            } else if (errorMsg.includes('503')) {
+            } else if (errorMsg.includes('503') || errorMsg.includes('Overloaded')) {
                 finalMsg = "🤯 **Serviço indisponível. A IA foi de base temporariamente.**";
             }
 
-            if (loading.edit) loading.edit(finalMsg);
+            if (loading.edit) await loading.edit(finalMsg);
         }
     }
 };
