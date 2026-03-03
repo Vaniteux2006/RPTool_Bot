@@ -1,71 +1,58 @@
-import fs from 'fs';
-import path from 'path';
 import { Message } from 'discord.js';
+import ServerStats, { BlockedWordsModel } from '../models/ServerStats';
 
-const dataPath = path.join(__dirname, '../Data');
-const statsFile = path.join(dataPath, 'statistics.json');
+const blockedWordsCache = new Map<string, Set<string>>();
 
-interface GlobalStats {
-    [guildId: string]: {
-        users: { [userId: string]: number };
-        chats: { [channelName: string]: number };
-        days: { [dateKey: string]: number };
+export async function loadBlockedWords(guildId: string) {
+    const doc = await BlockedWordsModel.findOne({ guildId });
+    if (doc) {
+        blockedWordsCache.set(guildId, new Set(doc.words));
+    } else {
+        blockedWordsCache.set(guildId, new Set());
     }
-}
-
-function getCurrentDateInt(): number {
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0'); 
-    const year = now.getFullYear();
-    return parseInt(`${day}${month}${year}`);
+    return blockedWordsCache.get(guildId);
 }
 
 export default async function trackMessage(message: Message) {
-    if (!message.guild) return;
+    if (!message.guild || message.author.bot || message.content.startsWith('rp!')) return;
 
     const guildId = message.guild.id;
-
-    let globalStats: GlobalStats = {};
-    
-    if (!fs.existsSync(dataPath)) fs.mkdirSync(dataPath, { recursive: true });
-
-    if (fs.existsSync(statsFile)) {
-        try {
-            const rawData = fs.readFileSync(statsFile, 'utf-8');
-            globalStats = JSON.parse(rawData);
-        } catch (error) {
-            console.error("Erro ao ler statistics.json:", error);
-        }
-    }
-
-    if (!globalStats[guildId]) {
-        globalStats[guildId] = {
-            users: {},
-            chats: {},
-            days: {}
-        };
-    }
-
-    const guildStats = globalStats[guildId];
-
     const userId = message.author.id;
-    const chatName = (message.channel as any).name || message.channel.id; 
-    const dateKey = getCurrentDateInt();
+    const channelId = message.channel.id;
 
-    if (!guildStats.users[userId]) guildStats.users[userId] = 0;
-    guildStats.users[userId] += 1;
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const hour = now.getHours();
 
-    if (!guildStats.chats[chatName]) guildStats.chats[chatName] = 0;
-    guildStats.chats[chatName] += 1;
+    const rawWords: string[] = message.content.toLowerCase().match(/\b[\wáéíóúâêôãõçü]{3,}\b/g) || [];
+    
+    let blocklist = blockedWordsCache.get(guildId);
+    if (!blocklist) {
+        blocklist = await loadBlockedWords(guildId);
+    }
 
-    const dateKeyStr = dateKey.toString();
-    if (!guildStats.days[dateKeyStr]) guildStats.days[dateKeyStr] = 0;
-    guildStats.days[dateKeyStr] += 1;
+    const validWords = rawWords.filter(w => 
+        !blocklist!.has(w) && 
+        !w.includes('http') && 
+        !w.includes('tenor') &&
+        !w.includes('https')
+    );
+
+    const incData: any = { total: 1 };
+    incData[`users.${userId}`] = 1;
+    incData[`channels.${channelId}`] = 1;
+
+    for (const word of validWords) {
+        incData[`words.${word}`] = 1;
+    }
 
     try {
-        fs.writeFileSync(statsFile, JSON.stringify(globalStats, null, 4));
+        await ServerStats.findOneAndUpdate(
+            { guildId, date: dateStr, hour },
+            { $inc: incData },
+            { upsert: true, setDefaultsOnInsert: true }
+        );
     } catch (e) {
-        console.error("Erro ao salvar estatísticas:", e);
+        console.error("Erro ao salvar estatísticas no MongoDB:", e);
     }
 }

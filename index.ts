@@ -13,6 +13,19 @@ import { BotStatusModel } from './models/Outros';
 import timeCommand from './commands/time';
 import { handleReactionAdd, handleReactionRemove } from './reactionListener';
 
+const stockfishPath = '/home/node/stockfish'; 
+
+try {
+    if (fs.existsSync(stockfishPath)) {
+        fs.chmodSync(stockfishPath, 0o755);
+        console.log('♟️ [XADREZ] Permissão de execução concedida ao Stockfish com sucesso!');
+    } else {
+        console.log('⚠️ [XADREZ] Arquivo do Stockfish não encontrado no caminho:', stockfishPath);
+    }
+} catch (error) {
+    console.error('❌ [XADREZ] Erro ao tentar dar permissão ao Stockfish:', error);
+}
+
 interface CustomClient extends Client {
     commands: Collection<string, any>;
 }
@@ -38,6 +51,8 @@ const client = new Client({
 client.commands = new Collection();
 const commandsArray: any[] = []; 
 const prefix = "rp!";
+const cooldowns = new Map<string, number>(); 
+const commandStrikes = new Map<string, number[]>(); 
 
 function loadCommands(dir: string) {
     if (!fs.existsSync(dir)) return;
@@ -95,7 +110,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     setInterval(updateStatus, 15000); 
 
     const CLIENT_ID = process.env.CLIENT_ID || readyClient.user.id;
-    const TOKEN = process.env.TOKEN;
+    const TOKEN = process.env.xdTOKEN;
     await timeCommand.checkAndRestoreClocks(client);
 
     if (TOKEN) {
@@ -137,10 +152,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
 
-    if (message.author.bot || await runSystemChecks(message, client)) return;
+    const isSystemHandled = await runSystemChecks(message, client);
     
-    if (!message.content.startsWith(prefix)) return;
+    if (isSystemHandled) return;
+
+    if (!message.content.startsWith('rp!')) return;
+
+    const guildId = message.guild ? message.guild.id : message.author.id;
+    const now = Date.now();
+
+    if (cooldowns.has(guildId)) {
+        const expiration = cooldowns.get(guildId)!;
+        if (now < expiration) {
+            return; 
+        } else {
+            cooldowns.delete(guildId);
+            commandStrikes.set(guildId, []);
+        }
+    }
+
+    const timestamps = commandStrikes.get(guildId) || [];
+    const recentCommands = timestamps.filter(ts => now - ts < 10000);
+    recentCommands.push(now);
+
+    if (recentCommands.length >= 6) {
+        cooldowns.set(guildId, now + 20000);
+        return message.reply("🛑 **CALMA AI MEU IRMÃO! TO LIDANDO COM MUITOS COMANDOS AO MESMO TEMPO! ESPERA!** (Comandos bloqueados por 20 segundos)");
+    } else {
+        commandStrikes.set(guildId, recentCommands);
+    }
     
     const args = message.content.slice(prefix.length).trim().split(/ +/);
     const commandName = args.shift()?.toLowerCase();
@@ -251,4 +293,4 @@ process.on('uncaughtException', (error) => {
     console.error('🚨 [ERRO FATAL] Exceção:', error);
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.xdTOKEN);

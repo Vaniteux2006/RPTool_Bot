@@ -1,10 +1,10 @@
 {
   "name": "rptool",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "description": "Bot de RPG e Xadrez",
   "main": "loader.js",
   "scripts": {
-    "start": "node loader.js",
+    "start": "npm install && node loader.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

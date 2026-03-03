@@ -8,6 +8,10 @@ export default {
         .setName('serverinfo')
         .setDescription('Mostra dados do servidor')
         .addStringOption(option =>
+            option.setName('id')
+                .setDescription('ID do servidor (Opcional)')
+                .setRequired(false))
+        .addStringOption(option =>
             option.setName('ver')
                 .setDescription('O que você quer ver?')
                 .addChoices(
@@ -17,27 +21,42 @@ export default {
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
         const modo = interaction.options.getString('ver') || 'geral';
+        const idOpt = interaction.options.getString('id');
         
-        if (modo === 'photo') {
-            const icon = interaction.guild?.iconURL({ size: 1024 });
-            if (icon) await interaction.reply(icon);
-            else await interaction.reply("Este servidor não tem ícone.");
-            return;
-        }
-
         const fakeMessage: any = {
             guild: interaction.guild,
+            client: interaction.client,
             author: interaction.user,
             channel: interaction.channel,
             reply: async (payload: any) => interaction.reply(payload)
         };
 
-        await this.execute(fakeMessage, []);
+        const args = [];
+        if (modo === 'photo') args.push('photo');
+        if (idOpt) args.push(idOpt);
+
+        await this.execute(fakeMessage, args);
     },
 
     async execute(message: Message | any, args: string[]) {
-        const guild = message.guild;
+        let guild = message.guild;
+        
+        const targetId = args.find(a => a.match(/^\d{17,20}$/));
+        if (targetId) {
+            try {
+                guild = await message.client.guilds.fetch(targetId);
+            } catch (e) {
+                return message.reply("❌ Não consegui encontrar o servidor. O bot precisa estar nele para puxar os dados!");
+            }
+        }
+
         if (!guild) return;
+
+        if (args.includes('photo')) {
+            const icon = guild.iconURL({ size: 1024, dynamic: true, extension: 'png' });
+            if (icon) return message.reply(icon);
+            return message.reply("Este servidor não tem ícone.");
+        }
 
         const owner = await guild.fetchOwner();
         
@@ -51,7 +70,7 @@ export default {
              banCount = bans.size;
         } catch (e) { banCount = 0; }
 
-        const members = await guild.members.fetch();
+        const members = guild.members.cache;
         const oldMember = members
             .filter((m: GuildMember) => !m.user.bot && m.id !== guild.ownerId)
             .sort((a: GuildMember, b: GuildMember) => (a.joinedTimestamp || 0) - (b.joinedTimestamp || 0))
@@ -63,12 +82,12 @@ export default {
             .setColor(0xFFD700) 
             .setTitle(`🏰 Informações de ${guild.name}`)
             .setThumbnail(guild.iconURL({ dynamic: true }))
-            .setFooter({ text: `RPTool v1.2` })
+            .setFooter({ text: `RPTool v1.4.1` })
             .addFields(
                 { name: '🆔 Identidade', value: `**ID:** \`${guild.id}\`\n**Dono:** ${owner.user.tag}\n**Criado em:** ${criacao}`, inline: false },
                 { name: '📊 Estatísticas', value: `**Membros:** ${guild.memberCount}\n**Bans:** ${banCount}`, inline: true },
                 { name: '💬 Canais', value: `**Total:** ${totalChannels}\n**Texto:** ${textChannels} | **Voz:** ${voiceChannels}`, inline: true },
-                { name: '👴 Ancião do Server', value: oldMember ? `${oldMember.user.tag} (Entrou em <t:${Math.floor(oldMember.joinedTimestamp! / 1000)}:d>)` : "Nenhum (Só tem o dono ou bots)", inline: false }
+                { name: '👴 Ancião', value: oldMember ? `${oldMember.user.tag} (Entrou em <t:${Math.floor(oldMember.joinedTimestamp! / 1000)}:d>)` : "Nenhum", inline: false }
             );
 
         if (guild.bannerURL()) {

@@ -20,6 +20,15 @@ import { OCModel } from "../models/OCSchema";
 import { getGuildAIConfig } from './utils/tokenHelper'; 
 import axios from 'axios';
 
+
+function sanitizeOutput(text: string): string {
+    if (!text) return text;
+    return text
+        .replace(/@everyone/g, '@everyоne') 
+        .replace(/@here/g, '@hеre')         
+        .replace(/<@&(\d+)>/g, '<@&\u200b$1>'); 
+}
+
 const extractName = (content: string, commandName: string) => {
     const cmdIndex = content.toLowerCase().indexOf(commandName.toLowerCase());
     if (cmdIndex === -1) return null;
@@ -57,13 +66,40 @@ const parseWikiText = (rawText: string) => {
     return { cleanText, extractedRefs };
 };
 
+const confusedUsers = new Map<string, number>();
+
 export const command: Command = {
     name: "oc",
     description: "Gerencia seus OCs (Personagens)",
     aliases: ["tul", "tupper", "char", "t"],
     execute: async (message: Message | any, args: string[]) => {
+        const userId = message.author.id;
 
         if (!args[0]) {
+            const count = (confusedUsers.get(userId) || 0) + 1;
+            confusedUsers.set(userId, count);
+
+            if (count >= 5) {
+                confusedUsers.delete(userId); 
+
+                const exists = await OCModel.findOne({ adminId: userId, name: "Nosferatu" });
+                
+                if (!exists) {
+                    await message.reply("🙄 Que saco mano, não entendeu como cria personagem? Tá bom, vou fazer um pra ti.");
+                    
+                    await OCModel.create({
+                        adminId: userId, 
+                        name: "Nosferatu", 
+                        prefix: "Nosferatu:", 
+                        suffix: "", 
+                        avatar: "https://media.discordapp.net/attachments/1328881429446398044/1474440885117653033/image.png?ex=6999db94&is=69988a14&hm=fcf89f47a01871198f54afbf0a58e6ee4c61f59df04180efb64a763f5f629389&=&format=webp&quality=lossless", 
+                        createdAt: new Date()
+                    });
+
+                    return message.channel.send("✅ OC **Nosferatu** criado!\nExemplo: `Nosferatu:Oi`");
+                }
+            }
+
             return message.reply(`
 **Comandos do RPTool OC:**
 \`create, list, delete, avatar, prefix, name, edit\`
@@ -74,8 +110,9 @@ Use \`rp!help oc\` para detalhes.
             `);
         }
 
+        if (confusedUsers.has(userId)) confusedUsers.delete(userId);
+
         const action = args[0].toLowerCase();
-        const userId = message.author.id;
 
         try {
             switch (action) {
@@ -1297,18 +1334,42 @@ Exemplo de formato esperado:
 
     let respostaDaIA = "";
     let novasMemorias: string[] = [];
+    let maxRetries = 1;
+    let tempMsg: Message | null = null;
 
-    try {
-        let rawResponse = await chamarIA(masterPrompt, aiConfig);
-        rawResponse = rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
-        
-        const parsed = JSON.parse(rawResponse); 
-        respostaDaIA = parsed.resposta;
-        novasMemorias = parsed.novas_memorias || [];
-        
-    } catch (e) {
-        console.error("Erro ao fazer parse do JSON ou chamar a API:", e);
-        respostaDaIA = "*[Erro de IA: O sistema falhou ao gerar um pensamento estruturado ou a chave/modelo é inválida.]*";
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            let rawResponse = await chamarIA(masterPrompt, aiConfig);
+            rawResponse = rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(rawResponse); 
+            
+            respostaDaIA = sanitizeOutput(parsed.resposta);
+            novasMemorias = parsed.novas_memorias ? parsed.novas_memorias.map((m: string) => sanitizeOutput(m)) : [];
+            
+            if (tempMsg) await tempMsg.delete().catch(() => {}); // Apaga a msg de erro se recuperou
+            break; // Sucesso
+            
+        } catch (e: any) {
+            const errorMsg = e.message || e.toString();
+            
+            // Se for 503, avisa e tenta de novo
+            if ((errorMsg.includes('503') || errorMsg.includes('Overloaded')) && attempt < maxRetries) {
+                if (!tempMsg) tempMsg = await channel.send(`🔥 **${oc.name}** sentiu uma falha na Matrix (Erro 503). A tentar focar de novo em 5s...`);
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                continue;
+            }
+
+            // Se for outro erro ou já esgotou as tentativas
+            console.error("Erro ao fazer parse do JSON ou chamar a API:", e);
+            if (tempMsg) await tempMsg.delete().catch(() => {});
+
+            if (errorMsg.includes('GoogleGenerativeAI Error') && errorMsg.includes('was blocked')) {
+                respostaDaIA = "⚠️ **Algo no teu texto passou totalmente dos limites e a IA não gostou. Toma cuidado aí.**";
+            } else {
+                respostaDaIA = "*[Erro de IA: O sistema falhou ao gerar um pensamento estruturado ou a chave/modelo é inválida.]*";
+            }
+            break;
+        }
     }
 
     if (novasMemorias.length > 0) {

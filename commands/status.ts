@@ -26,7 +26,7 @@ export default {
         const targetUser = interaction.options.getUser('usuario');
         const targetChannel = interaction.options.getChannel('canal');
         const targetOC = interaction.options.getString('oc');
-        
+
         let content = 'rp!status';
         if (targetUser) content += ` ${targetUser.id}`;
         else if (targetChannel) content += ` ${targetChannel.id}`;
@@ -45,7 +45,7 @@ export default {
     async execute(message: Message | any) {
         const guildId = message.guild.id;
         const args = message.content.trim().split(/ +/).slice(1);
-        const targetArg = args.join(' ').toLowerCase(); 
+        const targetArg = args.join(' ').toLowerCase();
 
         const now = new Date();
         const last15Days = Array.from({ length: 15 }, (_, i) => {
@@ -59,7 +59,7 @@ export default {
 
         if (targetArg === 'rank user' || targetArg === 'rank users') {
             const userTotals: Record<string, number> = {};
-            
+
             for (const stat of stats) {
                 if (stat.users) {
                     for (const [uid, count] of stat.users.entries()) {
@@ -97,17 +97,17 @@ export default {
             }));
 
             return await this.buildAndSendBarChart(
-                message, 
-                `🏆 Ranking de Atividade: Top 5 Usuários`, 
-                chartLabels, 
-                chartData, 
+                message,
+                `🏆 Ranking de Atividade: Top 5 Usuários`,
+                chartLabels,
+                chartData,
                 [{ name: 'Os Mais Ativos (15 Dias)', value: embedFields.join('\n'), inline: false }]
             );
         }
 
         if (targetArg === 'rank channel' || targetArg === 'rank channels' || targetArg === 'rank chat') {
             const channelTotals: Record<string, number> = {};
-            
+
             for (const stat of stats) {
                 if (stat.channels) {
                     for (const [cid, count] of stat.channels.entries()) {
@@ -125,7 +125,7 @@ export default {
 
             topChannelsRaw.forEach(([id, count], i) => {
                 const position = ['1º', '2º', '3º', '4º', '5º'][i];
-                const ch = message.guild.channels.cache.get(id); 
+                const ch = message.guild.channels.cache.get(id);
                 const displayName = ch ? ch.name : 'Excluído';
                 const embedName = `<#${id}>`;
 
@@ -135,17 +135,17 @@ export default {
             });
 
             return await this.buildAndSendBarChart(
-                message, 
-                `📊 Ranking de Atividade: Top 5 Canais`, 
-                chartLabels, 
-                chartData, 
+                message,
+                `📊 Ranking de Atividade: Top 5 Canais`,
+                chartLabels,
+                chartData,
                 [{ name: 'Canais Mais Ativos (15 Dias)', value: embedFields.join('\n'), inline: false }]
             );
         }
 
         if (targetArg === 'rank words' || targetArg === 'rank word' || targetArg === 'rank palavras') {
             const wordTotals: Record<string, number> = {};
-            
+
             for (const stat of stats) {
                 if (stat.words) {
                     for (const [word, count] of stat.words.entries()) {
@@ -156,7 +156,7 @@ export default {
 
             const topWordsRaw = Object.entries(wordTotals)
                 .sort(([, a], [, b]) => b - a)
-                .slice(0, 15); 
+                .slice(0, 15);
 
             if (topWordsRaw.length === 0) return message.reply('📉 Nenhuma palavra registrada ainda (ou o banco acabou de ser atualizado).');
 
@@ -226,7 +226,7 @@ export default {
             ]);
         }
 
-        const originalArg = args.join(' '); 
+        const originalArg = args.join(' ');
         let targetId = '', targetName = '', targetAvatar: string | null = null, targetType: 'user' | 'channel' | 'oc' = 'oc';
 
         const mentionedUser = message.mentions?.users?.first();
@@ -286,31 +286,33 @@ export default {
     async buildAndSendBarChart(message: any, title: string, labels: string[], data: number[], fields: any[]) {
         const chartConfig = {
             type: 'bar',
-            data: { 
-                labels, 
-                datasets: [{ 
-                    data, 
+            data: {
+                labels,
+                datasets: [{
+                    data,
                     backgroundColor: 'rgba(88, 101, 242, 0.8)',
-                    borderColor: 'rgba(88, 101, 242, 1)', 
+                    borderColor: 'rgba(88, 101, 242, 1)',
+                    lineTension: 0.4,
                     borderWidth: 1,
-                    borderRadius: 4
-                }] 
+                    borderRadius: 4,
+                    pointRadius: 0,
+                }]
             },
-            options: { 
-                plugins: { 
+            options: {
+                plugins: {
                     legend: { display: false },
-                    datalabels: { 
+                    datalabels: {
                         display: true,
                         align: 'end',
                         anchor: 'end',
                         color: '#fff',
                         font: { size: 14, weight: 'bold' }
                     }
-                }, 
-                scales: { 
-                    x: { ticks: { color: '#8e9297', font: { size: 11 } }, grid: { display: false } }, 
-                    y: { beginAtZero: true, ticks: { color: '#8e9297', font: { size: 10 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, suggestedMax: Math.max(...data) + 2 } 
-                } 
+                },
+                scales: {
+                    x: { ticks: { color: '#8e9297', font: { size: 11 } }, grid: { display: false } },
+                    y: { beginAtZero: true, ticks: { color: '#8e9297', font: { size: 10 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, suggestedMax: Math.max(...data) + 2 }
+                }
             }
         };
 
@@ -332,11 +334,11 @@ export default {
     async buildAndSend(message: any, title: string, t15: number, t7: number, t24: number, labels: string[], data: number[], avatar: string | null, fields: any[]) {
         const chartConfig = {
             type: 'line',
-            data: { labels, datasets: [{ data, borderColor: '#5865F2', backgroundColor: 'rgba(88, 101, 242, 0.15)', fill: true, cubicInterpolationMode: 'monotone', tension: 0.4, pointRadius: 0, borderWidth: 2 }] },
+            data: { labels, datasets: [{ data, borderColor: '#5865F2', backgroundColor: 'rgba(88, 101, 242, 0.15)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] },
             options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8e9297', font: { size: 10 } }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: '#8e9297', font: { size: 10 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' } } } }
         };
 
-        const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&bkg=${encodeURIComponent('#2b2d31')}&w=600&h=200`;
+        const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&bkg=${encodeURIComponent('#2b2d31')}&w=600&h=200&v=3`;
         const response = await axios.get(chartUrl, { responseType: 'arraybuffer' });
         const attachment = new AttachmentBuilder(Buffer.from(response.data), { name: 'stats.png' });
 
