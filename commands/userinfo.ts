@@ -12,6 +12,10 @@ export default {
                 .setDescription('Quem?')
                 .setRequired(false))
         .addStringOption(option =>
+            option.setName('id')
+                .setDescription('ID do usuário (Opcional)')
+                .setRequired(false))
+        .addStringOption(option =>
             option.setName('modo')
                 .setDescription('O que você quer ver?')
                 .addChoices(
@@ -20,64 +24,94 @@ export default {
                 )),
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
-        const targetUser = interaction.options.getUser('usuario') || interaction.user;
+        let targetUser = interaction.options.getUser('usuario') || interaction.user;
+        const idOpt = interaction.options.getString('id');
         const mode = interaction.options.getString('modo') || 'info';
 
         const fakeMessage: any = {
             author: interaction.user,
+            client: interaction.client,
             guild: interaction.guild,
-            mentions: { users: { first: () => targetUser } },
+            mentions: { users: { first: () => interaction.options.getUser('usuario') } },
             reply: async (payload: any) => interaction.reply(payload)
         };
         
-        const args = mode === 'photo' ? ['photo'] : [];
+        const args = [];
+        if (mode === 'photo') args.push('photo');
+        if (idOpt) args.push(idOpt);
+        
         await this.execute(fakeMessage, args);
     },
 
     async execute(message: Message | any, args: string[]) {
-        let targetUser = message.mentions.users.first() || message.author;
+        let targetUser = message.mentions.users.first();
+        let isPhoto = args.includes('photo');
+
+        if (!targetUser) {
+            const targetId = args.find(a => a.match(/^\d{17,20}$/));
+            if (targetId) {
+                try {
+                    targetUser = await message.client.users.fetch(targetId);
+                } catch (e) {
+                    return message.reply("❌ Não consegui encontrar nenhum usuário com esse ID no Discord.");
+                }
+            }
+        }
         
-        if (args[0] === 'photo') {
-            return message.reply(targetUser.displayAvatarURL({ size: 1024, extension: 'png' }));
+        if (!targetUser) targetUser = message.author;
+        
+        if (isPhoto) {
+            return message.reply(targetUser.displayAvatarURL({ size: 1024, extension: 'png', dynamic: true }));
         }
         
         let targetMember: GuildMember | undefined;
-        try {
-            targetMember = await message.guild.members.fetch(targetUser.id);
-        } catch (e) {
-            return message.reply("Usuário não está no servidor.");
+        if (message.guild) {
+            try {
+                targetMember = await message.guild.members.fetch(targetUser.id);
+            } catch (e) {
+                targetMember = undefined;
+            }
         }
 
-        if (!targetMember) return;
-
-        const members = await message.guild.members.fetch();
-        const sortedMembers = members
-            .sort((a: GuildMember, b: GuildMember) => (a.joinedTimestamp || 0) - (b.joinedTimestamp || 0))
-            .map((m: GuildMember) => m.id);
-        
-        const joinPosition = sortedMembers.indexOf(targetMember.id) + 1;
-
         const criadoEm = `<t:${Math.floor(targetUser.createdTimestamp / 1000)}:D>`;
-        const entrouEm = `<t:${Math.floor(targetMember.joinedTimestamp! / 1000)}:F>`; 
-
-        const roles = targetMember.roles.cache
-            .filter(r => r.name !== '@everyone')
-            .map(r => `<@&${r.id}>`) 
-            .join(', ') || "Nenhum cargo";
-
-        const finalRoles = roles.length > 1024 ? roles.substring(0, 1020) + "..." : roles;
-
+        
         const embed = new EmbedBuilder()
-            .setColor(targetMember.displayHexColor || 0x00FF00)
+            .setColor(targetMember?.displayHexColor || 0x00FF00)
             .setAuthor({ name: targetUser.tag, iconURL: targetUser.displayAvatarURL() })
             .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
             .addFields(
-                { name: '👤 Identidade', value: `**Nome:** ${targetUser.username}\n**Apelido:** ${targetMember.nickname || "Nenhum"}\n**ID:** \`${targetUser.id}\``, inline: false },
-                { name: '📅 Datas Importantes', value: `**Criou a Conta:** ${criadoEm}\n**Entrou no Server:** ${entrouEm}`, inline: false },
-                { name: '🏆 Rank de Antiguidade', value: `Este foi o membro **Nº ${joinPosition}** a entrar no servidor!`, inline: false },
-                { name: '🛡️ Cargos', value: finalRoles, inline: false }
+                { name: '👤 Identidade', value: `**Nome:** ${targetUser.username}\n**ID:** \`${targetUser.id}\``, inline: false },
+                { name: '📅 Conta Criada', value: criadoEm, inline: false }
             )
-            .setFooter({ text: `RPTool v1.4` });
+            .setFooter({ text: `RPTool v1.4.1` });
+
+        if (targetMember && message.guild) {
+            const entrouEm = `<t:${Math.floor(targetMember.joinedTimestamp! / 1000)}:F>`; 
+
+            const membersCache = message.guild.members.cache;
+            const sortedMembers = Array.from(membersCache.values())
+                .sort((a: any, b: any) => (a.joinedTimestamp || 0) - (b.joinedTimestamp || 0))
+                .map((m: any) => m.id);
+            
+            const joinPosition = sortedMembers.indexOf(targetMember.id) + 1;
+
+            const roles = targetMember.roles.cache
+                .filter((r: any) => r.name !== '@everyone')
+                .map((r: any) => `<@&${r.id}>`) 
+                .join(', ') || "Nenhum cargo";
+
+            const finalRoles = roles.length > 1024 ? roles.substring(0, 1020) + "..." : roles;
+
+            embed.addFields(
+                { name: '🏰 Entrada no Servidor', value: entrouEm, inline: false },
+                { name: '🏆 Rank de Antiguidade', value: `Este foi o membro **Nº ${joinPosition > 0 ? joinPosition : '?'}** a entrar!`, inline: false },
+                { name: '🛡️ Cargos', value: finalRoles, inline: false }
+            );
+        } else {
+            embed.addFields(
+                { name: '🏰 Servidor', value: `*Este usuário não é um membro deste servidor (Ou o ID foi puxado de fora).*`, inline: false }
+            );
+        }
 
         await message.reply({ embeds: [embed] });
     }

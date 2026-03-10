@@ -1,6 +1,6 @@
 import { Message, TextChannel } from "discord.js";
 import { Command } from "../interfaces/Command";
-import * as vm from 'vm'; // Módulo nativo do Node.js para criar Sandboxes
+import * as vm from 'vm'; 
 
 export const command: Command = {
     name: "console",
@@ -18,12 +18,11 @@ export const command: Command = {
         }
 
         if (!code.trim()) {
-            return message.reply("💻 **Uso:** `rp!console js { seu_codigo_aqui }` ou use blocos de código com crases.");
+            return message.reply("💻 **Uso:** `rp!console js { seu_codigo_aqui }`");
         }
         let output = "";
         const customConsole = {
             log: (...args: any[]) => {
-                // Junta os argumentos do console.log igual o JS de verdade faz
                 const line = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" ");
                 output += line + "\n";
             },
@@ -34,20 +33,20 @@ export const command: Command = {
         };
 
         const input = async (promptMsg: string = "") => {
-            if (promptMsg) {
-                await channel.send(`📥 **Console aguardando:** \`${promptMsg}\``); 
-            }
+            if (promptMsg) await channel.send(`📥 **Console aguardando:** \`${promptMsg}\``); 
             
-            const filter = (m: Message) => m.author.bot === false; 
+            // 🔥 Segurança extra: Apenas quem rodou o comando pode responder o input
+            const filter = (m: Message) => m.author.id === message.author.id; 
             
             try {
                 const collected = await channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] }); 
                 return collected.first()?.content || "";
             } catch (e) {
-                throw new Error("Timeout: Ninguém digitou nada no input a tempo.");
+                throw new Error("Timeout: Ninguém digitou nada a tempo.");
             }
         };
 
+        // 🔥 Removemos o setTimeout e setInterval para impedir tarefas em background
         const context = vm.createContext({
             console: customConsole,
             input: input,
@@ -57,14 +56,18 @@ export const command: Command = {
             String: String,
             Array: Array,
             Object: Object,
-            JSON: JSON,
-            setTimeout: setTimeout 
+            JSON: JSON
         });
 
         const wrappedCode = `(async () => { \n${code}\n })()`;
 
         try {
-            const script = new vm.Script(wrappedCode);
+            const script = new vm.Script(wrappedCode, {
+                // Quando ele tentar usar o "await import()", a VM joga um erro com uma tag secreta nossa
+                importModuleDynamically: async (specifier) => {
+                    throw new Error(`[SECURITY_BREACH] ${specifier}`);
+                }
+            });
             
             channel.sendTyping();
 
@@ -78,6 +81,13 @@ export const command: Command = {
             }
 
         } catch (error: any) {
+            // Se o erro tiver a nossa tag secreta, a gente ativa o modo passivo-agressivo
+            if (error.message && error.message.startsWith("[SECURITY_BREACH]")) {
+                const moduleName = error.message.replace("[SECURITY_BREACH] ", "");
+                return message.reply(`🚨 **ALERTA DE INTRUSÃO:** Encontramos tentativa de brecha maliciosa no seu código tentando importar o pacote \`${moduleName}\`. Você se acha muito esperto, não é mesmo? 🤨`);
+            }
+
+            // Se for um erro normal (sintaxe, timeout, etc), segue o padrão
             message.reply(`❌ **Erro de Compilação/Execução:**\n\`\`\`js\n${error.message}\n\`\`\``);
         }
     }
