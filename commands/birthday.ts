@@ -1,5 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder, Message, Client, TextChannel } from 'discord.js';
-import { BirthdayModel, BirthdayConfigModel } from '../models/BirthdaySchema';
+import { BirthdayModel, BirthdayConfigModel } from '../tools/models/BirthdaySchema';
 
 export default {
     name: 'birthday',

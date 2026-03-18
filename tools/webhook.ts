@@ -1,6 +1,6 @@
 import { Message, TextChannel, Webhook } from "discord.js";
-import { OCModel, IOC } from "../models/OCSchema";
-import ServerStats from "../models/ServerStats";
+import { OCModel, IOC } from "./models/OCSchema";
+import ServerStats from "./models/ServerStats";
 
 function sanitizeOutput(text: string): string {
     if (!text) return text;

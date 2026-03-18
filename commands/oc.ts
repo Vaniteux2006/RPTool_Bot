@@ -15,9 +15,9 @@ import {
     TextInputBuilder,
     TextInputStyle 
 } from "discord.js";
-import { Command } from "../interfaces/Command";
-import { OCModel } from "../models/OCSchema"; 
-import { getGuildAIConfig } from './utils/tokenHelper'; 
+import { Command } from "../tools/interfaces/Command";
+import { OCModel } from "../tools/models/OCSchema"; 
+import { getGuildAIConfig } from '../tools/utils/tokenHelper'; 
 import axios from 'axios';
 
 

@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message, PermissionFlagsBits } from 'discord.js';
-import { WelcomeModel } from '../models/Outros';
+import { WelcomeModel } from '../tools/models/Outros';
 
 export default {
     name: 'welcome',

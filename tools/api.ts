@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import { AIConfig } from './commands/utils/tokenHelper';
+import { AIConfig } from './utils/tokenHelper';
 
 class RPToolAPI {
     

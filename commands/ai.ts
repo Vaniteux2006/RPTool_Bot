@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
-import { api } from '../api';
-import { getGuildAIConfig } from './utils/tokenHelper';
+import { api } from '../tools/api';
+import { getGuildAIConfig } from '../tools/utils/tokenHelper';
 
 function sanitizeOutput(text: string): string {
     if (!text) return text;

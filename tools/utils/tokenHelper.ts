@@ -1,4 +1,4 @@
-import { TokenModel } from '../../models/TokenSchema';
+import { TokenModel } from '../models/TokenSchema';
 
 export interface AIConfig {
     provider: 'gemini' | 'openai';
@@ -6,7 +6,6 @@ export interface AIConfig {
     model: string;
 }
 
-// 🌟 Atenção: Agora a função é ASSÍNCRONA (async)
 export async function getGuildAIConfig(guildId: string | null): Promise<AIConfig | undefined> {
     if (!guildId) return fallbackEnv();
 

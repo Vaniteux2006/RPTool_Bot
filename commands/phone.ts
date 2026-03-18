@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message, Client } from 'discord.js';
-import { PhoneRegistryModel } from '../models/Outros'; 
+import { PhoneRegistryModel } from '../tools/models/Outros'; 
 
 interface PhoneServer {
     channelId: string;

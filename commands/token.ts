@@ -2,7 +2,7 @@ import {
     Message, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, 
     ButtonBuilder, ButtonStyle, ComponentType 
 } from 'discord.js';
-import { TokenModel } from '../models/TokenSchema';
+import { TokenModel } from '../tools/models/TokenSchema';
 
 export default {
     name: 'token',

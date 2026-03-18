@@ -1,5 +1,5 @@
 import { Message } from 'discord.js';
-import ServerStats, { BlockedWordsModel } from '../models/ServerStats';
+import ServerStats, { BlockedWordsModel } from './models/ServerStats';
 
 const blockedWordsCache = new Map<string, Set<string>>();
 

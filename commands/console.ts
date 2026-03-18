@@ -1,5 +1,5 @@
 import { Message, TextChannel } from "discord.js";
-import { Command } from "../interfaces/Command";
+import { Command } from "../tools/interfaces/Command";
 import * as vm from 'vm'; 
 
 export const command: Command = {

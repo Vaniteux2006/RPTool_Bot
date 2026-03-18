@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
-import ReturnVersion from '../ReturnVersion'; 
+import ReturnVersion from '../tools/ReturnVersion'; 
 
 export default {
     name: 'version',

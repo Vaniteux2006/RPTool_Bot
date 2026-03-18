@@ -1,6 +1,6 @@
 import { Message } from "discord.js";
-import { Command } from "../interfaces/Command";
-import { ReactionRoleModel } from "../models/ReactionRoleSchema";
+import { Command } from "../tools/interfaces/Command";
+import { ReactionRoleModel } from "../tools/models/ReactionRoleSchema";
 
 export const command: Command = {
     name: "reaction",

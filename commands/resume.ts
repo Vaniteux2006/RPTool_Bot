@@ -8,8 +8,8 @@ import {
     ComponentType,
     ButtonInteraction
 } from "discord.js";
-import { Command } from "../interfaces/Command";
-import { getGuildAIConfig } from './utils/tokenHelper';
+import { Command } from "../tools/interfaces/Command";
+import { getGuildAIConfig } from '../tools/utils/tokenHelper';
 import axios from 'axios';
 
 function sanitizeOutput(text: string): string {

@@ -2,9 +2,9 @@ import {
     Message, TextChannel, EmbedBuilder, ActionRowBuilder, 
     ButtonBuilder, ButtonStyle, ComponentType 
 } from "discord.js";
-import { Command } from "../interfaces/Command";
-import { TemplateModel, FichaModel } from "../models/FichaSchema";
-import { OCModel } from "../models/OCSchema"; 
+import { Command } from "../tools/interfaces/Command";
+import { TemplateModel, FichaModel } from "../tools/models/FichaSchema";
+import { OCModel } from "../tools/models/OCSchema"; 
 
 function compilarTemplate(rawText: string) {
     const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);

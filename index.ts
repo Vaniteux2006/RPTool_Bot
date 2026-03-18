@@ -3,15 +3,15 @@ import { Client, GatewayIntentBits, Collection, ActivityType, Events, REST, Rout
 import fs from 'fs'; 
 import path from 'path';
 import { getAverageColor } from 'fast-average-color-node';
-import { WelcomeModel } from './models/Outros';
+import { WelcomeModel } from './tools/models/Outros';
 
-import ReturnVersion from './ReturnVersion'; 
-import runSystemChecks from './command_checkout'; 
-import runInteractionChecks from './interaction_checkout';
+import ReturnVersion from './tools/ReturnVersion'; 
+import runSystemChecks from './tools/command_checkout'; 
+import runInteractionChecks from './tools/interaction_checkout';
 import autoroleCommand from './commands/autorole'; 
-import { BotStatusModel } from './models/Outros';
+import { BotStatusModel } from './tools/models/Outros';
 import timeCommand from './commands/time';
-import { handleReactionAdd, handleReactionRemove } from './reactionListener';
+import { handleReactionAdd, handleReactionRemove } from './tools/reactionListener';
 
 const stockfishPath = '/home/node/stockfish'; 
 

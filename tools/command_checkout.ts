@@ -1,20 +1,19 @@
 import { Message, Client } from 'discord.js';
-import phoneCommand from './commands/phone';
-import rollCommand from './commands/roll';
-import timeCommand from './commands/time';
-import command42 from './commands/42';
+import phoneCommand from '../commands/phone';
+import rollCommand from '../commands/roll';
+import timeCommand from '../commands/time';
+import command42 from '../commands/42';
 
-import { handleOCMessage } from './commands/webhook';
-import { handleAIMessage } from './commands/oc';
-import { handleFichaSubmit } from './commands/ficha';
-import birthdayCmd from './commands/birthday';
+import { handleOCMessage } from './webhook';
+import { handleAIMessage } from '../commands/oc';
+import { handleFichaSubmit } from '../commands/ficha';
+import birthdayCmd from '../commands/birthday';
 import ServerStats from './models/ServerStats';
 
 let clocksInitialized = false;
 
 async function trackMessageStats(message: Message) {
     if (!message.guild) return;
-
     const guildId = message.guild.id;
     const userId = message.webhookId || message.author.id;
     const channelId = message.channel.id;

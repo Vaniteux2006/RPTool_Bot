@@ -6,8 +6,8 @@ import {
     Message
 } from 'discord.js';
 import axios from 'axios';
-import ServerStats from '../models/ServerStats';
-import { OCModel } from '../models/OCSchema';
+import ServerStats from '../tools/models/ServerStats';
+import { OCModel } from '../tools/models/OCSchema';
 
 export default {
     name: 'status',
