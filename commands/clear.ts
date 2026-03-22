@@ -9,7 +9,7 @@ import {
 
 export default {
     name: 'clear',
-    aliases: ['limpar', 'purge'],
+    aliases: ['limpar', 'clean'],
     description: 'Apaga uma quantidade específica de mensagens.',
     
     data: new SlashCommandBuilder()

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { getAverageColor } from 'fast-average-color-node';
 import { WelcomeModel } from './tools/models/Outros';
+import loadEvents from './tools/utils/eventLoader';
 
 import ReturnVersion from './tools/ReturnVersion'; 
 import runSystemChecks from './tools/command_checkout'; 
@@ -38,7 +39,9 @@ const client = new Client({
         GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.GuildMessageReactions
+        GatewayIntentBits.GuildMessageReactions,  
+        GatewayIntentBits.GuildPresences, 
+        GatewayIntentBits.GuildVoiceStates 
     ],
     partials: [
         Partials.Channel,
@@ -210,81 +213,6 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
     await handleReactionRemove(reaction, user);
 });
 
-client.on('guildMemberAdd', async (member) => {
-    try { await autoroleCommand.giveRole(member); } catch (e) {}
-
-    try {
-        const config = await WelcomeModel.findOne({ guildId: member.guild.id });
-        if (!config || !config.channelId) return;
-        const channel = member.guild.channels.cache.get(config.channelId);
-        if (!channel || !channel.isTextBased()) return;
-
-        let msg = config.joinMsg.replace(/{user}/g, `<@${member.id}>`)
-                                .replace(/{server}/g, member.guild.name)
-                                .replace(/{count}/g, member.guild.memberCount.toString());
-
-        let embedColor = 0x5865F2; 
-        try {
-            const url = member.user.displayAvatarURL({ extension: 'png', size: 256 });
-            const color = await getAverageColor(url);
-            embedColor = parseInt(color.hex.replace('#', ''), 16);
-        } catch (e) {}
-
-        const embed = new EmbedBuilder()
-            .setColor(embedColor)
-            .setDescription(msg)
-            .setThumbnail(member.user.displayAvatarURL()); 
-
-        await (channel as any).send({ embeds: [embed] });
-    } catch (error) {
-        console.error("Erro no Welcome:", error);
-    }
-});
-
-client.on('guildMemberRemove', async (member) => {
-    try {
-        const config = await WelcomeModel.findOne({ guildId: member.guild.id });
-        if (!config || !config.channelId) return;
-        const channel = member.guild.channels.cache.get(config.channelId);
-        if (!channel || !channel.isTextBased()) return;
-
-        const banLogs = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberBanAdd }).catch(()=>null);
-        const banLog = banLogs?.entries.first();
-        let isBan = false;
-        if (banLog && banLog.target.id === member.id && Date.now() - banLog.createdTimestamp < 5000) isBan = true;
-
-        const kickLogs = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberKick }).catch(()=>null);
-        const kickLog = kickLogs?.entries.first();
-        let isKick = false;
-        if (!isBan && kickLog && kickLog.target.id === member.id && Date.now() - kickLog.createdTimestamp < 5000) isKick = true;
-
-        let rawMsg = config.leaveMsg;
-        let embedColor = 0x1A2B4C;
-
-        if (isBan) {
-            rawMsg = config.banMsg;
-            embedColor = 0xFF0000; 
-        } else if (isKick) {
-            rawMsg = config.kickMsg;
-            embedColor = 0xFFFFFF;
-        }
-
-        let msg = rawMsg.replace(/{user}/g, `**${member.user.username}**`)
-                        .replace(/{server}/g, member.guild.name)
-                        .replace(/{count}/g, member.guild.memberCount.toString());
-
-        const embed = new EmbedBuilder()
-            .setColor(embedColor)
-            .setDescription(msg)
-            .setThumbnail(member.user.displayAvatarURL());
-
-        await (channel as any).send({ embeds: [embed] });
-    } catch (error) {
-        console.error("Erro no Leave/Kick/Ban:", error);
-    }
-});
-
-
 process.on('unhandledRejection', (reason, promise) => {
     console.error('🚨 [ERRO CRÍTICO] Rejeição:', reason);
 });
@@ -292,5 +220,7 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (error) => {
     console.error('🚨 [ERRO FATAL] Exceção:', error);
 });
+
+loadEvents(client);
 
 client.login(process.env.xdTOKEN);
