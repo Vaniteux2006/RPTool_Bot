@@ -34,14 +34,18 @@ interface CustomClient extends Client {
 const client = new Client({
     rest: { timeout: 60 * 60 * 1000 },
     intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, 
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.GuildMessageReactions,  
-        GatewayIntentBits.GuildPresences, 
-        GatewayIntentBits.GuildVoiceStates 
+        GatewayIntentBits.Guilds, // O básico para o bot funcionar
+        GatewayIntentBits.GuildMembers, // 📥 Para logs de Entrada, Saída e Cargos
+        GatewayIntentBits.GuildModeration, // 🔨 O CULPADO! Escuta Bans e Unbans GUILD_MESSAGE_REACTIONS
+        GatewayIntentBits.GuildExpressions,
+        GatewayIntentBits.GuildIntegrations,
+        GatewayIntentBits.GuildWebhooks, // 🪝 Escuta Webhooks
+        GatewayIntentBits.GuildInvites, // 🔗 Escuta Convites
+        GatewayIntentBits.GuildVoiceStates, // 🎙️ (Caso você use logs de call no futuro)
+        GatewayIntentBits.GuildPresences,
+        GatewayIntentBits.GuildMessages, // 💬 Escuta as mensagens
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.MessageContent, // 📝 Escuta o CONTEÚDO das mensagens (para log de deletada/editada)
     ],
     partials: [
         Partials.Channel,
