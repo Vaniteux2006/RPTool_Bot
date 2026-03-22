@@ -36,7 +36,7 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds, // O básico para o bot funcionar
         GatewayIntentBits.GuildMembers, // 📥 Para logs de Entrada, Saída e Cargos
-        GatewayIntentBits.GuildModeration, // 🔨 O CULPADO! Escuta Bans e Unbans GUILD_MESSAGE_REACTIONS
+        GatewayIntentBits.GuildModeration, 
         GatewayIntentBits.GuildExpressions,
         GatewayIntentBits.GuildIntegrations,
         GatewayIntentBits.GuildWebhooks, // 🪝 Escuta Webhooks
