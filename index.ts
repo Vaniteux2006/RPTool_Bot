@@ -13,6 +13,7 @@ import autoroleCommand from './commands/autorole';
 import { BotStatusModel } from './tools/models/Outros';
 import timeCommand from './commands/time';
 import { handleReactionAdd, handleReactionRemove } from './tools/reactionListener';
+import runMemberChecks from './tools/member_checkout';
 
 const stockfishPath = '/home/node/stockfish'; 
 
@@ -215,6 +216,10 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
 client.on(Events.MessageReactionRemove, async (reaction, user) => {
     await handleReactionRemove(reaction, user);
+});
+
+client.on(Events.GuildMemberAdd, async (member) => {
+    await runMemberChecks(member, client);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
