@@ -5,7 +5,7 @@ import timeCommand from '../commands/time';
 import command42 from '../commands/42';
 
 import { handleOCMessage } from './webhook';
-import { handleAIMessage } from '../commands/oc';
+import { handleAIMessage } from './utils/aiUtils';
 import { handleFichaSubmit } from '../commands/ficha';
 import birthdayCmd from '../commands/birthday';
 import ServerStats from './models/ServerStats';
@@ -24,7 +24,44 @@ async function trackMessageStats(message: Message) {
 
     const content = message.content.toLowerCase();
     const rawWords = content.match(/[a-záàâãéèêíïóôõöúçñ]+/g) || [];
-    const stopWords = new Set(['como', 'para', 'você', 'isso', 'mais', 'pelo', 'pela', 'esse', 'essa', 'este', 'esta', 'tudo', 'nada', 'quem', 'onde', 'quando', 'porque', 'qual', 'aqui', 'sobre', 'então', 'muito', 'dela', 'dele', "https", "view", "tenor"]);
+    const stopWords = new Set([
+        'como', 
+        'para', 
+        'você', 
+        'isso', 
+        'mais', 
+        'pelo', 
+        'pela', 
+        'esse', 
+        'essa', 
+        'este', 
+        'esta', 
+        'tudo', 
+        'nada', 
+        'quem', 
+        'onde', 
+        'quando', 
+        'porque', 
+        'qual', 
+        'aqui', 
+        'sobre', 
+        'então', 
+        'muito', 
+        'dela', 
+        'dele', 
+        "https", 
+        "view", 
+        "tenor",
+        "cara",
+        "minha",
+        "tenho",
+        "tava",
+        "fazer",
+        "pode",
+        "acho",
+        "assim",
+        "agora"
+    ]);
 
     const wordCounts: Record<string, number> = {};
     for (const w of rawWords) {
