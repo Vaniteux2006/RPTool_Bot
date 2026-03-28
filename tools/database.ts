@@ -14,4 +14,9 @@ const mainConnection = mongoose.createConnection(process.env.DB_RESTANTE as stri
 
 mainConnection.on('connected', () => console.log('✅ [MongoDB] Conectado ao banco Geral'));
 
+const restanteConnection = mongoose.createConnection(process.env.DB_RESTANTE as string);
+
+restanteConnection.on('connected', () => console.log('✅ [MongoDB] Conectado ao banco de Kanban'));
+restanteConnection.on('error', (err) => console.error('❌ [MongoDB] Erro no banco Kanban:', err));
+
 export { tupperConnection, mainConnection };
