@@ -1,6 +1,11 @@
 import { Message, EmbedBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { Schema, model, models, Document } from 'mongoose';
 import { Command } from '../tools/interfaces/Command'; // <-- Puxando a sua interface!
+import mongoose from 'mongoose';
+
+mongoose.connect(process.env.DB_RESTANTE as string)
+    .then(() => console.log('✅ Conectado ao banco DB_RESTANTE!'))
+    .catch(err => console.error('❌ Erro ao conectar no banco:', err));
 
 // ---------------------------------------------------------
 // REQUISITO DE DADOS (MongoDB)
