@@ -78,7 +78,7 @@ if (fs.existsSync(supercommandsPath)) {
                 const command = require(fileToLoad).default;
                 if (command && command.name) {
                     client.commands.set(command.name, command);
-                    console.log(`[SuperComandos] Ecossistema carregado: ${command.name}`);
+                    console.log(`🌟[Super Comandos] Ecossistema carregado: ${command.name}`);
                 }
             }
         }
