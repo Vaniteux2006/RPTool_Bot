@@ -2,7 +2,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
 import { phoneSystem } from './system';
 
-// Importando os handlers (Os Estados Balcânicos do Telefone)
+// Importando os handlers
 import handleRegister from './handlers/register';
 import handleOff from './handlers/off';
 import handleCall from './handlers/call';
@@ -14,7 +14,6 @@ export default {
     name: 'phone',
     description: 'Sistema de Telefone Inter-Servidores',
     
-    // Mantendo a sua estrutura de Slash Commands perfeitamente intacta
     data: new SlashCommandBuilder()
         .setName('phone')
         .setDescription('Telefone Inter-Servidores')
@@ -30,7 +29,6 @@ export default {
         const alvo = interaction.options.getString('alvo') || interaction.options.getString('nome');
         if (alvo) args.push(alvo); 
 
-        // O seu truque genial de simular uma mensagem para o execute
         const fakeMessage: any = {
             content: `rp!phone ${args.join(' ')}`, 
             author: interaction.user, 
@@ -44,27 +42,30 @@ export default {
     },
 
     async execute(message: Message | any, args: string[]) {
-        // Acorda o motor do telefone antes de qualquer coisa
         await phoneSystem.init();
 
         const action = args[0] ? args[0].toLowerCase() : null;
 
         if (!action) {
-            return message.reply("📱 **Telefone:** Use `register, call, accept, decline, end` ou `off` para desinstalar.");
+            return message.reply("📱 **Telefone:** Use `register, call, accept, decline, end`.");
         }
 
-        switch (action) {
-            case 'register': return handleRegister(message, args);
-            case 'off': return handleOff(message);
-            case 'call': return handleCall(message, args);
-            case 'accept': return handleAccept(message);
-            case 'decline': return handleDecline(message);
-            case 'end': return handleEnd(message);
-            default: return message.reply("❌ Comando inválido. HTTP 418: I'm a teapot 🍵");
+        try {
+            switch (action) {
+                case 'register': await handleRegister(message, args); break;
+                case 'off': await handleOff(message); break;
+                case 'call': await handleCall(message, args); break;
+                case 'accept': await handleAccept(message); break;
+                case 'decline': await handleDecline(message); break;
+                case 'end': await handleEnd(message); break;
+                default: message.reply("📱 **Telefone:** Use `register, call, accept, decline, end`."); break;
+            }
+        } catch (e) {
+            console.error(e);
+            message.reply("❌ HTTP 418: I'm a teapot");
         }
     },
 
-    // A ponte que o evento client.on vai usar para checar as mensagens normais
     async processMessage(message: Message) {
         return await phoneSystem.processPhoneMessage(message);
     }

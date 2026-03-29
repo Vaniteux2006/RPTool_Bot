@@ -1,27 +1,19 @@
 import { Message } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
-import { extractName } from '../utils';
 
-export default async function handleRename(message: Message, args: string[], userId: string) {
-    const extracted = extractName(message.content, args[0]);
-    if (!extracted || !extracted.rest) return message.reply("⚠️ Uso: `rp!oc rename \"Antigo Nome\" \"Novo Nome\"`");
+export default async function handleRename(message: Message, args: string[], userId: string, action: string) {
+    const rawArgs = message.content.slice(message.content.toLowerCase().indexOf(action) + action.length).trim();
+    const match = rawArgs.match(/^("([^"]+)"|'([^']+)'|`([^`]+)`|(\S+))\s+("([^"]+)"|'([^']+)'|`([^`]+)`|(\S+))$/);
 
-    const oldName = extracted.name;
-    // Extrai o novo nome removendo possíveis aspas
-    const newNameMatch = extracted.rest.match(/^("([^"]+)"|'([^']+)'|([^\s]+))/);
-    if (!newNameMatch) return message.reply("⚠️ Novo nome inválido.");
-    
-    const newName = newNameMatch[2] || newNameMatch[3] || newNameMatch[4];
+    if (!match) return message.reply("Uso: `rp!oc rename \"Antigo\" \"Novo\"`");
 
-    const updated = await OCModel.findOneAndUpdate(
-        { adminId: userId, name: oldName },
-        { name: newName },
-        { new: true }
-    );
+    const oldName = match[2] || match[3] || match[4] || match[5];
+    const newName = match[7] || match[8] || match[9] || match[10];
 
-    if (updated) {
-        message.reply(`✏️ OC renomeado de **${oldName}** para **${newName}**!`);
-    } else {
-        message.reply(`❌ OC **${oldName}** não encontrado.`);
-    }
+    const oc = await OCModel.findOne({ adminId: userId, name: oldName });
+    if (!oc) return message.reply("OC não encontrado.");
+
+    oc.name = newName;
+    await oc.save();
+    return message.reply(`✅ Renomeado para **${newName}**.`);
 }

@@ -1,6 +1,4 @@
-// RPTool/supercommands/phone/system.ts
 import { Message, Client } from 'discord.js';
-// Ajuste o caminho dos models dependendo de onde a pasta supercommands ficar
 import { PhoneRegistryModel } from '../../tools/models/Outros'; 
 
 export interface PhoneServer {
@@ -124,7 +122,6 @@ export class PhoneSystem {
         return { msg: `📞 **[${serverName}] ${user}:** ${content}`, targets: [partner.channelId] };
     }
 
-    // A função principal que escuta as mensagens e envia pros parceiros
     async processPhoneMessage(message: Message): Promise<boolean> {
         await this.init(); 
         if (message.author.bot || message.content.startsWith('rp!') || message.content.startsWith('/')) return false;
@@ -133,21 +130,17 @@ export class PhoneSystem {
         const result = this.transmit(message.guild.id, message.channel.id, message.content, message.author.username, message.guild.name);
         if (result && result.targets) {
             result.targets.forEach((cId: string) => notifyServer(message.client, cId, result.msg));
-            return true; // Retorna true para avisar o client.on que a mensagem foi interceptada pelo telefone
+            return true;
         }
         return false;
     }
 }
 
-// Utilitário para notificar os canais (exportado pra ser usado nos comandos de atender/ligar se precisar)
+export const phoneSystem = new PhoneSystem();
+
 export async function notifyServer(client: Client, channelId: string, text: string) {
     try {
         const channel = await client.channels.fetch(channelId);
         if (channel && channel.isTextBased()) await (channel as any).send(text);
-    } catch (e) {
-        // Ignora silenciosamente se não tiver permissão
-    }
+    } catch (e) {}
 }
-
-// Exporta a instância única do motor
-export const phoneSystem = new PhoneSystem();

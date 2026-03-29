@@ -38,8 +38,8 @@ export default async function handleImport(message: Message, args: string[], use
         }
 
         await aguarde.edit(`✅ **${count}** OCs importados e sincronizados com sucesso!`);
-    } catch (err) {
-        console.error("Erro import:", err);
-        message.reply("❌ Erro ao processar o arquivo JSON.");
+    } catch (error) {
+        console.error(error);
+        message.reply("❌ Falha ao processar o arquivo de importação.");
     }
 }

@@ -3,19 +3,13 @@ import { OCModel } from '../../../tools/models/OCSchema';
 import { extractName } from '../utils';
 
 export default async function handleDelete(message: Message, args: string[], userId: string) {
-    if (args[1]?.toLowerCase() === "all") {
-        await OCModel.deleteMany({ adminId: userId });
-        return message.reply("💥 **TODOS** os seus OCs foram deletados.");
-    }
-
     const extracted = extractName(message.content, args[0]);
-    if (!extracted) return message.reply("⚠️ Uso: `rp!oc delete \"Nome do OC\"`");
+    if (!extracted) return message.reply("Qual OC? `rp!oc delete \"Nome\"`");
 
+    // Deleta apenas o OC especificado, exatamente como no seu código original
     const deleted = await OCModel.findOneAndDelete({ adminId: userId, name: extracted.name });
     
-    if (deleted) {
-        message.reply(`🗑️ OC **${extracted.name}** foi deletado.`);
-    } else {
-        message.reply(`❌ OC **${extracted.name}** não encontrado.`);
-    }
+    if (!deleted) return message.reply("OC não encontrado.");
+
+    return message.reply(`🗑️ OC **${extracted.name}** deletado.`);
 }

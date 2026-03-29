@@ -4,25 +4,17 @@ import { extractName } from '../utils';
 
 export default async function handleAvatar(message: Message, args: string[], userId: string) {
     const extracted = extractName(message.content, args[0]);
-    if (!extracted) return message.reply("⚠️ Uso: `rp!oc avatar \"Nome do OC\" url_do_avatar` (ou anexe uma imagem)");
+    if (!extracted) return message.reply("Qual OC? `rp!oc avatar \"Nome\"`");
 
-    const name = extracted.name;
+    const oc = await OCModel.findOne({ adminId: userId, name: extracted.name });
+    if (!oc) return message.reply("OC não encontrado.");
+
     const attachment = message.attachments.first();
-    const urlInText = extracted.rest.split(/\s+/).find(a => a.startsWith("http"));
-    
-    const avatarUrl = attachment ? attachment.url : urlInText;
+    const newAvatar = attachment ? attachment.url : (extracted.rest.startsWith("http") ? extracted.rest : null);
 
-    if (!avatarUrl) return message.reply("❌ Você precisa anexar uma imagem ou passar o link direto!");
+    if (!newAvatar) return message.reply(`🖼️ Avatar atual de **${oc.name}**: ${oc.avatar}`);
 
-    const updated = await OCModel.findOneAndUpdate(
-        { adminId: userId, name },
-        { avatar: avatarUrl },
-        { new: true }
-    );
-
-    if (updated) {
-        message.reply(`🖼️ Avatar de **${name}** atualizado com sucesso!`);
-    } else {
-        message.reply(`❌ OC **${name}** não encontrado.`);
-    }
+    oc.avatar = newAvatar;
+    await oc.save();
+    return message.reply("✅ Avatar atualizado!");
 }
