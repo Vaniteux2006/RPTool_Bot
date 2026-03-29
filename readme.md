@@ -16,7 +16,7 @@ O **RPTool** é um bot de Discord avançado e multifuncional, focado em servidor
 ## ✨ Principais Funcionalidades
 
 ### 🎭 Sistema de Roleplay & OCs (Original Characters)
-* **Tuppers / Webhooks:** Crie personagens (OCs) com avatares e nomes customizados. Eles "falam" no chat através de webhooks, substituindo a mensagem do usuário por um formato de RPG (`rp!oc`).
+* **Webhooks:** Crie personagens (OCs) com avatares e nomes customizados. Eles "falam" no chat através de webhooks, substituindo a mensagem do usuário por um formato de RPG (`rp!oc`).
 * **Aprovação de Fichas:** Sistema de envio e revisão de fichas. Administradores usam painéis interativos (botões) para **Aprovar** ou **Recusar** personagens.
 * **Wiki de Personagens:** Um sistema integrado (`rp!oc wiki`) para criar documentações e "lores" detalhadas dos personagens com páginas navegáveis, emojis customizados e links entre Wikis.
 
@@ -71,7 +71,7 @@ O projeto utiliza uma estrutura modular, o que facilita escalar novos comandos o
 
 ### Arquitetura de Banco de Dados
 O bot é projetado para operar com múltiplas URIs do MongoDB de forma simultânea (separação de responsabilidades):
-* `DB_TUPPER`: Usado exclusivamente para salvar OCs e logs pesados de mensagens.
+* `DB_OC`: Usado exclusivamente para salvar OCs e logs pesados de mensagens.
 * `DB_RESTANTE`: Usado para o Kanban, estatísticas e configurações de servidor.
 
 ---

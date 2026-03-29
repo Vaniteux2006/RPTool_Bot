@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { tupperConnection } from '../database';
+import { OCConnection } from '../database';
 
 export interface IOC extends Document {
     adminId: string;
@@ -68,4 +68,4 @@ const OCSchema = new Schema({
 
 OCSchema.index({ adminId: 1, name: 1 }, { unique: true });
 
-export const OCModel = tupperConnection.model<IOC>('OC', OCSchema, 'tuppers');
+export const OCModel = OCConnection.model<IOC>('OC', OCSchema, 'tuppers');

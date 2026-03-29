@@ -81,7 +81,7 @@ Use \`rp!help oc\` para detalhes.
             switch (action) {
                 case 'create': return handleCreate(message, args, userId);
                 case 'delete': return handleDelete(message, args, userId);
-                case 'name':
+                case 'name': return handleRename(message, args, userId, action);
                 case 'rename': return handleRename(message, args, userId, action); // Importante passar a "action" aqui como fizemos no `rename.ts`
                 case 'avatar': return handleAvatar(message, args, userId);
                 case 'group': return handleGroup(message, args, userId);
