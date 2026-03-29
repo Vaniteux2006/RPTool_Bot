@@ -25,32 +25,32 @@ async function trackMessageStats(message: Message) {
     const content = message.content.toLowerCase();
     const rawWords = content.match(/[a-záàâãéèêíïóôõöúçñ]+/g) || [];
     const stopWords = new Set([
-        'como', 
-        'para', 
-        'você', 
-        'isso', 
-        'mais', 
-        'pelo', 
-        'pela', 
-        'esse', 
-        'essa', 
-        'este', 
-        'esta', 
-        'tudo', 
-        'nada', 
-        'quem', 
-        'onde', 
-        'quando', 
-        'porque', 
-        'qual', 
-        'aqui', 
-        'sobre', 
-        'então', 
-        'muito', 
-        'dela', 
-        'dele', 
-        "https", 
-        "view", 
+        'como',
+        'para',
+        'você',
+        'isso',
+        'mais',
+        'pelo',
+        'pela',
+        'esse',
+        'essa',
+        'este',
+        'esta',
+        'tudo',
+        'nada',
+        'quem',
+        'onde',
+        'quando',
+        'porque',
+        'qual',
+        'aqui',
+        'sobre',
+        'então',
+        'muito',
+        'dela',
+        'dele',
+        "https",
+        "view",
         "tenor",
         "cara",
         "minha",
@@ -80,31 +80,30 @@ async function trackMessageStats(message: Message) {
     };
 
     ServerStats.findOneAndUpdate(
-        { guildId, date: dateStr, hour },
-        updateQuery,
+        { guildId, date: dateStr, hour }, updateQuery,
         { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
-    ).catch(() => { });
+    ).catch((err) => { console.error('[DB] Erro ao salvar ServerStats:', err.message); });
 }
 
 export default async function runSystemChecks(message: Message, client: Client): Promise<boolean> {
     trackMessageStats(message);
     if (message.author.bot) return false;
 
-// Uso pessoal de Vaniteux. Futuramnete será excluído.
-    if (message.guild?.id === '1477540310014886041' && message.author.id === '887364893966217236') {
+    // Uso pessoal de Vaniteux. Futuramnete será excluído.
+    if (message.guild?.id === process.env.MAIN_GUILD_ID && message.author.id === process.env.DEVELOPER_ID) {
         const msgContent = message.content.toLowerCase().trim();
-        
+
         if (msgContent === 'qw' || msgContent === 'qwerty') {
             try {
                 const member = await message.guild.members.fetch(message.author.id);
-                
-                await message.delete().catch(() => {}); 
-                
+
+                await message.delete().catch(() => { });
+
                 await member.kick('Protocolo de Segurança QWERTY Ativado.');
-                
+
                 console.log('🚨 ALERTA: Protocolo QWERTY executado com sucesso.');
-                
-                return true; 
+
+                return true;
             } catch (error) {
                 console.error('❌ Erro crítico ao tentar executar o protocolo de emergência:', error);
             }
@@ -116,9 +115,7 @@ export default async function runSystemChecks(message: Message, client: Client):
         await timeCommand.checkAndRestoreClocks(client);
 
         // 🔥 CORREÇÃO CRÍTICA: O setInterval fica AQUI DENTRO para rodar só UMA VEZ na vida útil do bot!
-        setInterval(() => {
-            birthdayCmd.updateBirthdayPanels(client).catch(() => { });
-        }, 1000 * 60 * 60);
+        setInterval(() => { birthdayCmd.updateBirthdayPanels(client).catch((err) => console.error('[Rotina] Erro no painel de aniversários:', err.message)); }, 1000 * 60 * 60);
 
         clocksInitialized = true;
     }
