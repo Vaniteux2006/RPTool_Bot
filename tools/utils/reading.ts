@@ -1,60 +1,62 @@
-import { Message, TextChannel } from 'discord.js';
+import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
 
-/**
- * Lê múltiplas mensagens do usuário e concatena tudo até ele digitar a palavra de parada.
- * @param message A mensagem original que engatilhou o comando
- * @param userId O ID do usuário que estamos ouvindo
- * @param stopKeyword A palavra que finaliza a leitura (padrão: "END")
- * @param cancelKeyword A palavra que cancela a operação (padrão: "CANCELAR")
- * @param timeoutMs Tempo máximo de espera em milissegundos (padrão: 5 minutos)
- * @returns O texto completo ou null se foi cancelado/tempo esgotado
- */
-export async function readLongText(
-    message: Message,
-    userId: string,
-    stopKeyword: string = "END",
-    cancelKeyword: string = "CANCELAR",
-    timeoutMs: number = 300000
-): Promise<string | null> {
-    return new Promise((resolve) => {
-        const channel = message.channel as TextChannel;
-        const filter = (m: Message) => m.author.id === userId;
-        
-        // Não definimos 'max' porque queremos várias mensagens
-        const collector = channel.createMessageCollector({ filter, time: timeoutMs });
-        
-        let fullText = "";
+// 🔍 FUNÇÃO 1: Extrai referências do texto (Ex: "Ele encontrou a [[Espada Sagrada]]")
+export function parseWikiText(text: string): string[] {
+    // Procura por textos entre colchetes duplos [[ ]]
+    const regex = /\[\[(.*?)\]\]/g;
+    const matches = [...text.matchAll(regex)];
+    return matches.map(m => m[1].trim());
+}
 
-        collector.on('collect', (m) => {
-            const content = m.content.trim();
+// 📖 FUNÇÃO 2: Paginador de Textões (Evita o erro de +4096 caracteres)
+export async function readLongText(message: Message, baseEmbed: EmbedBuilder, text: string) {
+    const CHUNK_SIZE = 4000; // Limite seguro para o description da Embed
 
-            if (content.toUpperCase() === cancelKeyword.toUpperCase()) {
-                m.reply("❌ Operação cancelada.");
-                collector.stop("cancelled");
-                return;
-            }
+    // Se o texto for curto, manda direto sem botões
+    if (text.length <= CHUNK_SIZE) {
+        baseEmbed.setDescription(text);
+        return message.reply({ embeds: [baseEmbed] });
+    }
 
-            if (content.toUpperCase() === stopKeyword.toUpperCase()) {
-                collector.stop("finished");
-                return;
-            }
+    // Se for longo, fatia o texto em várias páginas
+    const chunks = [];
+    for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+        chunks.push(text.substring(i, i + CHUNK_SIZE));
+    }
 
-            // Concatena com uma quebra de linha dupla para separar os parágrafos
-            fullText += (fullText.length > 0 ? "\n\n" : "") + content;
-            
-            // Reage à mensagem para o usuário saber que o bot "registrou" aquele parágrafo
-            m.react('👀').catch(() => {});
-        });
+    let currentPage = 0;
+    baseEmbed.setDescription(chunks[currentPage])
+             .setFooter({ text: `Página ${currentPage + 1} de ${chunks.length}` });
 
-        collector.on('end', (collected, reason) => {
-            if (reason === "cancelled") {
-                resolve(null);
-            } else if (reason === "time") {
-                message.reply("⌛ Tempo esgotado! A operação foi cancelada.");
-                resolve(null);
-            } else {
-                resolve(fullText.trim() || null);
-            }
-        });
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId('prev_ler').setEmoji('⬅️').setStyle(ButtonStyle.Primary).setDisabled(true),
+        new ButtonBuilder().setCustomId('next_ler').setEmoji('➡️').setStyle(ButtonStyle.Primary)
+    );
+
+    const msg = await message.reply({ embeds: [baseEmbed], components: [row] });
+    
+    // Coletor de 5 minutos para o usuário ler em paz
+    const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 300000 });
+
+    collector.on('collect', async (i) => {
+        if (i.user.id !== message.author.id) {
+            return i.reply({ content: "🚫 Apenas quem pediu pode folhear as páginas.", ephemeral: true });
+        }
+
+        if (i.customId === 'prev_ler' && currentPage > 0) currentPage--;
+        if (i.customId === 'next_ler' && currentPage < chunks.length - 1) currentPage++;
+
+        baseEmbed.setDescription(chunks[currentPage])
+                 .setFooter({ text: `Página ${currentPage + 1} de ${chunks.length}` });
+
+        row.components[0].setDisabled(currentPage === 0);
+        row.components[1].setDisabled(currentPage === chunks.length - 1);
+
+        await i.update({ embeds: [baseEmbed], components: [row] });
+    });
+
+    collector.on('end', () => {
+        row.components.forEach(c => c.setDisabled(true));
+        msg.edit({ components: [row] }).catch(() => {});
     });
 }

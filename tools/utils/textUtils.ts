@@ -34,16 +34,3 @@ export const cleanWrapper = (str: string) => {
     }
     return str;
 };
-
-export const parseWikiText = (rawText: string) => {
-    const extractedRefs: string[] = [];
-
-    const cleanText = rawText.replace(/\(ref="([^"]+)"\)/g, (match, refName) => {
-        if (!extractedRefs.includes(refName)) {
-            extractedRefs.push(refName);
-        }
-        return `**__${refName}__**`;
-    });
-
-    return { cleanText, extractedRefs };
-};

@@ -1,48 +1,53 @@
-import { Message, TextChannel } from 'discord.js';
+import { Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
 
 export default async function handlePurge(message: Message, args: string[], userId: string) {
-    // Quantidade de mensagens para apagar (padrão é 1 se o usuário não especificar)
-    let amount = 1;
-    if (args[1] && !isNaN(Number(args[1]))) {
-        amount = parseInt(args[1]);
-    }
+    const dangerEmbed = {
+        title: "⚠️ PERIGO: ZONA DE DESTRUIÇÃO",
+        description: "Você está prestes a **APAGAR TODOS** os seus OCs.\nEssa ação é irreversível.\n\nTem certeza absoluta?",
+        color: 0xFF0000,
+        footer: { text: "Você tem 15 segundos para decidir." }
+    };
 
-    // Limite de segurança para não explodir a API do Discord
-    if (amount > 50) amount = 50;
+    const row = new ActionRowBuilder<ButtonBuilder>()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('purge_confirm')
+                .setLabel('🔥 SIM, APAGAR TUDO')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('purge_cancel')
+                .setLabel('❌ Cancelar')
+                .setStyle(ButtonStyle.Secondary)
+        );
 
-    // Busca os nomes dos OCs do usuário (mesma lógica exata do seu 'edit')
-    const myOCs = await OCModel.find({ adminId: userId });
-    const myNames = myOCs.map(t => t.name);
-    
-    // Puxa as últimas 50 mensagens do canal para investigar
-    const msgs = await message.channel.messages.fetch({ limit: 50 });
-    
-    // Filtra apenas as mensagens que são de webhooks E pertencem aos OCs do usuário
-    const targetMsgs = msgs.filter(m => m.webhookId && myNames.includes(m.author.username));
+    const msg = await message.reply({ embeds: [dangerEmbed], components: [row] });
 
-    if (targetMsgs.size === 0) {
-        return message.reply("📭 Nenhuma mensagem recente dos seus OCs encontrada neste canal.");
-    }
+    // Coletor esperando o clique do botão por 15 segundos
+    const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 15000 });
 
-    // Isola apenas a quantidade que o usuário pediu para deletar
-    const toDelete = Array.from(targetMsgs.values()).slice(0, amount);
-
-    try {
-        // Deleta as mensagens encontradas
-        for (const msg of toDelete) {
-            await msg.delete().catch(() => {});
+    collector.on('collect', async (i) => {
+        // Bloqueia caso outro usuário tente clicar
+        if (i.user.id !== userId) {
+            return i.reply({ content: "🚫 Só quem pediu pode confirmar.", ephemeral: true });
         }
-        
-        // Apaga o comando rp!oc purge que o usuário enviou
-        message.delete().catch(() => {}); 
-        
-        // Envia confirmação temporária e apaga após 3 segundos para manter o chat limpo
-        const reply = await message.reply(`🗑️ **${toDelete.length}** mensagem(ns) dos seus OCs foram purgadas.`);
-        setTimeout(() => { reply.delete().catch(() => {}) }, 3000);
 
-    } catch (error) {
-        console.error("Erro no purge:", error);
-        return message.reply("❌ Erro interno ao tentar deletar os webhooks.");
-    }
+        if (i.customId === 'purge_confirm') {
+            // Comportamento destrutivo original: apaga tudo que pertence ao usuário
+            await OCModel.deleteMany({ adminId: userId });
+            await i.update({ content: "💥 Todos os seus OCs foram destruídos.", embeds: [], components: [] });
+            collector.stop("confirmed");
+        } 
+        else if (i.customId === 'purge_cancel') {
+            await i.update({ content: "✅ Ação cancelada. Seus OCs estão a salvo.", embeds: [], components: [] });
+            collector.stop("canceled");
+        }
+    });
+
+    collector.on('end', (collected, reason) => {
+        // Se esgotar o tempo (15 segundos) e não tiver confirmado/cancelado
+        if (reason === "time") {
+            msg.edit({ content: "⏳ Tempo esgotado. Ação cancelada.", embeds: [], components: [] }).catch(() => {});
+        }
+    });
 }
