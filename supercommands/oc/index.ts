@@ -14,6 +14,18 @@ import handleWiki from './handlers/wiki';
 import handleEdit from './handlers/edit';
 import handlePrefix from './handlers/prefix';
 import handlePurge from './handlers/purge';
+import handleAI from './ai/ai';
+import handleAlzheimer from './ai/alzheimer';
+import handleGaslight from './ai/gaslight';
+import handleForget from './ai/forget';
+import handleInsert from './ai/insert';
+import handleMemories from './ai/memories';
+import handleDelay from './ai/delay';
+import handleEnd from './ai/end';
+import handleDuo from './social_handlers/duo';
+import handleSolo from './social_handlers/solo';
+import handleBirthday from './social_handlers/birthday';
+import handleInfo from './social_handlers/info';
 
 
 const confusedUsers = new Map<string, number>();
@@ -80,6 +92,18 @@ Use \`rp!help oc\` para detalhes.
                 case 'edit': return handleEdit(message, args, userId);
                 case 'prefix': return handlePrefix(message, args, userId);
                 case 'purge': return handlePurge(message, args, userId);
+                case 'ai': return handleAI(message, args, userId);
+                case 'alzheimer': return handleAlzheimer(message, args, userId);
+                case 'gaslight': return handleGaslight(message, args, userId);
+                case 'forget': return handleForget(message, args, userId);
+                case 'insert': return handleInsert(message, args, userId);
+                case 'memories': return handleMemories(message, args, userId);
+                case 'delay': return handleDelay(message, args, userId);
+                case 'end': return handleEnd(message, args, userId);
+                case 'duo': return handleDuo(message, args, userId);
+                case 'solo': return handleSolo(message, args, userId);
+                case 'birthday': return handleBirthday(message, args, userId);
+                case 'info': return handleInfo(message, args, userId);
                 default:
                     return message.reply("🚫 HTTP 418: I'm a teapot. 🍵 (Comando inválido, apenas sou uma chaleira de chá)");
             }

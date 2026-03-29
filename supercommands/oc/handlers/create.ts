@@ -1,6 +1,6 @@
 import { Message } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
-import { extractName, cleanWrapper } from '../utils'; // Ajuste o caminho do seu utils se precisar
+import { extractName, cleanWrapper } from '../utils';
 
 export default async function handleCreate(message: Message, args: string[], userId: string) {
     const extracted = extractName(message.content, args[0]);
@@ -14,8 +14,11 @@ export default async function handleCreate(message: Message, args: string[], use
     const urlInText = args.find(a => a.startsWith("http"));
     if (urlInText) patternRaw = patternRaw.replace(urlInText, "").trim();
 
-    const avatarUrl = attachment ? attachment.url : urlInText;
-    if (!avatarUrl) return message.reply("❌ Erro: Precisa de imagem (anexo ou link).");
+    // Link padrão do Nosferatu caso o usuário não envie uma imagem
+    const defaultAvatar = "https://media.discordapp.net/attachments/1328881429446398044/1474440885117653033/image.png?ex=6999db94&is=69988a14&hm=fcf89f47a01871198f54afbf0a58e6ee4c61f59df04180efb64a763f5f629389&=&format=webp&quality=lossless";
+    
+    // Pega o anexo, ou o link no texto, ou usa o avatar padrão
+    const avatarUrl = attachment ? attachment.url : (urlInText || defaultAvatar);
 
     if (!patternRaw.includes("text")) return message.reply("⚠️ O padrão precisa ter **`text`**. Ex: `nome:text`");
 
@@ -27,9 +30,12 @@ export default async function handleCreate(message: Message, args: string[], use
     if (exists) return message.reply("❌ Já existe um OC com esse nome!");
 
     await OCModel.create({
-        adminId: userId, name, prefix, suffix, avatar: avatarUrl, createdAt: new Date()
+        adminId: userId,
+        name: name,
+        prefix: prefix,
+        suffix: suffix,
+        avatar: avatarUrl
     });
 
-    let msg = `✅ OC **${name}** criado!\nExemplo: \`${prefix}Oi${suffix}\``;
-    return message.reply(msg);
+    return message.reply(`✅ OC **${name}** criado com sucesso!${avatarUrl === defaultAvatar ? " (Avatar padrão do Nosferatu aplicado 🧛‍♂️)" : ""}`);
 }
