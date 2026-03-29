@@ -14,7 +14,7 @@ export default async function handleList(message: Message, args: string[], userI
     if (totalDocs === 0) return message.reply("📭 Nenhum OC encontrado.");
 
     const generateEmbed = async (page: number) => {
-        const pageSize = 5; 
+        const pageSize = 5;
         const skip = (page - 1) * pageSize;
 
         const ocs = await OCModel.find(query).skip(skip).limit(pageSize);
@@ -35,9 +35,9 @@ export default async function handleList(message: Message, args: string[], userI
             embeds: [{
                 title: `📒 Lista de OCs (${page}/${totalPages})`,
                 description: listStr,
-                color: 0xFFFF00, 
+                color: 0xFFFF00,
                 footer: { text: `Total de OCs: ${totalDocs}` },
-                thumbnail: { url: ocs[0]?.avatar } 
+                thumbnail: { url: ocs[0]?.avatar }
             }],
             totalPages
         };
@@ -56,8 +56,8 @@ export default async function handleList(message: Message, args: string[], userI
                 .setCustomId('prev_page')
                 .setLabel('⬅️ Anterior')
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(true), 
-            new ButtonBuilder() 
+                .setDisabled(true),
+            new ButtonBuilder()
                 .setCustomId('jump_page')
                 .setLabel('🔢 Pular')
                 .setStyle(ButtonStyle.Secondary),
@@ -71,7 +71,7 @@ export default async function handleList(message: Message, args: string[], userI
 
     const collector = msg.createMessageComponentCollector({
         componentType: ComponentType.Button,
-        time: 60000 
+        time: 60000
     });
 
     collector.on('collect', async (i) => {
@@ -95,11 +95,11 @@ export default async function handleList(message: Message, args: string[], userI
             await i.showModal(modal);
 
             try {
-                const modalSubmit = await i.awaitModalSubmit({ 
-                    filter: m => m.user.id === userId && m.customId === 'modal_jump_page', 
-                    time: 60000 
+                const modalSubmit = await i.awaitModalSubmit({
+                    filter: m => m.user.id === userId && m.customId === 'modal_jump_page',
+                    time: 60000
                 });
-                
+
                 const inputPage = parseInt(modalSubmit.fields.getTextInputValue('page_input'));
 
                 if (isNaN(inputPage) || inputPage < 1 || inputPage > totalPages) {
@@ -112,11 +112,17 @@ export default async function handleList(message: Message, args: string[], userI
                 row.components[0].setDisabled(currentPage === 1);
                 row.components[2].setDisabled(currentPage === totalPages);
 
-                await modalSubmit.update({ embeds: newData.embeds, components: [row] });
+                if (modalSubmit.isFromMessage()) {
+                    await modalSubmit.update({ embeds: newData.embeds, components: [row] });
+                } else {
+                    // Fallback de segurança caso o TS ainda reclame ou o contexto mude
+                    await modalSubmit.deferUpdate();
+                    await msg.edit({ embeds: newData.embeds, components: [row] });
+                }
             } catch (e) {
                 // Erro silencioso ou timeout do modal
             }
-            return; 
+            return;
         }
 
         if (i.customId === 'prev_page' && currentPage > 1) currentPage--;

@@ -4,7 +4,7 @@ import { phoneSystem, notifyServer } from '../system';
 export default async function handleDecline(message: Message) {
     if (!message.guild) return;
     
-    const data: any = phoneSystem.decline(message.guild.id);
+    const data: any = phoneSystem.decline(message.guild.id); 
     
     if (data.error) return message.reply(`❌ **Erro:** ${data.error}`);
 
