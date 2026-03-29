@@ -1,7 +1,6 @@
 import { createCanvas, loadImage } from "canvas"
 import { Guild } from "discord.js"
-import { DashboardStats } from 
-"../commands/dashboard"
+import { DashboardStats } from "../commands/dashboard"
 export async function generateDashboard(
     guild: Guild,
     data: DashboardStats
