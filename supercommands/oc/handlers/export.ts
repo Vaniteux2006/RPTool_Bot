@@ -5,7 +5,7 @@ export default async function handleExport(message: Message, args: string[], use
     const ocs = await OCModel.find({ adminId: userId });
     if (ocs.length === 0) return message.reply("❌ Você não tem OCs para exportar.");
 
-    const tuppers = ocs.map(oc => ({
+    const OCs = ocs.map(oc => ({
         name: oc.name,
         avatar_url: oc.avatar,
         brackets: [oc.prefix || "", oc.suffix || ""],
@@ -14,7 +14,7 @@ export default async function handleExport(message: Message, args: string[], use
         created_at: oc.createdAt ? oc.createdAt.toISOString() : new Date().toISOString()
     }));
 
-    const data = JSON.stringify({ tuppers }, null, 2);
+    const data = JSON.stringify({ OCs }, null, 2);
     const buffer = Buffer.from(data, "utf-8");
     const attachment = new AttachmentBuilder(buffer, { name: "tupperbox_export.json" });
 

@@ -68,4 +68,4 @@ const OCSchema = new Schema({
 
 OCSchema.index({ adminId: 1, name: 1 }, { unique: true });
 
-export const OCModel = OCConnection.model<IOC>('OC', OCSchema, 'tuppers');
+export const OCModel = OCConnection.model<IOC>('OC', OCSchema, 'OCs');

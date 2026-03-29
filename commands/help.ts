@@ -97,7 +97,7 @@ export default {
             },
             {
                 title: '🎭 Personagens Originais (OCs)',
-                description: 'Criação, edição e organização de Tuppers.',
+                description: 'Criação, edição e organização de OCs.',
                 fields: [
                     { 
                         name: '👤 Criação e Identidade', 

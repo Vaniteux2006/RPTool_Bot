@@ -10,14 +10,14 @@ export default async function handleImport(message: Message, args: string[], use
         const res = await axios.get(attachment.url);
         const data = res.data;
 
-        if (!data.tuppers || !Array.isArray(data.tuppers)) {
+        if (!data.OCs || !Array.isArray(data.OCs)) {
             return message.reply("❌ O arquivo não parece ser um backup válido do Tupperbox.");
         }
 
         const aguarde = await message.reply("⏳ Processando importação...");
         let count = 0;
 
-        for (const t of data.tuppers) {
+        for (const t of data.OCs) {
             const prefix = Array.isArray(t.brackets) ? t.brackets[0] || "" : "";
             const suffix = Array.isArray(t.brackets) ? t.brackets[1] || "" : "";
             

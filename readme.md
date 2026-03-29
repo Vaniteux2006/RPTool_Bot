@@ -63,7 +63,7 @@ O projeto utiliza uma estrutura modular, o que facilita escalar novos comandos o
 │   └── ...
 └── 📂 tools/                # Lógicas centrais, DB e Utilitários
     ├── database.ts          # Gerenciamento de Conexões Mongoose
-    ├── webhook.ts           # Motor de webhooks (Tuppers)
+    ├── webhook.ts           # Motor de webhooks 
     ├── interaction_checkout # Handler de Botões e Menus
     ├── 📂 models/           # Schemas do MongoDB (OC, GuildConfig, Token, etc.)
     └── 📂 utils/            # Ferramentas auxiliares (aiUtils, LogMinister, etc.)
@@ -97,7 +97,7 @@ O bot é projetado para operar com múltiplas URIs do MongoDB de forma simultân
    DISCORD_TOKEN=seu_token_aqui
    
    # Conexões do MongoDB
-   DB_TUPPER=mongodb+srv://user:pass@cluster.mongodb.net/tuppers
+   DB_OC=mongodb+srv://user:pass@cluster.mongodb.net/ocs
    DB_RESTANTE=mongodb+srv://user:pass@cluster.mongodb.net/geral
    ```
 4. **Inicie o Bot:**
