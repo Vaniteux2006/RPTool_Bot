@@ -2,14 +2,11 @@ import 'dotenv/config';
 import { Client, GatewayIntentBits, Collection, ActivityType, Events, REST, Routes, Partials, AuditLogEvent, EmbedBuilder } from 'discord.js';
 import fs from 'fs'; 
 import path from 'path';
-import { getAverageColor } from 'fast-average-color-node';
-import { WelcomeModel } from './tools/models/Outros';
 import loadEvents from './tools/utils/eventLoader';
 
 import ReturnVersion from './tools/ReturnVersion'; 
 import runSystemChecks from './tools/command_checkout'; 
 import runInteractionChecks from './tools/interaction_checkout';
-import autoroleCommand from './commands/autorole'; 
 import { BotStatusModel } from './tools/models/Outros';
 import timeCommand from './commands/time';
 import { handleReactionAdd, handleReactionRemove } from './tools/reactionListener';
@@ -61,6 +58,33 @@ const commandsArray: any[] = [];
 const prefix = "rp!";
 const cooldowns = new Map<string, number>(); 
 const commandStrikes = new Map<string, number[]>(); 
+
+// --- INÍCIO: CARREGADOR DE SUPERCOMANDOS ---
+const supercommandsPath = path.join(__dirname, 'supercommands');
+if (fs.existsSync(supercommandsPath)) {
+    const superFolders = fs.readdirSync(supercommandsPath);
+    for (const folder of superFolders) {
+        const folderPath = path.join(supercommandsPath, folder);
+        
+        // Verifica se é realmente uma pasta
+        if (fs.statSync(folderPath).isDirectory()) {
+            // Suporta rodar tanto em TS puro quanto no dist/ depois de compilado
+            const mainFileTs = path.join(folderPath, 'index.ts');
+            const mainFileJs = path.join(folderPath, 'index.js');
+            
+            const fileToLoad = fs.existsSync(mainFileTs) ? mainFileTs : (fs.existsSync(mainFileJs) ? mainFileJs : null);
+
+            if (fileToLoad) {
+                const command = require(fileToLoad).default;
+                if (command && command.name) {
+                    client.commands.set(command.name, command);
+                    console.log(`[SuperComandos] Ecossistema carregado: ${command.name}`);
+                }
+            }
+        }
+    }
+}
+// --- FIM: CARREGADOR DE SUPERCOMANDOS ---
 
 function loadCommands(dir: string) {
     if (!fs.existsSync(dir)) return;

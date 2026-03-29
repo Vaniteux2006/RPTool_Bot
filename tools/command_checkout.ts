@@ -1,5 +1,5 @@
 import { Message, Client } from 'discord.js';
-import phoneCommand from '../commands/phone';
+import phoneCommand from '../supercommands/phone';
 import rollCommand from '../commands/roll';
 import timeCommand from '../commands/time';
 import command42 from '../commands/42';
@@ -65,7 +65,7 @@ async function trackMessageStats(message: Message) {
 
     const wordCounts: Record<string, number> = {};
     for (const w of rawWords) {
-        if (w.length > 3 && !stopWords.has(w)) {
+        if (w.length > 4 && !stopWords.has(w)) {
             wordCounts[`words.${w}`] = (wordCounts[`words.${w}`] || 0) + 1;
         }
     }
@@ -125,7 +125,7 @@ export default async function runSystemChecks(message: Message, client: Client):
 
     if (await handleOCMessage(message)) return true;
 
-    if (await phoneCommand.processPhoneMessage(message)) return true;
+    if (await phoneCommand.processMessage(message)) return true;
     if (await rollCommand.processRoll(message, message.content)) return true;
     if (await handleFichaSubmit(message)) return true;
 

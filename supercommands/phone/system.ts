@@ -1,7 +1,9 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message, Client } from 'discord.js';
-import { PhoneRegistryModel } from '../tools/models/Outros'; 
+// RPTool/supercommands/phone/system.ts
+import { Message, Client } from 'discord.js';
+// Ajuste o caminho dos models dependendo de onde a pasta supercommands ficar
+import { PhoneRegistryModel } from '../../tools/models/Outros'; 
 
-interface PhoneServer {
+export interface PhoneServer {
     channelId: string;
     marker?: string;
     status: 'idle' | 'ringing' | 'connected' | 'voting';
@@ -9,7 +11,7 @@ interface PhoneServer {
     groupVotes?: Set<string>; 
 }
 
-class PhoneSystem {
+export class PhoneSystem {
     private servers: Map<string, PhoneServer> = new Map();
     public isInitialized = false;
 
@@ -121,109 +123,31 @@ class PhoneSystem {
         if (!partner) return null;
         return { msg: `📞 **[${serverName}] ${user}:** ${content}`, targets: [partner.channelId] };
     }
-}
 
-const phoneSystem = new PhoneSystem();
-
-async function notifyServer(client: Client, channelId: string, text: string) {
-    try {
-        const channel = await client.channels.fetch(channelId);
-        if (channel && channel.isTextBased()) await (channel as any).send(text);
-    } catch (e) {}
-}
-
-export default {
-    name: 'phone',
-    description: 'Sistema de Telefone Inter-Servidores',
-    data: new SlashCommandBuilder().setName('phone').setDescription('Telefone Inter-Servidores')
-        .addSubcommand(sub => sub.setName('call').setDescription('Liga para um servidor').addStringOption(op => op.setName('alvo').setDescription('ID ou Nome do servidor').setRequired(true)))
-        .addSubcommand(sub => sub.setName('register').setDescription('Instala o telefone neste canal').addStringOption(op => op.setName('nome').setDescription('Nome público do local').setRequired(false)))
-        .addSubcommand(sub => sub.setName('accept').setDescription('Atende uma chamada'))
-        .addSubcommand(sub => sub.setName('decline').setDescription('Recusa uma chamada'))
-        .addSubcommand(sub => sub.setName('end').setDescription('Desliga a chamada')),
-
-    async executeSlash(interaction: ChatInputCommandInteraction) {
-        const sub = interaction.options.getSubcommand();
-        const args = [sub]; 
-        const alvo = interaction.options.getString('alvo') || interaction.options.getString('nome');
-        if (alvo) args.push(alvo); 
-
-        const fakeMessage: any = {
-            content: `rp!phone ${args.join(' ')}`, author: interaction.user, guild: interaction.guild,
-            channel: interaction.channel, client: interaction.client, 
-            reply: async (payload: any) => interaction.replied || interaction.deferred ? interaction.followUp(payload) : interaction.reply(payload)
-        };
-        await this.execute(fakeMessage, args);
-    },
-
-    async execute(message: Message | any, args: string[]) {
-        await phoneSystem.init();
-
-        const action = args[0] ? args[0].toLowerCase() : null;
-        const serverId = message.guild?.id;
-
-        let data: any = {};
-        try {
-            switch (action) {
-                case 'register':
-                    const marker = args[1] ? args.slice(1).join(" ") : undefined;
-                    data = await phoneSystem.register(serverId, message.channel.id, marker); 
-                    break;
-                case 'off':
-                    data = await phoneSystem.turn_off(serverId); 
-                    break;
-                case 'call':
-                    data = phoneSystem.call(serverId, args.slice(1).join(" "));
-                    break;
-                case 'accept':
-                    data = phoneSystem.accept(serverId);
-                    break;
-                case 'decline':
-                    data = phoneSystem.decline(serverId);
-                    break;
-                case 'end':
-                    data = phoneSystem.end_call(serverId);
-                    break;
-                default:
-                    return message.reply("📱 **Telefone:** Use `register, call, accept, decline, end`.");
-            }
-
-            if (data.error) return message.reply(`❌ **Erro:** ${data.error}`);
-            
-            if (data.status === 'ringing') {
-                message.reply(`📞 **Chamando...**`);
-                if (data.target_channel) notifyServer(message.client, data.target_channel, `📞 **TRIM TRIM!** O servidor **${message.guild.name}** está ligando!\nDigite \`/phone accept\` para atender.`);
-            }
-            else if (data.status === 'connected') {
-                message.reply("🟢 **Ligação Conectada!**");
-                if (data.partners) data.partners.forEach((cId: string) => notifyServer(message.client, cId, `🟢 **${message.guild.name}** atendeu!`));
-            }
-            else if (data.status === 'ended') {
-                message.reply("🔴 **Ligação Encerrada.**");
-                if (data.notify_channels) data.notify_channels.forEach((cId: string) => notifyServer(message.client, cId, `🔴 **${message.guild.name}** desligou.`));
-            }
-            else if (data.status === 'declined') {
-                message.reply("🚫 **Chamada Recusada.**");
-                if (data.target_channel) notifyServer(message.client, data.target_channel, `🚫 **${message.guild.name}** recusou a chamada.`);
-            }
-            else if (data.msg) message.reply(`📱 ${data.msg}`);
-
-        } catch (e) {
-            console.error(e);
-            message.reply("❌ Erro interno no telefone.");
-        }
-    },
-
+    // A função principal que escuta as mensagens e envia pros parceiros
     async processPhoneMessage(message: Message): Promise<boolean> {
-        await phoneSystem.init(); 
+        await this.init(); 
         if (message.author.bot || message.content.startsWith('rp!') || message.content.startsWith('/')) return false;
         if (!message.guild) return false;
 
-        const result = phoneSystem.transmit(message.guild.id, message.channel.id, message.content, message.author.username, message.guild.name);
+        const result = this.transmit(message.guild.id, message.channel.id, message.content, message.author.username, message.guild.name);
         if (result && result.targets) {
             result.targets.forEach((cId: string) => notifyServer(message.client, cId, result.msg));
-            return true;
+            return true; // Retorna true para avisar o client.on que a mensagem foi interceptada pelo telefone
         }
         return false;
     }
-};
+}
+
+// Utilitário para notificar os canais (exportado pra ser usado nos comandos de atender/ligar se precisar)
+export async function notifyServer(client: Client, channelId: string, text: string) {
+    try {
+        const channel = await client.channels.fetch(channelId);
+        if (channel && channel.isTextBased()) await (channel as any).send(text);
+    } catch (e) {
+        // Ignora silenciosamente se não tiver permissão
+    }
+}
+
+// Exporta a instância única do motor
+export const phoneSystem = new PhoneSystem();
