@@ -11,7 +11,9 @@ export interface ITemplate extends Document {
     checkChannelId: string | null;
     hallChannelId: string | null;
     ocIntegration: boolean;
-    ocPrefixLabel: string | null;
+    approvalChannelId: string;  // ⬅️ Faltava isso!
+    integrateOC: boolean;       // ⬅️ Faltava isso!
+    ocPrefixLabel: string | null; // ⬅️ Faltava isso!
 }
 
 const TemplateSchema = new Schema({
@@ -21,7 +23,8 @@ const TemplateSchema = new Schema({
     checkChannelId: { type: String, default: null },
     hallChannelId: { type: String, default: null },
     ocIntegration: { type: Boolean, default: false },
-    ocPrefixLabel: { type: String, default: null }
+    ocPrefixLabel: { type: String, default: null },
+    integrateOC: { type: Boolean, default: false },      // ⬅️ Faltava isso!
 });
 
 export interface IFicha extends Document {

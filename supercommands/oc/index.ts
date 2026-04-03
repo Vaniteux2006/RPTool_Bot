@@ -10,7 +10,6 @@ import handleGroup from './handlers/group';
 import handleExport from './handlers/export';
 import handleImport from './handlers/import';
 import handleList from './handlers/list';
-import handleWiki from './handlers/wiki';
 import handleEdit from './handlers/edit';
 import handlePrefix from './handlers/prefix';
 import handlePurge from './handlers/purge';
@@ -26,6 +25,7 @@ import handleDuo from './social_handlers/duo';
 import handleSolo from './social_handlers/solo';
 import handleBirthday from './social_handlers/birthday';
 import handleInfo from './social_handlers/info';
+import handleWikiMain from "./wiki/index";
 
 
 const confusedUsers = new Map<string, number>();
@@ -88,7 +88,7 @@ Use \`rp!help oc\` para detalhes.
                 case 'export': return handleExport(message, args, userId);
                 case 'import': return handleImport(message, args, userId);
                 case 'list': return handleList(message, args, userId);
-                case 'wiki': return handleWiki(message, args, userId);
+                case 'wiki': return handleWikiMain(message, args, userId);
                 case 'edit': return handleEdit(message, args, userId);
                 case 'prefix': return handlePrefix(message, args, userId);
                 case 'purge': return handlePurge(message, args, userId);

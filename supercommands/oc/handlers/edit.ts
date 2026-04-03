@@ -1,3 +1,4 @@
+// RPTool/supercommands/oc/handlers/edit.ts
 import { Message, TextChannel } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
 
@@ -8,7 +9,6 @@ export default async function handleEdit(message: Message, args: string[], userI
     const myOCs = await OCModel.find({ adminId: userId });
     const myNames = myOCs.map(t => t.name);
     
-    // Busca as últimas 10 mensagens no canal para achar o webhook do OC
     const msgs = await message.channel.messages.fetch({ limit: 10 });
     const target = msgs.find(m => m.webhookId && myNames.includes(m.author.username));
 

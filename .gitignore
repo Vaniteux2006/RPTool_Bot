@@ -10,3 +10,4 @@ python_api/__pycache__/
 Data/*.json
 bin/*.exe
 bin/stockfish_linux
+all_code.json

@@ -1,5 +1,5 @@
 import { Client, Interaction } from 'discord.js';
-import { handleFichaInteraction } from '../commands/ficha'; 
+import { handleFichaInteraction } from '../supercommands/ficha/interactions';
 
 export default async function runInteractionChecks(interaction: Interaction, client: Client): Promise<boolean> {
     

@@ -6,7 +6,6 @@ import command42 from '../commands/42';
 
 import { handleOCMessage } from './webhook';
 import { handleAIMessage } from './utils/aiUtils';
-import { handleFichaSubmit } from '../commands/ficha';
 import birthdayCmd from '../commands/birthday';
 import ServerStats from './models/ServerStats';
 
@@ -127,7 +126,6 @@ export default async function runSystemChecks(message: Message, client: Client):
 
     if (await phoneCommand.processMessage(message)) return true;
     if (await rollCommand.processRoll(message, message.content)) return true;
-    if (await handleFichaSubmit(message)) return true;
 
     return false;
 };

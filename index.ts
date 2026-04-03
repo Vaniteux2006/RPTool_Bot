@@ -11,6 +11,8 @@ import { BotStatusModel } from './tools/models/Outros';
 import timeCommand from './commands/time';
 import { handleReactionAdd, handleReactionRemove } from './tools/reactionListener';
 import runMemberChecks from './tools/member_checkout';
+import onMessageReactionAdd from './events/messageReactionAdd'; // Ajuste o caminho
+import { handleFichaInteraction } from './supercommands/ficha/interactions';
 
 const stockfishPath = '/home/node/stockfish'; 
 
@@ -166,6 +168,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
     
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
+    if (interaction.isButton()) {
+    const btnInteraction = interaction as any; // Força o TypeScript a ignorar o conflito
+    if (btnInteraction.customId.startsWith('ficha_')) {
+        await handleFichaInteraction(btnInteraction);
+    }
+}
     
     console.log(`⚡ [SLASH] /${interaction.commandName} | User: ${interaction.user.tag} | Server: ${interaction.guild?.name ?? "DM"} (${interaction.guild?.id ?? "DM"})`);
     
@@ -234,8 +242,8 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-client.on(Events.MessageReactionAdd, async (reaction, user) => {
-    await handleReactionAdd(reaction, user);
+client.on('messageReactionAdd', async (reaction, user) => {
+    await onMessageReactionAdd(reaction, user);
 });
 
 client.on(Events.MessageReactionRemove, async (reaction, user) => {
