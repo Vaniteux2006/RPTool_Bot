@@ -23,6 +23,22 @@ export interface IOC extends Document {
     };
 }
 
+/*
+id do dono
+id do outro usuário que compartilha
+nome
+prefixo
+sufixo
+avatar
+grupo
+contagem de mensagens
+data de criação 
+data de aniversário
+IA (Banco a Parte)
+Wiki (Banco a parte)
+*/
+
+
 // --- INTERFACE DA WIKI (Dados Pesados - DB_OC_WIKI) ---
 export interface IWiki extends Document {
     ocId: mongoose.Types.ObjectId; 
@@ -59,6 +75,16 @@ const OCSchema = new Schema({
     }
 });
 
+/*
+id do tupper
+ativado ou desativado
+prompt de personalidade
+id de canal ativo
+automático ou manual
+delay se automático
+lista de strings que determinam a memória 
+*/
+
 // --- SCHEMA DA WIKI ---
 const WikiSchema = new Schema({
     ocId: { type: Schema.Types.ObjectId, required: true, index: true },
@@ -76,6 +102,18 @@ const WikiSchema = new Schema({
         images: { type: [String], default: [] }
     }]
 });
+
+/*
+id do OC (nulo se vazio)
+id do usuário 
+id do Server
+biografia de introdução (nulo se vazio)
+extras (nulo se vazio)
+seções (textos separados em título, conteúdo e emoji de exibição)
+referências (que linka a outras wikis)
+galeria (que mostra as imagens, necessitando o link da imagem e da categoria aonde vai aparecer)
+*/
+
 
 // Exportação dos Modelos vinculados às conexões corretas
 export const OCModel = OCConnection.model<IOC>('OC', OCSchema);

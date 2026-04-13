@@ -1,4 +1,4 @@
-import { Client, EmbedBuilder, TextChannel } from 'discord.js';
+import { Client, EmbedBuilder, TextChannel, AttachmentBuilder } from 'discord.js';
 import { GuildConfigModel } from '../models/GuildConfig'; 
 
 export class LogMinister {
@@ -6,7 +6,6 @@ export class LogMinister {
         try {
             const config = await GuildConfigModel.findOne({ guildId });
             
-            // 👇 SE NÃO EXISTIR, OU SE ESTIVER DESLIGADO, ELE ABORTA A MISSÃO!
             if (!config || !config.logChannelId || config.isLoggingEnabled === false) return null;
             
             const channel = client.channels.cache.get(config.logChannelId);
@@ -17,10 +16,12 @@ export class LogMinister {
         }
     }
 
-    static async publish(guildId: string, client: Client, embed: EmbedBuilder) {
+    static async publish(guildId: string, client: Client, embed: EmbedBuilder, files: AttachmentBuilder[] = []) {
         const channel = await this.getLogChannel(guildId, client);
         if (channel) {
-            await channel.send({ embeds: [embed] }).catch(() => {});
+            await channel.send({ embeds: [embed], files }).catch(err => {
+                console.error("Erro ao enviar log para o canal:", err);
+            });
         }
     }
 }
