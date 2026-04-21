@@ -5,7 +5,7 @@ import {
     TextChannel
 } from 'discord.js';
 import axios from 'axios';
-import { mainConnection } from '../database'; 
+import { mainConnection } from '../tools/database'; 
 
 
 const WMO_TABLE: {[key: number]: string} = {

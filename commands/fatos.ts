@@ -239,7 +239,7 @@ const wikiData = [
 export default {
     name: 'fatos',
     description: 'Envia uma dose variada de conhecimento (sem repetir tópicos cedo demais).',
-    aliases: ['curiosidades', 'cultura', 'aprender', 'wiki'],
+    aliases: ['curiosidades', 'cultura', 'aprender'],
 
     async execute(message: Message, args: string[]) {
         if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {

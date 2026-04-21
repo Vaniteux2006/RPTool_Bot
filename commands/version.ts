@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
-import ReturnVersion from '../ReturnVersion'; 
+import ReturnVersion from '../tools/ReturnVersion'; 
 
 export default {
     name: 'version',
@@ -28,9 +28,10 @@ export default {
             .setTitle('🤖 RPTool - Versão e Créditos')
             .setDescription(`Atualmente operando na build:\n# \`${displayVer}\`\n\nEste projeto épico foi forjado por estas lendas:`)
             .addFields(
-                { name: '👑 Fundador, Idealizador & Dev', value: '> **vaniteux_reborn**', inline: false },
-                { name: '💻 Co-Fundador & Dev', value: '> **mr.ivanol**', inline: false },
-                { name: '🎨 Ilustrador (Avatar)', value: '> **skieeeell**', inline: false }
+                { name: '👑 Fundador, Idealizador & Dev', value: '> @**vaniteux_reborn** (Vaniteux)', inline: false },
+                { name: '💻 Co-Fundador & QA Tester', value: '> @**mr.ivanol** (Ivan)', inline: false },
+                { name: '🎨 Ilustrador (Avatar)', value: '> @**skieeeell** (Skiel)', inline: false },
+                { name: '🐞 QA Tester', value: '> @**infinity_cat0765** (Maskara)', inline: false },
             )
             .setFooter({ text: 'TypeScript Update 🚀' });
     }

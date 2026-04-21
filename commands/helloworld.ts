@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'disco
 
 export default {
     name: 'helloworld',
+    aliases:['ping', 'test'],
     description: 'Teste de conexão e latência',
     
     data: new SlashCommandBuilder()
@@ -18,3 +19,4 @@ export default {
         message.reply(`Hello World! Conexão de ${ping}ms.`);
     },
 };
+//bem vindo ao Primeiro Comando feito no RPTool. Tudo começou por aqui. 

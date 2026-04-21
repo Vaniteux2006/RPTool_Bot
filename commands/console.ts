@@ -1,84 +1,49 @@
-import { Message, TextChannel } from "discord.js";
-import { Command } from "../interfaces/Command";
-import * as vm from 'vm'; // Módulo nativo do Node.js para criar Sandboxes
+import axios from 'axios';
+import { Message, EmbedBuilder } from 'discord.js';
 
-export const command: Command = {
-    name: "console",
-    description: "Executa código JavaScript simulado (Sandbox).",
-    aliases: ["js", "run", "eval"],
+export default {
+    name: 'console',
+    description: 'Executa código JavaScript em uma Sandbox segura (Piston API).',
     execute: async (message: Message, args: string[]) => {
-        const channel = message.channel as TextChannel;
+        // Pega o código removendo o comando e a formatação do Discord (```js ... ```)
         let code = message.content.replace(/^rp!(console|js|run|eval)(\s+js)?\s*/i, "");
+        code = code.replace(/^```(js|javascript)?|```$/g, "").trim();
 
-        if (code.startsWith("```") && code.endsWith("```")) {
-            code = code.replace(/^```(js|javascript)?\n/i, "").replace(/```$/, "");
-        } 
-        else if (code.startsWith("{") && code.endsWith("}")) {
-            code = code.slice(1, -1);
+        if (!code) {
+            return message.reply("❌ Digite algum código! Exemplo: `rp!js console.log('Olá Mundo!');`");
         }
 
-        if (!code.trim()) {
-            return message.reply("💻 **Uso:** `rp!console js { seu_codigo_aqui }` ou use blocos de código com crases.");
-        }
-        let output = "";
-        const customConsole = {
-            log: (...args: any[]) => {
-                // Junta os argumentos do console.log igual o JS de verdade faz
-                const line = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" ");
-                output += line + "\n";
-            },
-            error: (...args: any[]) => {
-                const line = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" ");
-                output += "[ERRO] " + line + "\n";
-            }
-        };
-
-        const input = async (promptMsg: string = "") => {
-            if (promptMsg) {
-                await channel.send(`📥 **Console aguardando:** \`${promptMsg}\``); 
-            }
-            
-            const filter = (m: Message) => m.author.bot === false; 
-            
-            try {
-                const collected = await channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] }); 
-                return collected.first()?.content || "";
-            } catch (e) {
-                throw new Error("Timeout: Ninguém digitou nada no input a tempo.");
-            }
-        };
-
-        const context = vm.createContext({
-            console: customConsole,
-            input: input,
-            Math: Math,
-            Date: Date,
-            Number: Number,
-            String: String,
-            Array: Array,
-            Object: Object,
-            JSON: JSON,
-            setTimeout: setTimeout 
-        });
-
-        const wrappedCode = `(async () => { \n${code}\n })()`;
+        const aguardeMsg = await message.reply("⏳ Executando em ambiente seguro...");
 
         try {
-            const script = new vm.Script(wrappedCode);
-            
-            channel.sendTyping();
+            // Envia o código para a Piston API
+            const response = await axios.post('https://emacs.piston.rs/api/v2/execute', {
+                language: 'javascript',
+                version: '18.15.0', // Versão do Node
+                files: [
+                    { content: code }
+                ],
+                compile_timeout: 10000,
+                run_timeout: 3000, // Se tiver while(true), ele mata em 3 segundos
+            });
 
-            const resultPromise = script.runInContext(context, { timeout: 3000 });
-            await resultPromise;
+            const data = response.data;
+            const output = data.run.output || "✅ Código executado sem retornos visíveis.";
             
-            if (output.trim()) {
-                message.reply(`✅ **Execução Concluída:**\n\`\`\`js\n${output.substring(0, 1900)}\n\`\`\``);
-            } else {
-                message.reply("✅ **Executado!** *(O código rodou sem erros, mas não imprimiu nada no console).*");
-            }
+            // Limita o tamanho do retorno para não estourar o limite do Discord
+            const safeOutput = output.length > 1900 ? output.substring(0, 1900) + "\n... [Saída muito longa]" : output;
+
+            const embed = new EmbedBuilder()
+                .setColor(data.run.code === 0 ? '#00FF00' : '#FF0000') // Verde se deu certo, vermelho se deu erro
+                .setTitle('💻 Console JavaScript (Sandbox)')
+                .setDescription(`\`\`\`js\n${safeOutput}\n\`\`\``)
+                .setFooter({ text: `Tempo de execução: ${data.compile?.code === 0 ? data.run.stdout : 'N/A'}` });
+
+            await aguardeMsg.edit({ content: null, embeds: [embed] });
 
         } catch (error: any) {
-            message.reply(`❌ **Erro de Compilação/Execução:**\n\`\`\`js\n${error.message}\n\`\`\``);
+            console.error('[Piston API Error]', error.message);
+            await aguardeMsg.edit("❌ Ocorreu um erro ao tentar executar o código na Sandbox remota.");
         }
     }
 };

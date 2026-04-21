@@ -3,10 +3,11 @@ node_modules
 __pycache__/
 *.pyc
 python_api/__pycache__/
-tuppers.json
+*.json
 *.o
 *.obj
 *.exe
 Data/*.json
 bin/*.exe
 bin/stockfish_linux
+all_code.json

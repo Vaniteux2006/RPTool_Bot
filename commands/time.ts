@@ -7,7 +7,7 @@ import {
     ChannelType
 } from 'discord.js';
 import { Schema, Document } from 'mongoose'; 
-import { mainConnection } from '../database'; 
+import { mainConnection } from '../tools/database'; 
 
 interface IClock extends Document {
     name: string;

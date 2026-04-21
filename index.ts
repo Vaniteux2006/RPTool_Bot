@@ -2,16 +2,29 @@ import 'dotenv/config';
 import { Client, GatewayIntentBits, Collection, ActivityType, Events, REST, Routes, Partials, AuditLogEvent, EmbedBuilder } from 'discord.js';
 import fs from 'fs'; 
 import path from 'path';
-import { getAverageColor } from 'fast-average-color-node';
-import { WelcomeModel } from './models/Outros';
+import loadEvents from './tools/utils/eventLoader';
 
-import ReturnVersion from './ReturnVersion'; 
-import runSystemChecks from './command_checkout'; 
-import runInteractionChecks from './interaction_checkout';
-import autoroleCommand from './commands/autorole'; 
-import { BotStatusModel } from './models/Outros';
+import ReturnVersion from './tools/ReturnVersion'; 
+import runSystemChecks from './tools/command_checkout'; 
+import runInteractionChecks from './tools/interaction_checkout';
+import { BotStatusModel } from './tools/models/Outros';
 import timeCommand from './commands/time';
-import { handleReactionAdd, handleReactionRemove } from './reactionListener';
+import { handleReactionAdd, handleReactionRemove } from './tools/reactionListener';
+import onMessageReactionAdd from './events/messageReactionAdd'; // Ajuste o caminho
+import { handleFichaInteraction } from './supercommands/ficha/interactions';
+
+const stockfishPath = '/home/node/stockfish'; 
+
+try {
+    if (fs.existsSync(stockfishPath)) {
+        fs.chmodSync(stockfishPath, 0o755);
+        console.log('♟️ [XADREZ] Permissão de execução concedida ao Stockfish com sucesso!');
+    } else {
+        console.log('⚠️ [XADREZ] Arquivo do Stockfish não encontrado no caminho:', stockfishPath);
+    }
+} catch (error) {
+    console.error('❌ [XADREZ] Erro ao tentar dar permissão ao Stockfish:', error);
+}
 
 interface CustomClient extends Client {
     commands: Collection<string, any>;
@@ -20,12 +33,18 @@ interface CustomClient extends Client {
 const client = new Client({
     rest: { timeout: 60 * 60 * 1000 },
     intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, 
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.GuildMessageReactions
+        GatewayIntentBits.Guilds, // O básico para o bot funcionar
+        GatewayIntentBits.GuildMembers, // 📥 Para logs de Entrada, Saída e Cargos
+        GatewayIntentBits.GuildModeration, 
+        GatewayIntentBits.GuildExpressions,
+        GatewayIntentBits.GuildIntegrations,
+        GatewayIntentBits.GuildWebhooks, // 🪝 Escuta Webhooks
+        GatewayIntentBits.GuildInvites, // 🔗 Escuta Convites
+        GatewayIntentBits.GuildVoiceStates, // 🎙️ (Caso você use logs de call no futuro)
+        GatewayIntentBits.GuildPresences,
+        GatewayIntentBits.GuildMessages, // 💬 Escuta as mensagens
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.MessageContent, // 📝 Escuta o CONTEÚDO das mensagens (para log de deletada/editada)
     ],
     partials: [
         Partials.Channel,
@@ -38,6 +57,35 @@ const client = new Client({
 client.commands = new Collection();
 const commandsArray: any[] = []; 
 const prefix = "rp!";
+const cooldowns = new Map<string, number>(); 
+const commandStrikes = new Map<string, number[]>(); 
+
+// --- INÍCIO: CARREGADOR DE SUPERCOMANDOS ---
+const supercommandsPath = path.join(__dirname, 'supercommands');
+if (fs.existsSync(supercommandsPath)) {
+    const superFolders = fs.readdirSync(supercommandsPath);
+    for (const folder of superFolders) {
+        const folderPath = path.join(supercommandsPath, folder);
+        
+        // Verifica se é realmente uma pasta
+        if (fs.statSync(folderPath).isDirectory()) {
+            // Suporta rodar tanto em TS puro quanto no dist/ depois de compilado
+            const mainFileTs = path.join(folderPath, 'index.ts');
+            const mainFileJs = path.join(folderPath, 'index.js');
+            
+            const fileToLoad = fs.existsSync(mainFileTs) ? mainFileTs : (fs.existsSync(mainFileJs) ? mainFileJs : null);
+
+            if (fileToLoad) {
+                const command = require(fileToLoad).default;
+                if (command && command.name) {
+                    client.commands.set(command.name, command);
+                    console.log(`🌟 [Super Comandos] Ecossistema carregado: ${command.name}`);
+                }
+            }
+        }
+    }
+}
+// --- FIM: CARREGADOR DE SUPERCOMANDOS ---
 
 function loadCommands(dir: string) {
     if (!fs.existsSync(dir)) return;
@@ -95,7 +143,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     setInterval(updateStatus, 15000); 
 
     const CLIENT_ID = process.env.CLIENT_ID || readyClient.user.id;
-    const TOKEN = process.env.TOKEN;
+    const TOKEN = process.env.xdTOKEN;
     await timeCommand.checkAndRestoreClocks(client);
 
     if (TOKEN) {
@@ -119,6 +167,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
     
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
+    if (interaction.isButton()) {
+    const btnInteraction = interaction as any; // Força o TypeScript a ignorar o conflito
+    if (btnInteraction.customId.startsWith('ficha_')) {
+        await handleFichaInteraction(btnInteraction);
+    }
+}
     
     console.log(`⚡ [SLASH] /${interaction.commandName} | User: ${interaction.user.tag} | Server: ${interaction.guild?.name ?? "DM"} (${interaction.guild?.id ?? "DM"})`);
     
@@ -137,10 +191,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
 
-    if (message.author.bot || await runSystemChecks(message, client)) return;
+    const isSystemHandled = await runSystemChecks(message, client);
     
-    if (!message.content.startsWith(prefix)) return;
+    if (isSystemHandled) return;
+
+    if (!message.content.startsWith('rp!')) return;
+
+    const guildId = message.guild ? message.guild.id : message.author.id;
+    const now = Date.now();
+
+    if (cooldowns.has(guildId)) {
+        const expiration = cooldowns.get(guildId)!;
+        if (now < expiration) {
+            return; 
+        } else {
+            cooldowns.delete(guildId);
+            commandStrikes.set(guildId, []);
+        }
+    }
+
+    const timestamps = commandStrikes.get(guildId) || [];
+    const recentCommands = timestamps.filter(ts => now - ts < 10000);
+    recentCommands.push(now);
+
+    if (recentCommands.length >= 6) {
+        cooldowns.set(guildId, now + 20000);
+        return message.reply("🛑 **CALMA AI MEU IRMÃO! TO LIDANDO COM MUITOS COMANDOS AO MESMO TEMPO! ESPERA!** (Comandos bloqueados por 20 segundos)");
+    } else {
+        commandStrikes.set(guildId, recentCommands);
+    }
     
     const args = message.content.slice(prefix.length).trim().split(/ +/);
     const commandName = args.shift()?.toLowerCase();
@@ -160,88 +241,13 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-client.on(Events.MessageReactionAdd, async (reaction, user) => {
-    await handleReactionAdd(reaction, user);
+client.on('messageReactionAdd', async (reaction, user) => {
+    await onMessageReactionAdd(reaction, user);
 });
 
 client.on(Events.MessageReactionRemove, async (reaction, user) => {
     await handleReactionRemove(reaction, user);
 });
-
-client.on('guildMemberAdd', async (member) => {
-    try { await autoroleCommand.giveRole(member); } catch (e) {}
-
-    try {
-        const config = await WelcomeModel.findOne({ guildId: member.guild.id });
-        if (!config || !config.channelId) return;
-        const channel = member.guild.channels.cache.get(config.channelId);
-        if (!channel || !channel.isTextBased()) return;
-
-        let msg = config.joinMsg.replace(/{user}/g, `<@${member.id}>`)
-                                .replace(/{server}/g, member.guild.name)
-                                .replace(/{count}/g, member.guild.memberCount.toString());
-
-        let embedColor = 0x5865F2; 
-        try {
-            const url = member.user.displayAvatarURL({ extension: 'png', size: 256 });
-            const color = await getAverageColor(url);
-            embedColor = parseInt(color.hex.replace('#', ''), 16);
-        } catch (e) {}
-
-        const embed = new EmbedBuilder()
-            .setColor(embedColor)
-            .setDescription(msg)
-            .setThumbnail(member.user.displayAvatarURL()); 
-
-        await (channel as any).send({ embeds: [embed] });
-    } catch (error) {
-        console.error("Erro no Welcome:", error);
-    }
-});
-
-client.on('guildMemberRemove', async (member) => {
-    try {
-        const config = await WelcomeModel.findOne({ guildId: member.guild.id });
-        if (!config || !config.channelId) return;
-        const channel = member.guild.channels.cache.get(config.channelId);
-        if (!channel || !channel.isTextBased()) return;
-
-        const banLogs = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberBanAdd }).catch(()=>null);
-        const banLog = banLogs?.entries.first();
-        let isBan = false;
-        if (banLog && banLog.target.id === member.id && Date.now() - banLog.createdTimestamp < 5000) isBan = true;
-
-        const kickLogs = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberKick }).catch(()=>null);
-        const kickLog = kickLogs?.entries.first();
-        let isKick = false;
-        if (!isBan && kickLog && kickLog.target.id === member.id && Date.now() - kickLog.createdTimestamp < 5000) isKick = true;
-
-        let rawMsg = config.leaveMsg;
-        let embedColor = 0x1A2B4C;
-
-        if (isBan) {
-            rawMsg = config.banMsg;
-            embedColor = 0xFF0000; 
-        } else if (isKick) {
-            rawMsg = config.kickMsg;
-            embedColor = 0xFFFFFF;
-        }
-
-        let msg = rawMsg.replace(/{user}/g, `**${member.user.username}**`)
-                        .replace(/{server}/g, member.guild.name)
-                        .replace(/{count}/g, member.guild.memberCount.toString());
-
-        const embed = new EmbedBuilder()
-            .setColor(embedColor)
-            .setDescription(msg)
-            .setThumbnail(member.user.displayAvatarURL());
-
-        await (channel as any).send({ embeds: [embed] });
-    } catch (error) {
-        console.error("Erro no Leave/Kick/Ban:", error);
-    }
-});
-
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('🚨 [ERRO CRÍTICO] Rejeição:', reason);
@@ -251,4 +257,6 @@ process.on('uncaughtException', (error) => {
     console.error('🚨 [ERRO FATAL] Exceção:', error);
 });
 
-client.login(process.env.TOKEN);
+loadEvents(client);
+
+client.login(process.env.xdTOKEN);

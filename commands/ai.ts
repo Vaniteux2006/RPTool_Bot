@@ -1,6 +1,14 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
-import { api } from '../api';
-import { getGuildAIConfig } from './utils/tokenHelper';
+import { api } from '../tools/api';
+import { getGuildAIConfig } from '../tools/utils/tokenHelper';
+
+function sanitizeOutput(text: string): string {
+    if (!text) return text;
+    return text
+        .replace(/@everyone/g, '@everyоne') 
+        .replace(/@here/g, '@hеre')        
+        .replace(/<@&(\d+)>/g, '<@&\u200b$1>'); 
+}
 
 export default {
     name: 'ai',
@@ -32,30 +40,51 @@ export default {
 
         try {
             const config = await getGuildAIConfig(guildId);
-
             if (!config) {
                  const errText = "⚠️ Nenhum token configurado. Use `rp!token` para configurar.";
-                 if (isEdit) target.edit(errText); else target.editReply(errText);
+                 if (isEdit) await target.edit(errText); else await target.editReply(errText);
                  return;
             }
 
-            const replyText = await api.chat(
-                "RPTool", 
-                "Você é um bot assistente de RPG engraçadão da galera. Seja útil, breve e use gírias de Discord.", 
-                text,
-                config
-            );
+            let replyText = "";
+            let attempt = 1;
+            let success = false;
 
-            if (replyText.includes('503') || replyText.includes('high demand') || replyText.includes('Service Unavailable')) {
-                const msgFrita = "🔥 **ERRO: ESTÃO FRITANDO OS SERVIDORES!** 🍟\nAlta demanda na IA do Google (Erro 503). Espera um pouquinho que já esfria.";
-                
-                if (isEdit) target.edit(msgFrita);
-                else target.editReply(msgFrita);
-                return;
+            // --- SISTEMA DE RETRY INFINITO PARA 503 ---
+            while (!success) {
+                try {
+                    replyText = await api.chat(
+                        "RPTool", 
+                        "Você é um bot assistente de RPG engraçadão da galera. Seja útil, breve e use gírias de Discord.", 
+                        text,
+                        config
+                    );
+                    
+                    // Se a API retornar o 503 em texto
+                    if (replyText.includes('503') || replyText.includes('high demand') || replyText.includes('Service Unavailable')) {
+                        throw new Error('503');
+                    }
+                    
+                    success = true; // Quebra o loop se deu certo
+                } catch (error: any) {
+                    const errorMsg = error.message || error.toString();
+                    if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
+                        const retryMsg = `🔥 **ERRO 503: Servidores fritando!** 🍟\nEspera aí, a IA vai tentar de novo em 5 segundos... (Tentativa ${attempt})`;
+                        if (isEdit) await target.edit(retryMsg); else await target.editReply(retryMsg);
+                        
+                        await new Promise(resolve => setTimeout(resolve, 5000));
+                        attempt++;
+                    } else {
+                        throw error; // Se não for 503, joga pro catch principal
+                    }
+                }
             }
+            // ------------------------
 
-            if (isEdit) target.edit(replyText);
-            else target.editReply(replyText);
+            replyText = sanitizeOutput(replyText);
+
+            if (isEdit) await target.edit(replyText);
+            else await target.editReply(replyText);
 
         } catch (error: any) {
             console.error(`[AI Error] ${error.message}`);
@@ -63,30 +92,28 @@ export default {
             let errText = "😵‍💫 **Minha cabeça deu um nó... Tenta de novo?**";
             const errorMsg = error.message || error.toString();
 
-            if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Quota exceeded')) {
-                
+            if (errorMsg.includes('GoogleGenerativeAI Error') && errorMsg.includes('was blocked')) {
+                errText = "⚠️ **Algo no teu texto passou totalmente dos limites e a IA não gostou. Toma cuidado aí.**";
+            }
+            else if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Quota')) {
                 const limitMatch = errorMsg.match(/limit:\s*(\d+)/i);
                 
                 if (errorMsg.includes('Quota') || limitMatch) {
                     const limitAmount = limitMatch ? limitMatch[1] : "várias";
-                    errText = `🛑 **ERRO! LIMITE ATINGIDO!** Você pode ter apenas **${limitAmount}** mensagens por dia. Volte amanhã nesse mesmo horário, ou use \`rp!token\` pra mudar de API.`;
+                    errText = `🛑 **ERRO! LIMITE ATINGIDO!** A IA estourou a cota de **${limitAmount}** requisições. Use \`rp!token\` pra mudar de API.`;
                 } else {
                     const match = errorMsg.match(/retry in (\d+(\.\d+)?)/) || errorMsg.match(/after (\d+)/);
                     let seconds = 60; 
-
-                    if (match) {
-                        seconds = Math.ceil(parseFloat(match[1]));
-                    }
+                    if (match) seconds = Math.ceil(parseFloat(match[1]));
                     
                     errText = `🔥 **CALMA AÍ! Muita mensagem pra ler!**\n⏳ *O cérebro fritou... Tenta de novo em **${seconds}s**.*`;
                 }
-            
             } else if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
                 errText = "🔥 **ERRO: ESTÃO FRITANDO OS SERVIDORES!** 🍟\nAlta demanda na IA do Google (Erro 503). Espera um pouquinho que já esfria.";
             }
 
-            if (isEdit) target.edit(errText);
-            else target.editReply(errText);
+            if (isEdit) await target.edit(errText);
+            else await target.editReply(errText);
         }
     }
 };
