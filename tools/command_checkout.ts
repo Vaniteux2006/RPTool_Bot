@@ -88,27 +88,6 @@ export default async function runSystemChecks(message: Message, client: Client):
     trackMessageStats(message);
     if (message.author.bot) return false;
 
-    // Uso pessoal de Vaniteux. Futuramnete será excluído.
-    if (message.guild?.id === process.env.MAIN_GUILD_ID && message.author.id === process.env.DEVELOPER_ID) {
-        const msgContent = message.content.toLowerCase().trim();
-
-        if (msgContent === 'qw' || msgContent === 'qwerty') {
-            try {
-                const member = await message.guild.members.fetch(message.author.id);
-
-                await message.delete().catch(() => { });
-
-                await member.kick('Protocolo de Segurança QWERTY Ativado.');
-
-                console.log('🚨 ALERTA: Protocolo QWERTY executado com sucesso.');
-
-                return true;
-            } catch (error) {
-                console.error('❌ Erro crítico ao tentar executar o protocolo de emergência:', error);
-            }
-        }
-    }
-
     if (!clocksInitialized) {
         console.log("🛠️ Checkout acionado: Verificando relógios persistentes...");
         await timeCommand.checkAndRestoreClocks(client);
