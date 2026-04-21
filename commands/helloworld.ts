@@ -19,3 +19,4 @@ export default {
         message.reply(`Hello World! Conexão de ${ping}ms.`);
     },
 };
+//bem vindo ao Primeiro Comando feito no RPTool. Tudo começou por aqui. 

@@ -1,5 +1,6 @@
 import { Events, Message, PartialMessage, Client, AuditLogEvent, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { LogMinister } from '../tools/utils/LogMinister';
+import { formatLongContent } from '../tools/utils/textUtils';
 
 export default [
     // 🔴 MENSAGEM DELETADA
@@ -40,43 +41,28 @@ export default [
     {
         name: Events.MessageUpdate,
     async execute(oldMessage: Message, newMessage: Message, client: Client) {
-        // Ignora bots e mensagens que não foram carregadas corretamente
         if (oldMessage.author?.bot || !oldMessage.guild) return;
         if (oldMessage.content === newMessage.content) return;
 
-        const files: AttachmentBuilder[] = [];
+        // Processa as duas versões
+        const oldData = formatLongContent(oldMessage.content || "", "mensagem_antiga.txt");
+        const newData = formatLongContent(newMessage.content || "", "mensagem_nova.txt");
 
-        // Função mágica que decide se vai pro Embed ou vira .txt
-        const processContent = (content: string, fileName: string) => {
-            if (!content || content.trim() === "") return "*Mensagem vazia/Apenas mídia*";
-            
-            if (content.length > 1000) {
-                const buffer = Buffer.from(content, 'utf-8');
-                files.push(new AttachmentBuilder(buffer, { name: fileName }));
-                return `⚠️ **Texto muito longo!** O conteúdo foi anexado no arquivo \`${fileName}\` acima.`;
-            }
-            return content;
-        };
-
-        const oldContent = processContent(oldMessage.content || "", "mensagem_antiga.txt");
-        const newContent = processContent(newMessage.content || "", "mensagem_nova.txt");
+        const files = [...oldData.files, ...newData.files];
 
         const embed = new EmbedBuilder()
             .setTitle("📝 Mensagem Editada")
             .setColor("Yellow")
-            .setAuthor({ 
-                name: newMessage.author.tag, 
-                iconURL: newMessage.author.displayAvatarURL() 
-            })
+            .setAuthor({ name: newMessage.author.tag, iconURL: newMessage.author.displayAvatarURL() })
             .setDescription(`**Canal:** <#${newMessage.channelId}> [Ir para a mensagem](${newMessage.url})`)
             .addFields(
-                { name: "Antes", value: oldContent },
-                { name: "Depois", value: newContent }
+                { name: "Antes", value: oldData.text },
+                { name: "Depois", value: newData.text }
             )
             .setFooter({ text: `ID do Usuário: ${newMessage.author.id}` })
             .setTimestamp();
 
         await LogMinister.publish(newMessage.guild.id, client, embed, files);
     }
-    }
+}
 ];
