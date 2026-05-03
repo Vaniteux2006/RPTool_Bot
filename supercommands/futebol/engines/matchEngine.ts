@@ -20,6 +20,7 @@ export interface IrlOptions {
     secondsPerMinute: number;   // 10–60 s por minuto de jogo
     homeAdminId: string;
     awayAdminId: string;
+    cancelToken: { cancelled: boolean }; // flag mutável para cancelamento
 }
 
 export interface MatchResult {
@@ -118,10 +119,16 @@ function posEmoji(pos: string): string {
     return ({ GK: '🧤', DEF: '🛡️', MID: '⚙️', ATK: '⚡' } as any)[pos] ?? '⚽';
 }
 
-// ─── Formata o footer com timestamp relativo (sugestão 11) ───────────────────
-export function buildExpirationFooter(reportId: string): string {
+// ─── Formata o rodapé de expiração ───────────────────────────────────────────
+// IMPORTANTE: Discord renderiza <t:...:R> apenas em conteúdo de mensagem,
+// NÃO em footers de embed. Por isso retornamos objeto separado: footer (texto
+// simples) + content (com o timestamp que Discord vai renderizar).
+export function buildExpirationFooter(reportId: string): { footer: string; content: string } {
     const expirationTs = Math.floor(Date.now() / 1000) + 48 * 3600;
-    return `⚠️ Análise expira <t:${expirationTs}:R> • ID: ${reportId}\nUse \`rp!futebol export ${reportId}\` para guardar forever`;
+    return {
+        footer:  `ID: ${reportId} • Use rp!futebol export ${reportId} para guardar forever`,
+        content: `⚠️ Análise expira em 48h (<t:${expirationTs}:R>)`,
+    };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -192,19 +199,41 @@ export async function simulateTacticalMatch(
 
     eventsLog.push(`⏱️ **0'** — Rola a bola!`);
 
-    // ─── IRL: envia embed ao vivo ──────────────────────────────────────────────
+    // ─── IRL: envia embed ao vivo com botão cancelar ──────────────────────────
     let liveMsg: any = null;
     if (irlOptions) {
+        const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+                .setCustomId('fb_irl_cancel')
+                .setLabel('⏹ Cancelar Partida')
+                .setStyle(ButtonStyle.Danger),
+        );
         const initEmbed = buildLiveEmbed(homeTeam.name, awayTeam.name, 0, 0, 0, eventsLog, homeFormation, awayFormation, homeTactic, awayTactic);
-        liveMsg = await (irlOptions.message.channel as TextChannel).send({ embeds: [initEmbed] });
+        liveMsg = await (irlOptions.message.channel as TextChannel).send({ embeds: [initEmbed], components: [cancelRow] });
+
+        // Listener do botão cancelar
+        const cancelCollector = liveMsg.createMessageComponentCollector({
+            componentType: ComponentType.Button,
+            filter: (i: any) => i.customId === 'fb_irl_cancel' &&
+                [irlOptions.homeAdminId, irlOptions.awayAdminId, irlOptions.message.author.id].includes(i.user.id),
+        });
+        cancelCollector.on('collect', async (i: any) => {
+            irlOptions.cancelToken.cancelled = true;
+            cancelCollector.stop();
+            await i.reply({ content: '⏹ Partida cancelada.', ephemeral: true });
+        });
     }
 
     // ─── Loop dos 90 minutos ──────────────────────────────────────────────────
     for (let minute = 1; minute <= 90; minute++) {
 
-        // IRL: delay entre minutos
+        // IRL: delay entre minutos + verificação de cancelamento
         if (irlOptions && liveMsg) {
             await sleep(irlOptions.secondsPerMinute * 1000);
+            if (irlOptions.cancelToken.cancelled) {
+                await liveMsg.edit({ embeds: [buildLiveEmbed(homeTeam.name, awayTeam.name, homeScore, awayScore, minute, ['⏹ *Partida cancelada.*'], homeFormation, awayFormation, homeTactic, awayTactic, true)], components: [] });
+                break;
+            }
         }
 
         const staminaH = getStaminaPenalty(minute, homeTactic);
@@ -350,9 +379,12 @@ export async function simulateTacticalMatch(
             }
         }
 
-        // 7. Atualiza embed IRL a cada 5 minutos
-        if (irlOptions && liveMsg && minute % 5 === 0 && minute !== 45) {
-            await liveMsg.edit({ embeds: [buildLiveEmbed(homeTeam.name, awayTeam.name, homeScore, awayScore, minute, eventsLog.slice(-6), homeFormation, awayFormation, homeTactic, awayTactic)] });
+        // 7. Atualiza embed IRL a cada minuto (antes era a cada 5, agora é 1:1 com o timer)
+        if (irlOptions && liveMsg && minute !== 45 && !irlOptions.cancelToken.cancelled) {
+            const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId('fb_irl_cancel').setLabel('⏹ Cancelar Partida').setStyle(ButtonStyle.Danger),
+            );
+            await liveMsg.edit({ embeds: [buildLiveEmbed(homeTeam.name, awayTeam.name, homeScore, awayScore, minute, eventsLog.slice(-6), homeFormation, awayFormation, homeTactic, awayTactic)], components: [cancelRow] });
         }
     }
 
@@ -379,8 +411,16 @@ export async function simulateTacticalMatch(
             const c = contributions[p.name] ?? { goals: 0, assists: 0, keyPasses: 0, tacklesWon: 0, errors: 0, isSub: false };
             const rating = calculatePlayerRating({ ...c, baseOvr: p.overall, isWinner });
             playerRatings.push({ team: teamName, playerName: p.name, rating, isSub: !p.isStarter });
-            if (teamName === homeTeam.name && rating > topHome.rating) topHome = { name: p.name, rating };
-            if (teamName === awayTeam.name && rating > topAway.rating) topAway = { name: p.name, rating };
+
+            // BUG FIX: Reservas Emergenciais (slot vazio na formação) e jogadores
+            // do banco NÃO devem ganhar destaque — destaque é só para titulares reais.
+            const isEmergency = p.name.startsWith('Reserva Emergencial');
+            const isOriginalStarter = p.isStarter && !isEmergency;
+
+            if (isOriginalStarter) {
+                if (teamName === homeTeam.name && rating > topHome.rating) topHome = { name: p.name, rating };
+                if (teamName === awayTeam.name && rating > topAway.rating) topAway = { name: p.name, rating };
+            }
         });
     };
 
@@ -413,7 +453,8 @@ export async function simulateTacticalMatch(
     // Edita embed final do IRL
     if (irlOptions && liveMsg) {
         const finalEmbed = buildLiveEmbed(homeTeam.name, awayTeam.name, homeScore, awayScore, 90, eventsLog.slice(-8), homeFormation, awayFormation, homeTactic, awayTactic, true);
-        finalEmbed.setFooter({ text: buildExpirationFooter((report._id as any).toString()) });
+        const expiration = buildExpirationFooter((report._id as any).toString());
+        finalEmbed.setFooter({ text: expiration.footer });
         await liveMsg.edit({ embeds: [finalEmbed] });
     }
 
@@ -463,14 +504,22 @@ async function askHalftimeSubstitutions(
 ): Promise<{ homeSubsUsed: number; awaySubsUsed: number }> {
     const channel = irlOptions.message.channel as TextChannel;
 
+    // BUG FIX: Documentos Mongoose têm propriedades em _doc, não no objeto raiz.
+    // O spread/map retornava undefined para name/position. Normalizamos aqui.
+    const readName     = (p: any): string => p?.name     ?? p?._doc?.name     ?? 'Desconhecido';
+    const readPosition = (p: any): string => p?.position ?? p?._doc?.position ?? '?';
+    const readOverall  = (p: any): number => p?.overall  ?? p?._doc?.overall  ?? 0;
+
     const announceRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId('fb_halftime_home').setLabel(`${homeTeam.name}: Substituições`).setStyle(ButtonStyle.Primary).setEmoji('🔄'),
-        new ButtonBuilder().setCustomId('fb_halftime_away').setLabel(`${awayTeam.name}: Substituições`).setStyle(ButtonStyle.Primary).setEmoji('🔄'),
+        new ButtonBuilder().setCustomId('fb_halftime_home').setLabel(`${homeTeam.name}: Fazer Sub`).setStyle(ButtonStyle.Primary).setEmoji('🔄'),
+        new ButtonBuilder().setCustomId('fb_halftime_away').setLabel(`${awayTeam.name}: Fazer Sub`).setStyle(ButtonStyle.Primary).setEmoji('🔄'),
         new ButtonBuilder().setCustomId('fb_halftime_skip').setLabel('Continuar sem trocas').setStyle(ButtonStyle.Secondary),
     );
 
     const halftimeMsg = await channel.send({
-        content: `🔔 **INTERVALO!** Os técnicos têm **60 segundos** para fazer substituições.\n> <@${irlOptions.homeAdminId}> (${homeTeam.name}) e <@${irlOptions.awayAdminId}> (${awayTeam.name}), cliquem no botão do seu time.`,
+        content:
+            `🔔 **INTERVALO!** Os técnicos têm **60 segundos** para fazer substituições.\n` +
+            `> <@${irlOptions.homeAdminId}> (${homeTeam.name}) e <@${irlOptions.awayAdminId}> (${awayTeam.name}), cliquem no botão do seu time.`,
         components: [announceRow],
     });
 
@@ -492,62 +541,78 @@ async function askHalftimeSubstitutions(
                 }
 
                 const isHome = interaction.customId === 'fb_halftime_home';
-                const team   = isHome ? homeTeam : awayTeam;
+                const team   = isHome ? homeTeam   : awayTeam;
                 const field  = isHome ? homeOnField : awayOnField;
-                const bench  = isHome ? homeBench : awayBench;
+                const bench  = isHome ? homeBench   : awayBench;
                 const used   = isHome ? homeSubsUsed : awaySubsUsed;
 
                 if (decided.has(team.name)) {
-                    await interaction.reply({ content: '❌ Você já fez suas substituições.', ephemeral: true });
+                    await interaction.reply({ content: '❌ Você já fez suas substituições neste intervalo.', ephemeral: true });
                     return;
                 }
 
                 if (bench.length === 0 || used >= 5) {
-                    await interaction.reply({ content: '⚠️ Sem reservas disponíveis ou limite de substituições atingido.', ephemeral: true });
+                    await interaction.reply({ content: '⚠️ Sem reservas disponíveis ou limite de 5 substituições atingido.', ephemeral: true });
                     decided.add(team.name);
+                    if (decided.size >= 2) collector.stop();
                     return;
                 }
 
-                // Pergunta qual jogador trocar via resposta de texto
-                await interaction.reply({
+                // Listas legíveis usando o helper (evita undefined em docs Mongoose)
+                const fieldList = field.map((p, i) => `\`${i + 1}.\` ${readName(p)} (${readPosition(p)})`).join('\n');
+                const benchList = bench.map((p, i) => `\`${i + 1}.\` ${readName(p)} (${readPosition(p)} OVR:${readOverall(p)})`).join('\n');
+
+                // BUG FIX: interaction.reply ephemeral não é visível ao channel.createMessageCollector.
+                // Solução: enviamos mensagem PÚBLICA no canal (apagada depois) para poder escutar a resposta.
+                const subPromptMsg = await channel.send({
                     content:
-                        `🔄 **${team.name} — Substituição no Intervalo**\n` +
-                        `**Em campo:** ${field.map(p => `${p.name} (${p.position})`).join(', ')}\n` +
-                        `**Reservas:** ${bench.map(p => `${p.name} (${p.position})`).join(', ')}\n\n` +
-                        `Responda com: \`SAINDO / ENTRANDO\` (ex: "João Silva / Carlos Souza"). Você tem 30 segundos.`,
-                    ephemeral: true,
+                        `🔄 <@${interaction.user.id}> — **Substituição: ${team.name}**\n\n` +
+                        `**Em campo:**\n${fieldList}\n\n` +
+                        `**Banco:**\n${benchList}\n\n` +
+                        `Responda aqui: \`SAINDO / ENTRANDO\` *(ex: Marchesín / Carlos GK)*\n` +
+                        `-# Esta mensagem some em 30s.`,
                 });
 
+                await interaction.reply({ content: '✅ Lista enviada abaixo. Responda em 30 segundos.', ephemeral: true });
+
                 const msgCollector = channel.createMessageCollector({
-                    filter: (m) => m.author.id === interaction.user.id,
+                    filter: (m) => m.author.id === interaction.user.id && m.content.includes('/'),
                     time: 30_000,
                     max: 1,
                 });
 
-                msgCollector.on('collect', (m) => {
+                msgCollector.on('collect', async (m) => {
                     const parts = m.content.split('/').map(s => s.trim());
-                    if (parts.length !== 2) return;
-                    const [outName, inName] = parts;
+                    if (parts.length !== 2) {
+                        await m.reply('❌ Formato inválido. Use: `SAINDO / ENTRANDO`').catch(() => null);
+                        return;
+                    }
 
-                    const outIdx  = field.findIndex(p => p.name.toLowerCase() === outName.toLowerCase());
-                    const inPlayer = bench.find(p => p.name.toLowerCase() === inName.toLowerCase());
+                    const [outName, inName] = parts;
+                    const outIdx   = field.findIndex(p => readName(p).toLowerCase() === outName.toLowerCase());
+                    const inPlayer = bench.find(p => readName(p).toLowerCase() === inName.toLowerCase());
 
                     if (outIdx === -1 || !inPlayer) {
-                        m.reply('❌ Jogadores não encontrados. Substituição cancelada.').catch(() => null);
+                        await m.reply('❌ Nomes não encontrados. Confira a lista e tente novamente.').catch(() => null);
                         return;
                     }
 
                     const outPlayer = field[outIdx];
-                    eventsLog.push(`🔄 **45+1'** — **${team.name}**: ${inPlayer.name} entra no lugar de ${outPlayer.name} ↩️`);
-                    field.splice(outIdx, 1, { ...inPlayer, isStarter: false });
+                    eventsLog.push(`🔄 **45+1'** — **${team.name}**: ${readName(inPlayer)} entra no lugar de ${readName(outPlayer)} ↩️`);
+                    field.splice(outIdx, 1, { ...inPlayer, isStarter: false } as any);
                     bench.splice(bench.indexOf(inPlayer), 1);
 
                     if (isHome) homeSubsUsed++; else awaySubsUsed++;
                     decided.add(team.name);
-                    m.reply(`✅ Substituição confirmada: 🔄 **${inPlayer.name}** ← **${outPlayer.name}**`).catch(() => null);
+
+                    await m.reply(`✅ ${readName(inPlayer)} 🔄 ${readName(outPlayer)} — confirmado!`).catch(() => null);
+                    await m.delete().catch(() => null);
+                    if (decided.size >= 2) collector.stop();
                 });
 
-                if (decided.size >= 2) collector.stop();
+                msgCollector.on('end', async () => {
+                    await subPromptMsg.delete().catch(() => null);
+                });
             });
 
             collector.on('end', () => resolve());
@@ -557,6 +622,7 @@ async function askHalftimeSubstitutions(
     await halftimeMsg.delete().catch(() => null);
     return { homeSubsUsed, awaySubsUsed };
 }
+
 
 function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));

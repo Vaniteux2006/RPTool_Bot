@@ -42,6 +42,7 @@ export default {
     async execute(message: Message, args: string[]) {
         const action = args[0]?.toLowerCase();
 
+        // Sem argumentos OU chamado pelo alias raiz (rp!fb, rp!fut, rp!football sem subcomando)
         if (!action) return sendHelp(message);
 
         try {
@@ -58,7 +59,11 @@ export default {
                 case 'add':
                     // rp!futebol add "Nome" [OVR] [emoji] -ai
                     if (args.includes('-ai')) return await handleAISquad(message, args, message.author.id);
-                    return message.reply('⚠️ **Uso:** `rp!futebol add "Nome" [OVR] [emoji] -ai`\nPara adicionar jogadores manualmente: `rp!futebol addplayer`');
+                    return message.reply(
+                        '⚠️ A flag `-ai` é necessária para gerar um elenco automaticamente.\n' +
+                        'Use `rp!futebol add "Nome" -ai` para gerar 22 jogadores via IA.\n' +
+                        '> Você quis dizer **`rp!futebol create`** (para criar um clube do zero)?',
+                    );
 
                 case 'addplayer':
                     return await handleAddPlayer(message, args, message.author.id);

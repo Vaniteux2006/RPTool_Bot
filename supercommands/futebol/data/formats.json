@@ -1,0 +1,383 @@
+{
+  "BR": {
+    "name": "Série A (Brasil)",
+    "flag": "🇧🇷",
+    "description": "Pontos corridos. Todos contra todos (ida e volta). 38 rodadas.",
+    "minTeams": 20,
+    "maxTeams": 20,
+    "phases": [
+      { "name": "Pontos Corridos", "type": "league", "homeAndAway": true }
+    ],
+    "relegation": 4,
+    "relegationPlayoff": 0
+  },
+  "EU": {
+    "name": "Liga Europeia Clássica",
+    "flag": "🇪🇺",
+    "description": "Modelo Bundesliga/Ligue 1. 38 rodadas. Dois descem direto, um joga playoff.",
+    "minTeams": 20,
+    "maxTeams": 20,
+    "phases": [
+      { "name": "Pontos Corridos", "type": "league", "homeAndAway": true }
+    ],
+    "relegation": 2,
+    "relegationPlayoff": 1
+  },
+  "ARG": {
+    "name": "Liga Argentina",
+    "flag": "🇦🇷",
+    "description": "Copa da Liga (grupos) + mata-mata + Liga Profissional (turno único). Rebaixamento por média histórica.",
+    "minTeams": 28,
+    "maxTeams": 30,
+    "phases": [
+      {
+        "name": "Copa da Liga — Grupos",
+        "type": "groups",
+        "groupsCount": 2,
+        "homeAndAway": false,
+        "advancingPerGroup": 4
+      },
+      {
+        "name": "Copa da Liga — Mata-Mata",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      },
+      {
+        "name": "Liga Profissional (Turno Único)",
+        "type": "league",
+        "homeAndAway": false
+      }
+    ],
+    "relegation": 3,
+    "relegationByAverage": true
+  },
+  "MEX": {
+    "name": "Liga MX",
+    "flag": "🇲🇽",
+    "description": "Apertura/Clausura. Turno único (17 rodadas). Top 6 direto pra Liguilla. 7–10 jogam Play-In.",
+    "minTeams": 18,
+    "maxTeams": 18,
+    "phases": [
+      {
+        "name": "Fase Regular",
+        "type": "league",
+        "homeAndAway": false,
+        "advancingToPlayoffs": 6,
+        "advancingToPlayIn": 4
+      },
+      { "name": "Play-In", "type": "knockout", "homeAndAway": false },
+      { "name": "Liguilla (Mata-Mata)", "type": "knockout", "homeAndAway": true }
+    ],
+    "relegation": 0
+  },
+  "USA": {
+    "name": "MLS",
+    "flag": "🇺🇸",
+    "description": "Conferências Leste/Oeste. Temporada regular (34 jogos). Top 9 de cada conferência vão aos Playoffs.",
+    "minTeams": 28,
+    "maxTeams": 32,
+    "phases": [
+      {
+        "name": "Conferências",
+        "type": "groups",
+        "groupsCount": 2,
+        "homeAndAway": true,
+        "advancingPerGroup": 9
+      },
+      {
+        "name": "Playoffs",
+        "type": "knockout",
+        "homeAndAway": true,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "BEL": {
+    "name": "Liga Belga",
+    "flag": "🇧🇪",
+    "description": "Fase regular (30 rodadas). Pontos cortados pela metade. Top 6 jogam Championship Playoff. Última fase decide campeão.",
+    "minTeams": 16,
+    "maxTeams": 16,
+    "phases": [
+      {
+        "name": "Fase Regular",
+        "type": "league",
+        "homeAndAway": true
+      },
+      {
+        "name": "Championship Playoff (Pontos Cortados)",
+        "type": "league",
+        "homeAndAway": true,
+        "pointsHalved": true,
+        "teamsInvolved": 6
+      },
+      {
+        "name": "Relegation Playoff",
+        "type": "knockout",
+        "homeAndAway": false,
+        "teamsInvolved": 4
+      }
+    ],
+    "relegation": 1
+  },
+  "COPA": {
+    "name": "Copa Eliminatória",
+    "flag": "🏆",
+    "description": "Mata-mata puro. Configurável para jogo único ou ida e volta. Empate: pênaltis.",
+    "minTeams": 4,
+    "maxTeams": 128,
+    "phases": [
+      {
+        "name": "Mata-Mata",
+        "type": "knockout",
+        "homeAndAway": true,
+        "awayGoalsRule": false,
+        "neutralFinal": false
+      }
+    ],
+    "relegation": 0
+  },
+  "CONMEBOL": {
+    "name": "Copa Libertadores",
+    "flag": "🌎",
+    "description": "8 grupos de 4 (ida/volta). Top 2 de cada grupo avançam. 3º cai pra Sul-Americana. Final em campo neutro.",
+    "minTeams": 32,
+    "maxTeams": 32,
+    "phases": [
+      {
+        "name": "Fase de Grupos",
+        "type": "groups",
+        "groupsCount": 8,
+        "teamsPerGroup": 4,
+        "homeAndAway": true,
+        "advancingPerGroup": 2,
+        "thirdPlaceFallback": "CONMEBOL_SUL"
+      },
+      {
+        "name": "Mata-Mata",
+        "type": "knockout",
+        "homeAndAway": true,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "UEFA_OLD": {
+    "name": "Champions League (Clássica)",
+    "flag": "🇪🇺",
+    "description": "32 times. 8 grupos de 4 (ida/volta). Top 2 avançam. 3º cai pra Europa League. Mata-mata ida/volta. Final única.",
+    "minTeams": 32,
+    "maxTeams": 32,
+    "phases": [
+      {
+        "name": "Fase de Grupos",
+        "type": "groups",
+        "groupsCount": 8,
+        "teamsPerGroup": 4,
+        "homeAndAway": true,
+        "advancingPerGroup": 2,
+        "thirdPlaceFallback": "UEFA_EL"
+      },
+      {
+        "name": "Mata-Mata",
+        "type": "knockout",
+        "homeAndAway": true,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "UEFA_NEW": {
+    "name": "Champions League (Sistema Suíço)",
+    "flag": "🇪🇺",
+    "description": "36 times em tabela única. Cada time joga 8 partidas (sorteadas). Top 8 vão direto pras Oitavas. 9–24 jogam Playoff. Resto eliminado.",
+    "minTeams": 36,
+    "maxTeams": 36,
+    "phases": [
+      {
+        "name": "Fase de Liga (Swiss System)",
+        "type": "swiss",
+        "gamesPerTeam": 8,
+        "directAdvancing": 8,
+        "playoffSpots": 16
+      },
+      {
+        "name": "Playoff de Acesso (Oitavas)",
+        "type": "knockout",
+        "homeAndAway": true
+      },
+      {
+        "name": "Mata-Mata",
+        "type": "knockout",
+        "homeAndAway": true,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "INTER_OLD": {
+    "name": "Copa Intercontinental (Pré-2004)",
+    "flag": "🌍",
+    "description": "Campeão UEFA x Campeão CONMEBOL. Jogo único no Japão (ou ida/volta na era clássica).",
+    "minTeams": 2,
+    "maxTeams": 2,
+    "phases": [
+      {
+        "name": "Final Única",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "CWC_OLD": {
+    "name": "Mundial de Clubes FIFA (7 times)",
+    "flag": "🌐",
+    "description": "Campeões de cada continente. Ásia/África/Concacaf/Oceania fazem mata-mata. UEFA e CONMEBOL entram nas Semifinais.",
+    "minTeams": 7,
+    "maxTeams": 7,
+    "phases": [
+      {
+        "name": "Fase de Acesso",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true,
+        "teamsInvolved": 4
+      },
+      {
+        "name": "Quartas de Final",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      },
+      {
+        "name": "Semifinais",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      },
+      {
+        "name": "Final",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "INTER_NEW": {
+    "name": "Copa Intercontinental FIFA (Atual)",
+    "flag": "🌍",
+    "description": "Campeão UEFA garantido na final. Outros continentes fazem mata-mata para decidir o desafiante.",
+    "minTeams": 6,
+    "maxTeams": 8,
+    "phases": [
+      {
+        "name": "Repescagem Intercontinental",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      },
+      {
+        "name": "Final",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "CWC_NEW": {
+    "name": "Super Mundial de Clubes FIFA (32 times)",
+    "flag": "🌐",
+    "description": "A cada 4 anos. 8 grupos de 4. Top 2 de cada grupo avançam. Mata-mata até a final.",
+    "minTeams": 32,
+    "maxTeams": 32,
+    "phases": [
+      {
+        "name": "Fase de Grupos",
+        "type": "groups",
+        "groupsCount": 8,
+        "teamsPerGroup": 4,
+        "homeAndAway": false,
+        "advancingPerGroup": 2
+      },
+      {
+        "name": "Mata-Mata",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "WC_32": {
+    "name": "Copa do Mundo (Modelo 1998–2022)",
+    "flag": "🏆",
+    "description": "32 seleções. 8 grupos de 4. Top 2 avançam. Mata-mata jogo único até a final.",
+    "minTeams": 32,
+    "maxTeams": 32,
+    "phases": [
+      {
+        "name": "Fase de Grupos",
+        "type": "groups",
+        "groupsCount": 8,
+        "teamsPerGroup": 4,
+        "homeAndAway": false,
+        "advancingPerGroup": 2
+      },
+      {
+        "name": "Mata-Mata",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "WC_48": {
+    "name": "Copa do Mundo (Modelo 2026+)",
+    "flag": "🏆",
+    "description": "48 seleções. 12 grupos de 4. Top 2 + 8 melhores 3ºs avançam (32 times nas Oitavas).",
+    "minTeams": 48,
+    "maxTeams": 48,
+    "phases": [
+      {
+        "name": "Fase de Grupos",
+        "type": "groups",
+        "groupsCount": 12,
+        "teamsPerGroup": 4,
+        "homeAndAway": false,
+        "advancingPerGroup": 2,
+        "bestThirdPlaces": 8
+      },
+      {
+        "name": "Mata-Mata",
+        "type": "knockout",
+        "homeAndAway": false,
+        "neutralFinal": true
+      }
+    ],
+    "relegation": 0
+  },
+  "QUALIFIERS_CONMEBOL": {
+    "name": "Eliminatórias CONMEBOL",
+    "flag": "🌎",
+    "description": "10 seleções em pontos corridos (ida/volta, 18 rodadas). Top 6 classificadas, 7ª joga repescagem.",
+    "minTeams": 10,
+    "maxTeams": 10,
+    "phases": [
+      {
+        "name": "Pontos Corridos",
+        "type": "league",
+        "homeAndAway": true
+      }
+    ],
+    "relegation": 0,
+    "qualifiedSpots": 6,
+    "playoffSpot": 1
+  }
+}

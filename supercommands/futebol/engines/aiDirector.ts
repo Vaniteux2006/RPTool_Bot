@@ -59,21 +59,30 @@ RETORNE APENAS um JSON com este formato exato (sem markdown, sem texto extra):
   "formation": "4-3-3",
   "tactic": "POSSE",
   "starters": [
-    { "name": "Nome", "position": "GK", "age": 28, "number": 1, "overall": ${targetOvr}, "archetype": "Muralha" }
+    { "name": "Nome Sobrenome", "position": "GK", "age": 28, "number": 1, "overall": ${targetOvr}, "archetype": "Muralha" }
   ],
   "bench": [
-    { "name": "Nome", "position": "GK", "age": 22, "number": 12, "overall": ${targetOvr - 5}, "archetype": "Reflexo" }
+    { "name": "Nome Sobrenome", "position": "GK", "age": 22, "number": 12, "overall": ${targetOvr - 5}, "archetype": "Reflexo" }
   ]
 }
 
-REGRAS OBRIGATÓRIAS:
-1. "formation": escolha UMA entre ${formations.slice(0, 10).join(', ')} e mais.
+REGRAS OBRIGATÓRIAS — LEIA COM ATENÇÃO:
+1. "formation": escolha UMA entre ${formations.slice(0, 10).join(', ')} etc. A formação determina o número de jogadores em cada posição.
 2. "tactic": escolha UMA entre ${VALID_TACTICS.join(', ')}.
-3. "starters": EXATAMENTE 11 jogadores respeitando a formação escolhida (1 GK + linha defensiva + meio + ataque).
-4. "bench": EXATAMENTE 11 reservas (pelo menos 1 GK reserva, 2 DEF, 3 MID, 2 ATK, o restante livre).
+3. "starters": EXATAMENTE 11 jogadores. A distribuição DEVE respeitar a formação:
+   - Exemplo 4-3-3: 1 GK + 4 DEF + 3 MID + 3 ATK = 11 total.
+   - Exemplo 4-4-2: 1 GK + 4 DEF + 4 MID + 2 ATK = 11 total.
+   - Exemplo 5-3-2: 1 GK + 5 DEF + 3 MID + 2 ATK = 11 total.
+   O número antes do traço = DEF, número do meio = MID, número depois = ATK.
+4. "bench": EXATAMENTE 11 reservas (pelo menos 1 GK, 2 DEF, 3 MID, 2 ATK).
 5. "archetype": use APENAS: ${VALID_ARCHETYPES.join(', ')}.
-6. Nomes coerentes com o clube "${teamName}" (se for "Flamengo", use nomes brasileiros, se for "Real Madrid", espanhóis, etc).
-7. JSON PURO — nenhum texto antes ou depois.
+6. ⚠️ NOMES: Use NOMES REAIS de jogadores coerentes com o clube "${teamName}".
+   - "Grêmio": Danrlei, Ronaldinho, Jardel, Paulo Nunes, etc.
+   - "Real Madrid": Casillas, Zidane, Ronaldo, Raúl, Roberto Carlos, etc.
+   - "Manchester United": Schmeichel, Beckham, Keane, Cantona, etc.
+   - NUNCA use nomes genéricos como "Real GK1", "Jogador DEF2", "${teamName} ATK3", etc.
+   - Se não souber jogadores históricos, invente nomes completos verossímeis para a região do clube.
+7. JSON PURO — zero texto antes ou depois, zero markdown, zero backticks.
 `;
 
     try {
@@ -92,7 +101,7 @@ REGRAS OBRIGATÓRIAS:
         const tactic    = VALID_TACTICS.includes(data.tactic) ? data.tactic : 'BALANCEADO';
 
         const mapPlayer = (p: any, isStarter: boolean, idx: number): IPlayer => ({
-            name:      p.name     ?? `Jogador ${idx + 1}`,
+            name:      (typeof p.name === 'string' && p.name.trim().length > 1 && !p.name.match(/^[A-Za-z]+(GK|DEF|MID|ATK|FW)\d*$/)) ? p.name.trim() : `Jogador ${idx + 1}`,
             position:  (['GK', 'DEF', 'MID', 'ATK'].includes(p.position) ? p.position : 'MID') as IPlayer['position'],
             age:       p.age      ?? 22,
             number:    p.number   ?? (isStarter ? idx + 1 : idx + 12),
@@ -104,9 +113,37 @@ REGRAS OBRIGATÓRIAS:
             isStarter,
         });
 
+        let starters: IPlayer[] = data.starters.map((p: any, i: number) => mapPlayer(p, true, i));
+
+        // ─── Validação pós-parse: garante que a formação bate com as posições ──
+        // Se a IA retornou distribuição errada (só MIDs, zero ATKs, etc.), corrige.
+        const { parseFormation } = await import('../engines/matchEngine');
+        const slots   = parseFormation(formation);
+        const counts  = { GK: 0, DEF: 0, MID: 0, ATK: 0 };
+        starters.forEach(p => counts[p.position]++);
+
+        const posOrder: IPlayer['position'][] = ['GK', 'DEF', 'MID', 'ATK'];
+        for (const pos of posOrder) {
+            const needed = slots[pos] ?? 0;
+            const have   = counts[pos];
+            if (have > needed) {
+                // Converte excesso para a posição mais carente
+                let excess = have - needed;
+                for (let i = starters.length - 1; i >= 0 && excess > 0; i--) {
+                    if (starters[i].position !== pos) continue;
+                    const needy = posOrder.find(p2 => counts[p2] < (slots[p2] ?? 0));
+                    if (!needy) break;
+                    starters[i] = { ...starters[i], position: needy };
+                    counts[pos]--;
+                    counts[needy]++;
+                    excess--;
+                }
+            }
+        }
+
         const players: IPlayer[] = [
-            ...data.starters.map((p: any, i: number) => mapPlayer(p, true,  i)),
-            ...data.bench.map(   (p: any, i: number) => mapPlayer(p, false, i)),
+            ...starters,
+            ...data.bench.map((p: any, i: number) => mapPlayer(p, false, i)),
         ];
 
         return { players, formation, tactic };
@@ -131,6 +168,7 @@ export async function generateTeamViaAI(
 export async function suggestTacticsViaAI(
     guildId: string,
     team: ITeam,
+    onRetry?: (attempt: number) => void,  // callback para avisar o usuário sobre retry
 ): Promise<{ formation: string; tactic: string; reason: string } | null> {
     const aiConfig   = await getGuildAIConfig(guildId);
     const formations = loadFormations();
@@ -140,10 +178,7 @@ export async function suggestTacticsViaAI(
         .join(', ');
 
     if (!aiConfig) {
-        // Fallback sem IA: escolha baseada em estatísticas simples do elenco
-        const atkCount = team.players.filter(p => p.position === 'ATK').length;
-        const defCount = team.players.filter(p => p.position === 'DEF').length;
-        const formation = atkCount >= 3 && defCount >= 4 ? '4-3-3' : defCount >= 5 ? '5-3-2' : '4-4-2';
+        const formation = formations[Math.floor(Math.random() * Math.min(6, formations.length))] ?? '4-3-3';
         const tactic    = VALID_TACTICS[Math.floor(Math.random() * VALID_TACTICS.length)];
         return { formation, tactic, reason: 'Sugestão automática baseada no perfil do elenco (sem IA configurada).' };
     }
@@ -166,22 +201,37 @@ RETORNE APENAS um JSON com este formato exato (sem markdown):
 - "reason": explique POR QUÊ essa combinação faz sentido para este elenco.
 `;
 
-    try {
-        let raw = await chamarIA(prompt, aiConfig);
-        raw = raw.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const match = raw.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error('JSON não encontrado');
+    // BUG FIX: adiciona retry com até 3 tentativas em caso de 503 (seguindo padrão resenha.ts)
+    let attempt = 1;
+    while (attempt <= 3) {
+        try {
+            let raw = await chamarIA(prompt, aiConfig);
+            raw = raw.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const match = raw.match(/\{[\s\S]*\}/);
+            if (!match) throw new Error('JSON não encontrado');
 
-        const data = JSON.parse(match[0]);
-        return {
-            formation: formations.includes(data.formation) ? data.formation : '4-3-3',
-            tactic:    VALID_TACTICS.includes(data.tactic) ? data.tactic : 'BALANCEADO',
-            reason:    data.reason ?? 'Sem justificativa disponível.',
-        };
-    } catch (err) {
-        console.error('❌ [AI Director] Falha ao sugerir táticas:', err);
-        return null;
+            const data = JSON.parse(match[0]);
+            return {
+                formation: formations.includes(data.formation) ? data.formation : '4-3-3',
+                tactic:    VALID_TACTICS.includes(data.tactic) ? data.tactic : 'BALANCEADO',
+                reason:    data.reason ?? 'Sem justificativa disponível.',
+            };
+        } catch (err: any) {
+            const msg = err?.message ?? String(err);
+            const is503 = msg.includes('503') || msg.includes('overloaded') || msg.includes('Overloaded');
+
+            if (is503 && attempt < 3) {
+                console.warn(`⚠️ [AI Director] 503 na sugestão tática, tentativa ${attempt}/3. Aguardando 5s...`);
+                onRetry?.(attempt);          // avisa o handler para editar a mensagem de loading
+                await new Promise(r => setTimeout(r, 5000));
+                attempt++;
+            } else {
+                console.error('❌ [AI Director] Falha definitiva ao sugerir táticas:', err);
+                return null;
+            }
+        }
     }
+    return null;
 }
 
 // ─── Fallback: elenco genérico quando a IA falha ─────────────────────────────

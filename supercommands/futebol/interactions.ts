@@ -201,7 +201,7 @@ function buildSummaryEmbed(report: any, expirationTs: number): EmbedBuilder {
             { name: 'Faltas',            value: `**${s.foulsHome}** ↔ **${s.foulsAway}**`,                                                                            inline: false },
             { name: 'Precisão de Passes',value: `**${s.passAccuracyHome}%** ↔ **${s.passAccuracyAway}%**`,                                                            inline: false },
         )
-        .setFooter({ text: `⚠️ Análise expira <t:${expirationTs}:R> • rp!futebol export ${report._id}` });
+        .setFooter({ text: `⚠️ Análise expira em 48h (<t:${expirationTs}:R>) • rp!futebol export ${report._id}` });
 }
 
 function buildDetailButtons(reportId: string): ActionRowBuilder<ButtonBuilder> {

@@ -142,12 +142,17 @@ export async function handleAddPlayer(message: Message, args: string[], userId: 
     const teamName   = cleanArgs[0];
     const playerName = cleanArgs[1];
     const position   = cleanArgs[2]?.toUpperCase() as 'GK' | 'DEF' | 'MID' | 'ATK';
-    const overall    = parseInt(cleanArgs[3], 10);
     const archetype  = cleanArgs[4] ?? 'Balanceado';
     const isStarter  = cleanArgs[5]?.toLowerCase() !== 'reserva';
 
     if (!VALID_POSITIONS.includes(position)) return message.reply(`❌ Posição inválida: **${position}**. Use GK, DEF, MID ou ATK.`);
-    if (isNaN(overall) || overall < 1 || overall > 100) return message.reply('❌ Overall deve ser entre 1 e 100.');
+
+    // BUG FIX: parseInt("99.237...") silenciosamente retorna 99 e passa na validação.
+    // Rejeitamos qualquer valor com ponto decimal explicitamente.
+    const overallRaw = cleanArgs[3] ?? '';
+    if (overallRaw.includes('.')) return message.reply('❌ Overall deve ser um número inteiro (ex: `85`, não `99.5`).');
+    const overall = parseInt(overallRaw, 10);
+    if (isNaN(overall) || overall < 1 || overall > 100) return message.reply('❌ Overall deve ser um número inteiro entre 1 e 100.');
 
     const team = await TeamModel.findOne({ adminId: userId, name: new RegExp(`^${escapeRegex(teamName)}$`, 'i'), guildOriginId: message.guild!.id });
     if (!team) return message.reply(`❌ Você não é o dono de **${teamName}** neste servidor.`);
@@ -209,9 +214,20 @@ export async function handleSuggestTactics(message: Message, args: string[], use
     if (!team) return message.reply(`❌ Você não é o dono de **${cleanArgs[0]}** neste servidor.`);
 
     const waitMsg = await message.reply('🧠 Analisando o elenco via IA...');
-    const suggestion = await suggestTacticsViaAI(message.guild!.id, team);
 
-    if (!suggestion) return waitMsg.edit('❌ Não foi possível gerar a sugestão tática. Tente novamente.');
+    // BUG FIX: passa callback onRetry para avisar o usuário sobre erros 503
+    // ao invés de silenciosamente retornar "Tente novamente" sem contexto
+    const onRetry = (attempt: number) =>
+        waitMsg.edit(`🔥 **Erro 503 — Servidores da IA sobrecarregados.** Tentando novamente... (${attempt}/3)`).catch(() => null);
+
+    const suggestion = await suggestTacticsViaAI(message.guild!.id, team, onRetry);
+
+    if (!suggestion) {
+        return waitMsg.edit(
+            '❌ Não foi possível gerar a sugestão tática após 3 tentativas.\n' +
+            '-# Os servidores da IA estão sobrecarregados (503). Tente novamente em alguns minutos.',
+        );
+    }
 
     const embed = new EmbedBuilder()
         .setColor('Purple')
@@ -219,9 +235,9 @@ export async function handleSuggestTactics(message: Message, args: string[], use
         .addFields(
             { name: '🛡️ Formação Sugerida', value: suggestion.formation, inline: true },
             { name: '⚔️ Estilo Sugerido',   value: suggestion.tactic,    inline: true },
-            { name: '💡 Análise da IA',       value: suggestion.reason,    inline: false },
+            { name: '💡 Análise da IA',      value: suggestion.reason,    inline: false },
         )
-        .setFooter({ text: 'Use rp!futebol tatic para aplicar esta sugestão' });
+        .setFooter({ text: 'Use rp!futebol tatic para aplicar esta sugestão manualmente' });
 
     const applyRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -255,8 +271,7 @@ export async function handleSetEmoji(message: Message, args: string[], userId: s
     return message.reply(`${emoji} Emoji do **${team.name}** atualizado para **${emoji}**!`);
 }
 
-// ─── rp!futebol list userlist / serverlist ────────────────────────────────────
-// Sugestão 1: lista de times com pesquisa
+// ─── rp!futebol list userlist [@usuario] / serverlist ─────────────────────────
 export async function handleList(message: Message, args: string[]) {
     const sub = args[1]?.toLowerCase();
 
@@ -264,17 +279,24 @@ export async function handleList(message: Message, args: string[]) {
     let title: string;
 
     if (sub === 'userlist') {
-        teams = await TeamModel.find({ adminId: message.author.id });
-        title = `⚽ Times de <@${message.author.id}>`;
+        // Permite consultar times de outro usuário: rp!futebol list userlist @alguem
+        const targetMention = args[2];
+        const targetId      = targetMention
+            ? targetMention.replace(/[<@!>]/g, '')
+            : message.author.id;
+
+        teams = await TeamModel.find({ adminId: targetId });
+        title = targetId === message.author.id
+            ? `⚽ Seus Times`
+            : `⚽ Times de <@${targetId}>`;
     } else {
-        // serverlist (padrão)
         teams = await TeamModel.find({ guildOriginId: message.guild!.id });
         title = `⚽ Times do Servidor — ${message.guild!.name}`;
     }
 
     if (teams.length === 0) {
         return message.reply(sub === 'userlist'
-            ? '📭 Você não tem nenhum time registrado.'
+            ? '📭 Nenhum time registrado para este usuário.'
             : '📭 Nenhum time registrado neste servidor ainda.');
     }
 

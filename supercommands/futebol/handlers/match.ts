@@ -22,13 +22,14 @@ export default async function handleMatch(message: Message, args: string[]) {
 
     const isNeutral = flags.includes('-n');
     const isQuick   = flags.includes('-r');
-    const irlIndex  = flags.indexOf('-irl');
-    const isIRL     = irlIndex !== -1;
+    const isIRL     = flags.includes('-irl');
 
-    // Tempo por minuto em modo IRL (10–60s, padrão 15s)
+    // BUG FIX: "100" não começa com "-" então caia fora do array flags.
+    // Agora buscamos o número diretamente no args original, logo após "-irl".
     let secondsPerMinute = 15;
     if (isIRL) {
-        const rawSec = parseInt(flags[irlIndex + 1] ?? '', 10);
+        const irlArgIdx = args.indexOf('-irl');
+        const rawSec    = parseInt(args[irlArgIdx + 1] ?? '', 10);
         if (!isNaN(rawSec)) secondsPerMinute = Math.min(60, Math.max(10, rawSec));
     }
 
@@ -72,11 +73,13 @@ export default async function handleMatch(message: Message, args: string[]) {
     const awayTactic = (awayTeam.defaultTactic  ?? 'BALANCEADO') as TacticStyle;
 
     // Modo IRL: passa as opções para o engine
+    const cancelToken = { cancelled: false };
     const irlOptions: IrlOptions | undefined = isIRL ? {
         message,
         secondsPerMinute,
         homeAdminId: homeTeam.adminId ?? message.author.id,
         awayAdminId: awayTeam.adminId ?? message.author.id,
+        cancelToken,
     } : undefined;
 
     // ─── Simulação ────────────────────────────────────────────────────────────
@@ -101,6 +104,8 @@ export default async function handleMatch(message: Message, args: string[]) {
     const homeEmoji = homeTeam.emoji ?? '⚽';
     const awayEmoji = awayTeam.emoji ?? '⚽';
 
+    const expiration = buildExpirationFooter(result.reportId);
+
     const embed = new EmbedBuilder()
         .setColor(resultColor)
         .setTitle('🏁 Fim de Jogo!')
@@ -117,7 +122,7 @@ export default async function handleMatch(message: Message, args: string[]) {
             { name: 'Escanteios',        value: `**${result.stats.cornersHome}** ↔ **${result.stats.cornersAway}**`,                           inline: true  },
             { name: 'Cartões 🟨/🟥',     value: `**${result.stats.yellowCardsHome}/${result.stats.redCardsHome}** ↔ **${result.stats.yellowCardsAway}/${result.stats.redCardsAway}**`, inline: true },
         )
-        .setFooter({ text: buildExpirationFooter(result.reportId) });
+        .setFooter({ text: expiration.footer });
 
     if (result.topPerformerHome || result.topPerformerAway) {
         embed.addFields({
@@ -140,9 +145,9 @@ export default async function handleMatch(message: Message, args: string[]) {
             .setColor(resultColor)
             .setTitle('⚡ Resultado Direto')
             .setDescription(`## ${homeEmoji} ${homeTeam.name}  **${result.homeScore}**  ×  **${result.awayScore}**  ${awayTeam.name} ${awayEmoji}\n\n📊 Posse: **${result.finalPossessionHome}%** ↔ **${result.finalPossessionAway}%** | Chutes: **${result.stats.shotsHome}** ↔ **${result.stats.shotsAway}**`)
-            .setFooter({ text: buildExpirationFooter(result.reportId) });
+            .setFooter({ text: expiration.footer });
         await waitMsg.delete().catch(() => null);
-        return message.reply({ embeds: [q], components: [row] });
+        return message.reply({ content: expiration.content, embeds: [q], components: [row] });
     }
 
     // No modo IRL, o embed ao vivo já está no canal — só limpamos a mensagem de espera
@@ -152,7 +157,7 @@ export default async function handleMatch(message: Message, args: string[]) {
     }
 
     await waitMsg.delete().catch(() => null);
-    return message.reply({ embeds: [embed], components: [row] });
+    return message.reply({ content: expiration.content, embeds: [embed], components: [row] });
 }
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
