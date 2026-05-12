@@ -25,6 +25,7 @@ import {
 }                                           from './handlers/league';
 import { handlePunish, handleBan, handlePostpone } from './handlers/admin';
 import { handleHistory }                    from './handlers/history';
+import { handlePlayerRouter }               from './handlers/player';
 
 export default {
     name:        'futebol',
@@ -67,6 +68,9 @@ export default {
 
                 case 'addplayer':
                     return await handleAddPlayer(message, args, message.author.id);
+
+                case 'player':
+                    return await handlePlayerRouter(message, args, message.author.id);
 
                 case 'delete':
                     return await handleDeleteTeam(message, args, message.author.id);
@@ -168,12 +172,20 @@ function sendHelp(message: Message) {
         `**🏗️ Gestão de Clube**\n` +
         `\`rp!futebol create "Nome" [emoji]\` — funda um clube\n` +
         `\`rp!futebol add "Nome" [OVR] [emoji] -ai\` — gera 22 jogadores via IA 🤖\n` +
-        `\`rp!futebol addplayer "Time" "Jogador" POS OVR [arq] [reserva]\` — contrata\n` +
+        `\`rp!futebol addplayer "Time" "Jogador" POS OVR [arq] [reserva]\` — adição rápida\n` +
         `\`rp!futebol squad "Time"\` — exibe o elenco\n` +
         `\`rp!futebol tatic "Time" FORMAÇÃO ESTILO\` — define a tática\n` +
         `\`rp!futebol suggest "Time"\` — IA sugere a melhor tática 🧠\n` +
         `\`rp!futebol emoji "Time" 🎯\` — define o emoji do clube\n` +
         `\`rp!futebol delete "Time"\` — dissolve o clube\n\n` +
+
+        `**🎴 Jogadores Customizados**\n` +
+        `\`rp!futebol player create "Time" "Nome" POS [-pac N] [-sho N] ...\` — cria com stats FIFA\n` +
+        `\`rp!futebol player view "Time" "Nome"\` — exibe o card do jogador\n` +
+        `\`rp!futebol player edit "Time" "Nome" [-stat N]\` — edita stats\n` +
+        `\`rp!futebol player remove "Time" "Nome"\` — dispensa jogador\n` +
+        `\`rp!futebol player archetypes\` — lista todos os arquétipos\n` +
+        `-# Outfield: \`-pac -sho -pas -dri -def -phy\` | GK: \`-div -ref -han -kic -spe -pos\`\n\n` +
 
         `**📋 Listagens**\n` +
         `\`rp!futebol list serverlist\` — times do servidor (com pesquisa)\n` +

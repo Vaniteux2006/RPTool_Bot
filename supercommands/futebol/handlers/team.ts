@@ -8,7 +8,7 @@ import {
     ButtonStyle,
     ComponentType,
 } from 'discord.js';
-import { TeamModel, ITeam } from '../../../tools/models/FutebolSchema';
+import { TeamModel, ITeam, VALID_ARCHETYPES } from '../../../tools/models/FutebolSchema';
 import { extractArgs } from '../../../tools/utils/textUtils';
 import { generateFullSquadViaAI, suggestTacticsViaAI } from '../engines/aiDirector';
 
@@ -135,34 +135,59 @@ export async function handleAddPlayer(message: Message, args: string[], userId: 
     const cleanArgs = extractArgs(message.content, 'addplayer');
     if (cleanArgs.length < 4) {
         return message.reply(
-            '⚠️ **Uso:** `rp!futebol addplayer "Time" "Jogador" [GK|DEF|MID|ATK] [1-100] [arquétipo] [titular|reserva]`',
+            '⚠️ **Uso rápido:** `rp!futebol addplayer "Time" "Jogador" [GK|DEF|MID|ATK] [OVR] [arquétipo] [reserva]`\n' +
+            '-# Para criar jogadores com stats customizados (PAC/SHO/etc), use `rp!futebol player create`.',
         );
     }
 
     const teamName   = cleanArgs[0];
     const playerName = cleanArgs[1];
     const position   = cleanArgs[2]?.toUpperCase() as 'GK' | 'DEF' | 'MID' | 'ATK';
-    const archetype  = cleanArgs[4] ?? 'Balanceado';
     const isStarter  = cleanArgs[5]?.toLowerCase() !== 'reserva';
 
-    if (!VALID_POSITIONS.includes(position)) return message.reply(`❌ Posição inválida: **${position}**. Use GK, DEF, MID ou ATK.`);
+    if (!VALID_POSITIONS.includes(position)) {
+        return message.reply(`❌ Posição inválida: **${position}**. Use GK, DEF, MID ou ATK.`);
+    }
 
-    // BUG FIX: parseInt("99.237...") silenciosamente retorna 99 e passa na validação.
-    // Rejeitamos qualquer valor com ponto decimal explicitamente.
+    // Valida arquétipo — agora obrigatoriamente da lista fechada
+    const archetypeRaw = cleanArgs[4];
+    const archetype    = archetypeRaw ?? (position === 'GK' ? 'Muralha' : 'Balanceado');
+
+    if (archetypeRaw && !(VALID_ARCHETYPES as readonly string[]).includes(archetypeRaw)) {
+        return message.reply(
+            `❌ Arquétipo **${archetypeRaw}** não reconhecido.\n` +
+            `Use \`rp!futebol player archetypes\` para ver a lista completa.\n` +
+            `Arquétipos válidos: \`${VALID_ARCHETYPES.join('`, `')}\``,
+        );
+    }
+
+    // Valida OVR (rejeita floats explicitamente)
     const overallRaw = cleanArgs[3] ?? '';
-    if (overallRaw.includes('.')) return message.reply('❌ Overall deve ser um número inteiro (ex: `85`, não `99.5`).');
+    if (overallRaw.includes('.')) {
+        return message.reply('❌ Overall deve ser um número inteiro (ex: `85`, não `99.5`).');
+    }
     const overall = parseInt(overallRaw, 10);
-    if (isNaN(overall) || overall < 1 || overall > 100) return message.reply('❌ Overall deve ser um número inteiro entre 1 e 100.');
+    if (isNaN(overall) || overall < 1 || overall > 100) {
+        return message.reply('❌ Overall deve ser um número inteiro entre 1 e 100.');
+    }
 
     const team = await TeamModel.findOne({ adminId: userId, name: new RegExp(`^${escapeRegex(teamName)}$`, 'i'), guildOriginId: message.guild!.id });
     if (!team) return message.reply(`❌ Você não é o dono de **${teamName}** neste servidor.`);
     if (team.players.length >= 40) return message.reply('❌ Elenco lotado! Máximo de 40 jogadores.');
 
-    team.players.push({ name: playerName, position, age: parseInt(cleanArgs[6] ?? '22', 10) || 22, number: parseInt(cleanArgs[7] ?? '10', 10) || 10, overall, archetype, energy: 100, sharpness: 50, morale: 3, isStarter } as any);
+    team.players.push({
+        name: playerName, position, overall, archetype,
+        age:       parseInt(cleanArgs[6] ?? '22', 10) || 22,
+        number:    parseInt(cleanArgs[7] ?? '10', 10) || 10,
+        energy: 100, sharpness: 50, morale: 3, isStarter,
+    } as any);
     await team.save();
 
     const posEmoji: Record<string, string> = { GK: '🧤', DEF: '🛡️', MID: '⚙️', ATK: '⚽' };
-    return message.reply(`${posEmoji[position]} **${playerName}** (OVR:${overall} | ${position} | ${archetype} | ${isStarter ? 'titular' : '🪑 reserva'}) contratado pelo **${team.name}**!`);
+    return message.reply(
+        `${posEmoji[position]} **${playerName}** (OVR:${overall} | ${position} | ${archetype} | ${isStarter ? 'titular' : '🪑 reserva'}) contratado pelo **${team.name}**!\n` +
+        `-# Dica: use \`rp!futebol player create\` para definir PAC/SHO/DRI e outros stats individuais.`,
+    );
 }
 
 // ─── rp!futebol delete "Nome" ──────────────────────────────────────────────────

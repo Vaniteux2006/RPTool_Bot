@@ -55,7 +55,7 @@ export default {
                 try {
                     replyText = await api.chat(
                         "RPTool", 
-                        "Você é um bot assistente de RPG engraçadão da galera. Seja útil, breve e use gírias de Discord.", 
+                        "Você é um bot assistente de IA. Seja útil e breve.", 
                         text,
                         config
                     );
