@@ -1,6 +1,5 @@
 // RPTool/supercommands/logs/events/integrationLogs.ts
 // Intents necessários: GUILD_INTEGRATIONS (1<<4) + GUILD_WEBHOOKS (1<<5)
-// ⚠️ NÃO IMPLEMENTADO
 import { Integration, Client } from 'discord.js';
 
 export async function onIntegrationCreate(_integration: Integration, _client: Client) {
