@@ -72,11 +72,6 @@ EventCheckout.onMessageCreate('__system.checkout', async (message: Message) => {
     return false; // não consome — outros handlers continuam
 });
 
-// ─── FIX: export default para compatibilidade com index.ts ───────────────────
-// O index.ts faz: import runSystemChecks from './tools/command_checkout'
-// e chama: await runSystemChecks(message, client)
-// Com o EventCheckout, o processamento real já foi delegado acima.
-// Esta função mantém o contrato de retorno booleano que o index.ts espera.
 export default async function runSystemChecks(message: Message, _client: Client): Promise<boolean> {
     // O processamento agora ocorre via EventCheckout.dispatch internamente.
     // Retorna false para que o index.ts continue com o roteamento de comandos.
