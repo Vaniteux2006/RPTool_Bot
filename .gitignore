@@ -2,3 +2,4 @@ node_modules
 dist
 .env
 bin/stockfish_linux
+docs

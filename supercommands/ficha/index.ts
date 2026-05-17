@@ -1,25 +1,51 @@
 // RPTool/supercommands/ficha/index.ts
-import { Message } from "discord.js";
-import handleTemplate from "./handlers/template";
-import handleView from "./handlers/view";
-import handleStart from "./handlers/start";
+import { Message } from 'discord.js';
+import handleTemplate from './handlers/template';
+import handleView     from './handlers/view';
+import handleNew      from './handlers/new';
+import handleCheck    from './handlers/check';
+import handleShow     from './handlers/show';
+
+const HELP = `
+📋 **Sistema de Fichas — rp!ficha**
+
+\`rp!ficha template\`       → Cria/edita o modelo de ficha do servidor *(admin)*
+\`rp!ficha check #canal\`   → Define o canal de aprovação das fichas *(admin)*
+\`rp!ficha show #canal\`    → Define o canal público de exibição de resultados *(admin)*
+\`rp!ficha view\`           → Exibe o modelo atual e os canais configurados
+
+\`rp!ficha new\`            → Preenche a ficha na DM
+\`rp!ficha new +oc\`        → Preenche a ficha e cria o OC automaticamente ao ser aprovado
+`.trim();
 
 export default {
     name: 'ficha',
-    aliases: ['form'],
+    aliases: ['form', 'sheet'],
     description: 'Sistema automático de Fichas (RP)',
+
     execute: async (message: Message, args: string[]) => {
         const action = args[0]?.toLowerCase();
 
         switch (action) {
             case 'template':
-                return handleTemplate(message, args);
+                return handleTemplate(message, args.slice(1));
+
+            case 'check':
+                return handleCheck(message, args.slice(1));
+
+            case 'show':
+                return handleShow(message, args.slice(1));
+
             case 'view':
-                return handleView(message, args);
-            case 'start':
-                return handleStart(message, args);
+            case 'edit':   // alias legado
+                return handleView(message, args.slice(1));
+
+            case 'new':
+            case 'start':  // alias legado
+                return handleNew(message, args.slice(1));
+
             default:
-                return message.reply("📖 **Uso do Sistema de Fichas:**\n`rp!ficha template` - Criar o modelo do servidor\n`rp!ficha view` - Ver o modelo atual\n`rp!ficha start` - Iniciar o preenchimento na sua DM");
+                return message.reply(HELP);
         }
-    }
-}
+    },
+};

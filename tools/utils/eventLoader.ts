@@ -1,48 +1,80 @@
+// RPTool/tools/utils/eventLoader.ts
+// ─── Carregador de eventos por intent ────────────────────────────────────────
+// Lê todos os arquivos de /events/ e registra os listeners no Client.
+// Cada arquivo exporta um array de { name, once, execute }.
+//
+// IMPORTANTE sobre duplicatas:
+//   - Events.MessageCreate é registrado no index.ts para o roteamento de comandos.
+//   - Os handlers de messageEvents.ts e dmEvents.ts fazem guard (isDMBased, etc.)
+//     para não conflitar. Manter essa separação de responsabilidade.
+//   - Events.GuildMemberAdd é registrado em memberEvents.ts;
+//     o bloco manual do index.ts deve ser REMOVIDO para evitar dupla execução.
 import { Client } from 'discord.js';
-import fs from 'fs';
-import path from 'path';
+import * as path from 'path';
+import * as fs from 'fs';
 
-export default async function loadEvents(client: Client) {
-    // Caminho para a pasta onde ficam os eventos
-    const eventsPath = path.join(__dirname, '../../events'); 
-    
-    // Lê todas as pastas e arquivos dentro de events/
-    const readEvents = (dir: string) => {
-        const files = fs.readdirSync(dir);
-        let count = 0;
+// ─── Ordem de carregamento (por volume crescente de eventos) ──────────────────
+// Arquivos de maior volume ficam por último para facilitar debug dos primeiros.
+const EVENT_FILES_ORDER = [
+    'memberEvents',
+    'roleEvents',
+    'guildEvents',
+    'moderationEvents',
+    'expressionEvents',
+    'inviteEvents',
+    'integrationEvents',
+    'scheduledEventEvents',
+    'autoModerationEvents',
+    'pollEvents',
+    'reactionEvents',
+    'messageEvents',
+    'voiceEvents',
+];
 
-        for (const file of files) {
-            const filePath = path.join(dir, file);
-            const stat = fs.statSync(filePath);
+export function loadEvents(client: Client): void {
+    const eventsDir = path.join(__dirname, '../../events');
+    let totalLoaded = 0;
 
-            if (stat.isDirectory()) {
-                count += readEvents(filePath); // Se for uma subpasta, entra nela
-            } else if (file.endsWith('.ts') || file.endsWith('.js')) {
-                const imported = require(filePath).default; // Importa o que tem no arquivo
-                if (!imported) continue;
+    for (const fileName of EVENT_FILES_ORDER) {
+        const filePath = path.join(eventsDir, `${fileName}.ts`);
 
-                // Transforma em array se for um evento só, para o loop funcionar para ambos os casos
-                const events = Array.isArray(imported) ? imported : [imported];
+        // Tenta .ts primeiro; fallback .js para produção compilada
+        const resolvedPath = fs.existsSync(filePath)
+            ? filePath
+            : filePath.replace('.ts', '.js');
 
-                for (const event of events) {
-                    if (!event.name) continue;
+        if (!fs.existsSync(resolvedPath)) {
+            console.warn(`⚠️ [EventLoader] Arquivo não encontrado: ${fileName}`);
+            continue;
+        }
 
-                    // Liga o evento no client!
-                    if (event.once) {
-                        client.once(event.name, (...args) => event.execute(...args, client));
-                    } else {
-                        client.on(event.name, (...args) => event.execute(...args, client));
-                    }
-                    count++;
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const module = require(resolvedPath);
+            const handlers: any[] = Array.isArray(module.default)
+                ? module.default
+                : [module.default];
+
+            for (const handler of handlers) {
+                if (!handler?.name || typeof handler.execute !== 'function') {
+                    console.warn(`⚠️ [EventLoader] Handler inválido em ${fileName}`);
+                    continue;
                 }
+
+                if (handler.once) {
+                    client.once(handler.name, (...args) => handler.execute(...args, client));
+                } else {
+                    client.on(handler.name, (...args) => handler.execute(...args, client));
+                }
+
+                totalLoaded++;
             }
+
+            console.log(`✅ [EventLoader] ${fileName} — ${handlers.length} handler(s) registrado(s)`);
+        } catch (e) {
+            console.error(`❌ [EventLoader] Erro ao carregar ${fileName}:`, e);
         }
-            return count;
-        }
-    try {
-        const loadedCount = readEvents(eventsPath);
-        console.log(`📡 [EVENTOS] ${loadedCount} ouvintes conectados à Matrix com sucesso!`);
-    } catch (error) {
-        console.error("❌ [EVENTOS] Erro ao carregar a pasta de eventos:", error);
     }
+
+    console.log(`🎯 [EventLoader] Total: ${totalLoaded} listener(s) registrado(s).`);
 }

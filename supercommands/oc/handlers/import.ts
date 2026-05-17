@@ -11,6 +11,33 @@ export default async function handleImport(message: Message, args: string[], use
         const res = await axios.get(attachment.url);
         const data = res.data;
 
+        // --- Normalização de formato Tupperbox ---
+        // O Tupperbox exporta { tuppers: [...], groups: [...] }
+        // O RPTool espera { OCs: [...] }
+        if (data.tuppers && Array.isArray(data.tuppers)) {
+            // Monta mapa group_id → nome do grupo
+            const groupMap: Record<number, string> = {};
+            if (Array.isArray(data.groups)) {
+                for (const g of data.groups) {
+                    if (g.id != null && g.name) groupMap[g.id] = g.name;
+                }
+            }
+
+            data.OCs = data.tuppers.map((t: any) => ({
+                name:       t.name,
+                avatar_url: t.avatar_url || "",
+                brackets:   Array.isArray(t.brackets) ? t.brackets : ["", ""],
+                posts:      t.posts || 0,
+                created_at: t.created_at || null,
+                // Campos exclusivos do RPTool — ficam nulos/padrão
+                rpt_ai:    null,
+                rpt_duo:   [],
+                rpt_group: t.group_id != null ? (groupMap[t.group_id] || null) : null,
+                rpt_wiki:  null,
+            }));
+        }
+        // -----------------------------------------
+
         if (!data.OCs || !Array.isArray(data.OCs)) return message.reply("❌ Formato de arquivo inválido.");
 
         const aguarde = await message.reply("⏳ Sincronizando bancos de dados...");

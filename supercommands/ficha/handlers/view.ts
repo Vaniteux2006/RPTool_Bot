@@ -1,32 +1,52 @@
 // RPTool/supercommands/ficha/handlers/view.ts
-import { Message, EmbedBuilder } from "discord.js";
-import { TemplateModel } from "../../../tools/models/FichaSchema";
+import { Message, EmbedBuilder } from 'discord.js';
+import { TemplateModel } from '../../../tools/models/FichaSchema';
+
+const TYPE_LABEL: Record<string, string> = {
+    string: 'Texto',
+    int:    'Número inteiro',
+    float:  'Número decimal',
+    image:  'Imagem / Anexo',
+    prefix: 'Prefixo do webhook',
+    if:     'Escolha',
+};
 
 export default async function handleView(message: Message, args: string[]) {
     const template = await TemplateModel.findOne({ guildId: message.guildId });
     if (!template || !template.fields || template.fields.length === 0) {
-        return message.reply("❌ Este servidor ainda não tem um modelo de ficha configurado. Use `rp!ficha template`.");
+        return message.reply('❌ Este servidor ainda não tem um modelo de ficha. Use `rp!ficha template`.');
     }
 
     const embed = new EmbedBuilder()
-        .setTitle(`📋 Modelo de Ficha: ${message.guild?.name}`)
-        .setColor(0x2B2D31)
-        .setDescription(`As fichas preenchidas serão enviadas para <#${template.approvalChannelId}>.`);
+        .setTitle(`📋 Modelo de Ficha — ${message.guild?.name}`)
+        .setColor(0x2B2D31);
 
-    let desc = "";
+    // Info de canais
+    const checkInfo = template.checkChannelId ? `<#${template.checkChannelId}>` : '*(não definido — use `rp!ficha check #canal`)*';
+    const showInfo  = template.showChannelId  ? `<#${template.showChannelId}>`  : '*(não definido — use `rp!ficha show #canal`)*';
+
+    embed.setDescription(
+        `**Canal de aprovação:** ${checkInfo}\n` +
+        `**Canal de exibição:** ${showInfo}`
+    );
+
+    // Lista de campos
+    let fieldDesc = '';
     template.fields.forEach((f: any, i: number) => {
-        const opt = f.isOptional ? "*(Opcional)*" : "**(Obrigatório)**";
-        let ruleInfo = "";
-        
-        if (f.type === "int") ruleInfo = " [Número Inteiro]";
-        if (f.type === "float") ruleInfo = " [Número Decimal]";
-        if (f.type === "image") ruleInfo = " [Link de Imagem]";
-        if (f.type === "if") ruleInfo = ` [Escolha: ${f.options.join(", ")}]`;
+        let tags = '';
+        if (f.isName)   tags += ' 🏷️';
+        if (f.isAvatar) tags += ' 🖼️';
+        if (f.isPrefix) tags += ' 🔗';
 
-        desc += `${i + 1}. **${f.name}** ${opt}${ruleInfo}\n`;
+        let extra = TYPE_LABEL[f.type] ?? f.type;
+        if (f.type === 'if' && f.options?.length) {
+            extra += `: ${f.options.join(', ')}`;
+        }
+
+        fieldDesc += `\`${i + 1}.\` **${f.name}**${tags} — *${extra}*\n`;
     });
 
-    embed.addFields({ name: "Campos Exigidos", value: desc });
-    
+    embed.addFields({ name: `Campos (${template.fields.length})`, value: fieldDesc });
+
     return message.reply({ embeds: [embed] });
 }

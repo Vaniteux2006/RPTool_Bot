@@ -9,18 +9,18 @@ import { KanbanItemModel, KanbanPainelModel } from '../tools/models/KanbanSchema
 async function buildKanbanEmbed(guildId: string) {
     const tasks = await KanbanItemModel.find({ guildId: guildId });
 
-    const todoTasks = tasks.filter(t => t.status === 'TODO').map(t => `\`#${t.shortId}\` ${t.title} (<@${t.userId}>)`).join('\n') || '*Vazio*';
-    const doingTasks = tasks.filter(t => t.status === 'DOING').map(t => `\`#${t.shortId}\` ${t.title} (<@${t.userId}>)`).join('\n') || '*Vazio*';
-    const doneTasks = tasks.filter(t => t.status === 'DONE').map(t => `\`#${t.shortId}\` ${t.title} (<@${t.userId}>)`).join('\n') || '*Vazio*';
+    const todoTasks = tasks.filter(t => t.status === 'TODO').map(t => `\`#${t.shortId}\` ${t.title} (<@${t.userId}>)`).join('\n') || '**Vazio**';
+    const doingTasks = tasks.filter(t => t.status === 'DOING').map(t => `\`#${t.shortId}\` ${t.title} (<@${t.userId}>)`).join('\n') || '**Vazio**';
+    const doneTasks = tasks.filter(t => t.status === 'DONE').map(t => `\`#${t.shortId}\` ${t.title} (<@${t.userId}>)`).join('\n') || '**Vazio**';
 
     return new EmbedBuilder()
         .setTitle('📋 Quadro Kanban Fixo')
         .setDescription('Atualizado em tempo real!')
         .setColor('#2F3136')
         .addFields(
-            { name: '🔴 A Fazer (TODO)', value: todoTasks, inline: false },
+            { name: '🔴 Fazer (TODO)', value: todoTasks, inline: false },
             { name: '🟡 Fazendo (DOING)', value: doingTasks, inline: false },
-            { name: '🟢 Concluído (DONE)', value: doneTasks, inline: false }
+            { name: '🟢 Feito (DONE)', value: doneTasks, inline: false }
         )
         .setTimestamp();
 }
@@ -50,7 +50,7 @@ async function refreshLiveBoard(guildId: string, client: any) {
 export const command: Command = {
     name: "kanban",
     description: "Gerencia suas tarefas de desenvolvimento do bot",
-    aliases: ["kb", "tasks"],
+    aliases: ["kb", "tasks", "task"],
     execute: async (event: Message | ChatInputCommandInteraction | any, args: string[]) => {
         
         const isMessage = !!event.content;
@@ -74,7 +74,7 @@ export const command: Command = {
                     { name: '➡️ Mover', value: '`rp!kanban move [ID] [NOVO_STATUS]`' },
                     { name: '❌ Deletar', value: '`rp!kanban del [ID]`' },
                     { name: '📺 Criar Painel', value: '`rp!kanban show #canal`' },
-                    { name: '👀 Ver Rápido', value: '`rp!kanban ver`' }
+                    { name: '👀 Checkar R', value: '`rp!kanban ver`' }
                 );
             return isMessage ? event.reply({ embeds: [helpEmbed] }) : event.reply({ embeds: [helpEmbed], ephemeral: true });
         }

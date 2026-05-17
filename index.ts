@@ -2,16 +2,14 @@ import 'dotenv/config';
 import { Client, GatewayIntentBits, Collection, ActivityType, Events, REST, Routes, Partials, AuditLogEvent, EmbedBuilder } from 'discord.js';
 import fs from 'fs'; 
 import path from 'path';
-import loadEvents from './tools/utils/eventLoader';
+import { loadEvents } from './tools/utils/eventLoader';
 
 import ReturnVersion from './tools/ReturnVersion'; 
-import runSystemChecks from './tools/command_checkout'; 
+import runSystemChecks from './tools/command_checkout';
 import runInteractionChecks from './tools/interaction_checkout';
 import { BotStatusModel } from './tools/models/Outros';
 import timeCommand from './commands/time';
 import { handleReactionAdd, handleReactionRemove } from './tools/reactionListener';
-import onMessageReactionAdd from './events/messageReactionAdd'; // Ajuste o caminho
-import { handleFichaInteraction } from './supercommands/ficha/interactions';
 
 const stockfishPath = '/home/node/stockfish'; 
 
@@ -170,7 +168,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton()) {
     const btnInteraction = interaction as any; // Força o TypeScript a ignorar o conflito
     if (btnInteraction.customId.startsWith('ficha_')) {
-        await handleFichaInteraction(btnInteraction);
+        console.log('XD');
     }
 }
     
@@ -239,14 +237,6 @@ client.on('messageCreate', async (message) => {
         console.error(error);
         message.reply('❌ Houve um erro ao executar esse comando!');
     }
-});
-
-client.on('messageReactionAdd', async (reaction, user) => {
-    await onMessageReactionAdd(reaction, user);
-});
-
-client.on(Events.MessageReactionRemove, async (reaction, user) => {
-    await handleReactionRemove(reaction, user);
 });
 
 process.on('unhandledRejection', (reason, promise) => {

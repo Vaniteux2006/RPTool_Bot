@@ -1,38 +1,104 @@
 // RPTool/supercommands/ficha/handlers/template.ts
-import { Message, MessageCollector, TextChannel } from "discord.js";
-import { TemplateModel } from "../../../tools/models/FichaSchema";
+import { Message, MessageCollector, TextChannel } from 'discord.js';
+import { TemplateModel } from '../../../tools/models/FichaSchema';
 
-function compilarTemplate(rawText: string) {
+/*
+ * SINTAXE DO TEMPLATE
+ * ──────────────────────────────────────────────────────
+ * Campo: {tipo}
+ * Campo: {tipo} | if (Opção A), (Opção B), (Opção C)
+ *
+ * Tipos disponíveis:
+ *   {string}      → texto livre
+ *   {string_name} → texto livre + marca este campo como NOME do personagem
+ *   {int}         → número inteiro
+ *   {float}       → número decimal
+ *   {anex}        → imagem (URL ou anexo) — marca como AVATAR do personagem
+ *   {prefix}      → prefixo do webhook (obrigatório se usar rp!ficha new +oc)
+ *
+ * Exemplos:
+ *   Nome: {string_name}
+ *   Idade: {int}
+ *   Altura: {float}
+ *   Gênero: {int} | if (Homem), (Mulher), (Nenhum)
+ *   Aparência: {anex}
+ *   Prefixo: {prefix}
+ * ──────────────────────────────────────────────────────
+ */
+
+function compilarTemplate(rawText: string): { fields: any[]; ocPrefixLabel: string | null } {
     const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);
-    const fields = [];
-    let ocPrefixLabel = null;
+    const fields: any[] = [];
+    let ocPrefixLabel: string | null = null;
 
     for (const line of lines) {
-        if (!line.includes(':')) continue;
-        
-        const [namePart, ...ruleParts] = line.split(':');
-        const name = namePart.trim();
-        const rules = ruleParts.join(':').trim(); 
-        
-        const isOptional = rules.includes('|maynot|');
-        const isPrefix = rules.includes('|prefix|');
-        
-        if (isPrefix) ocPrefixLabel = name;
-        
-        let type = "string";
-        if (rules.includes('|int|')) type = "int";
-        else if (rules.includes('|float|')) type = "float";
-        else if (rules.includes('|image|')) type = "image";
-        else if (rules.includes('|if|')) type = "if";
+        // Divide em "Nome do Campo" e "regras"
+        const colonIdx = line.indexOf(':');
+        if (colonIdx === -1) continue;
 
-        let options: any[] = [];
-        
-        if (type === "if") {
-            const ifContent = rules.split('|if|')[1].replace(/\|maynot\||\|prefix\|/g, "").trim();
-            options = ifContent.split(',').map(o => o.trim());
+        const name  = line.slice(0, colonIdx).trim();
+        const rules = line.slice(colonIdx + 1).trim();
+
+        if (!name || !rules) continue;
+
+        // ── Detectar tipo dentro de {chaves} ──
+        const typeMatch = rules.match(/\{(\w+)\}/);
+        if (!typeMatch) continue;
+
+        const rawType = typeMatch[1].toLowerCase();
+
+        let type: string;
+        let isName  = false;
+        let isAvatar = false;
+        let isPrefix = false;
+
+        switch (rawType) {
+            case 'string_name':
+                type   = 'string';
+                isName = true;
+                break;
+            case 'string':
+                type = 'string';
+                break;
+            case 'int':
+                type = 'int';
+                break;
+            case 'float':
+                type = 'float';
+                break;
+            case 'anex':
+                type     = 'image';
+                isAvatar = true;
+                break;
+            case 'prefix':
+                type     = 'prefix';
+                isPrefix = true;
+                break;
+            default:
+                type = 'string';
         }
 
-        fields.push({ name, type, isOptional, options });
+        if (isPrefix) ocPrefixLabel = name;
+
+        // ── Detectar opções: | if (A), (B), (C) ──
+        let options: string[] = [];
+        const ifMatch = rules.match(/\|\s*if\s+(.*)/i);
+        if (ifMatch) {
+            // Captura conteúdo dentro de parênteses: (Algo)
+            const raw = ifMatch[1];
+            const parenMatches = [...raw.matchAll(/\(([^)]+)\)/g)];
+            if (parenMatches.length > 0) {
+                options = parenMatches.map(m => m[1].trim());
+            } else {
+                // Fallback: separado por vírgula sem parênteses
+                options = raw.split(',').map(o => o.trim()).filter(Boolean);
+            }
+        }
+
+        // Se tem opções, força tipo para 'if' (misto é válido ex: {int} | if ...)
+        const finalType = options.length > 0 ? 'if' : type;
+
+        fields.push({ name, type: finalType, baseType: type, isName, isAvatar, isPrefix, options });
     }
 
     return { fields, ocPrefixLabel };
@@ -40,58 +106,71 @@ function compilarTemplate(rawText: string) {
 
 export default async function handleTemplate(message: Message, args: string[]) {
     if (!message.member?.permissions.has('Administrator')) {
-        return message.reply("❌ Apenas administradores podem configurar o modelo de ficha do servidor.");
+        return message.reply('❌ Apenas administradores podem configurar o modelo de ficha do servidor.');
     }
 
-    message.reply("📝 **Criando Modelo de Ficha**\nEnvie o modelo seguindo o formato:\n`NomeCampo: regras` (ex: `Idade: |int|`).\nRegras disponíveis: `|maynot|`, `|prefix|`, `|int|`, `|float|`, `|image|`, `|if| opt1, opt2`.\n\nDigite o modelo inteiro em UMA MENSAGEM. Digite **CANCEL** para cancelar.");
+    await message.reply(
+        '📝 **Criando Modelo de Ficha**\n' +
+        'Envie o modelo em **uma única mensagem**, no formato:\n' +
+        '```\n' +
+        'Campo: {tipo}\n' +
+        'Campo: {tipo} | if (Opção A), (Opção B)\n' +
+        '```\n' +
+        '**Tipos:** `{string}` `{string_name}` `{int}` `{float}` `{anex}` `{prefix}`\n' +
+        '> `{string_name}` marca o campo como nome do personagem\n' +
+        '> `{anex}` marca o campo como imagem/avatar\n' +
+        '> `{prefix}` é necessário para `rp!ficha new +oc`\n\n' +
+        'Digite **CANCELAR** para cancelar.'
+    );
 
     const collector = new MessageCollector(message.channel as TextChannel, {
         filter: m => m.author.id === message.author.id,
-        time: 300000,
-        max: 1
+        time: 300_000,
+        max: 1,
     });
 
     collector.on('collect', async (m) => {
-        if (m.content.toUpperCase() === 'CANCEL') {
-            message.reply("🛑 Operação cancelada.");
-            return;
+        if (m.content.toUpperCase() === 'CANCELAR') {
+            return message.reply('🛑 Operação cancelada.');
         }
 
         const { fields, ocPrefixLabel } = compilarTemplate(m.content);
 
         if (fields.length === 0) {
-            message.reply("❌ Nenhum campo válido encontrado com o formato `Nome: regra`.");
-            return;
+            return message.reply(
+                '❌ Nenhum campo válido encontrado.\n' +
+                'Certifique-se de usar o formato `NomeCampo: {tipo}` (ex: `Idade: {int}`).'
+            );
         }
 
-        message.reply("✅ Modelo lido! Agora, **mencione o canal** onde as fichas preenchidas serão enviadas para aprovação (ex: <#123456789>).");
+        await TemplateModel.findOneAndUpdate(
+            { guildId: message.guildId },
+            {
+                guildId: message.guildId,
+                rawText: m.content,
+                fields,
+                ocPrefixLabel,
+            },
+            { upsert: true, new: true }
+        );
 
-        const channelCollector = new MessageCollector(message.channel as TextChannel, {
-            filter: msg => msg.author.id === message.author.id,
-            time: 60000,
-            max: 1
-        });
+        const fieldList = fields.map((f, i) => {
+            let info = f.type === 'if' ? ` → Escolha: ${f.options.join(', ')}` : '';
+            let tag  = '';
+            if (f.isName)   tag += ' 🏷️nome';
+            if (f.isAvatar) tag += ' 🖼️avatar';
+            if (f.isPrefix) tag += ' 🔗prefix';
+            return `${i + 1}. **${f.name}**${tag}${info}`;
+        }).join('\n');
 
-        channelCollector.on('collect', async (cMsg) => {
-            const channelId = cMsg.mentions.channels.first()?.id;
-            if (!channelId) {
-                message.reply("❌ Canal inválido. Configuração cancelada.");
-                return;
-            }
+        await message.reply(
+            `✅ **Modelo registrado com ${fields.length} campo(s):**\n${fieldList}\n\n` +
+            `📌 Use \`rp!ficha check #canal\` para definir onde as fichas serão enviadas para aprovação.\n` +
+            `📌 Use \`rp!ficha show #canal\` para definir onde as aprovações/recusas serão exibidas.`
+        );
+    });
 
-            await TemplateModel.findOneAndUpdate(
-                { guildId: message.guildId },
-                {
-                    guildId: message.guildId,
-                    fields,
-                    approvalChannelId: channelId,
-                    integrateOC: true,
-                    ocPrefixLabel
-                },
-                { upsert: true, new: true }
-            );
-
-            message.reply(`🎉 Modelo de ficha criado com sucesso! As avaliações ocorrerão em <#${channelId}>.`);
-        });
+    collector.on('end', (_, reason) => {
+        if (reason === 'time') message.reply('⏳ Tempo esgotado. Operação cancelada.');
     });
 }
