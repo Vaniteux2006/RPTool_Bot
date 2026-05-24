@@ -1,23 +1,110 @@
-// RPTool/supercommands/logs/events/autoModerationLogs.ts
-// Intents necessários: AUTO_MODERATION_CONFIGURATION (1<<20) + EXECUTION (1<<21)
-// ⚠️ NÃO IMPLEMENTADO
-import { AutoModerationRule, AutoModerationActionExecution, Client } from 'discord.js';
+// RPTool/supercommands/logs/events/Automoderationlogs.ts
+// ─── Log: AutoMod ─────────────────────────────────────────────────────────────
+// Intents: AUTO_MODERATION_CONFIGURATION (1<<20) + EXECUTION (1<<21)
 
-export async function onRuleCreate(_rule: AutoModerationRule, _client: Client) {
-    // TODO: nome da regra, tipo de trigger (keyword/spam/mention_spam/etc),
-    //       ações configuradas (block/warn/timeout), quem criou (audit log)
-}
+import {
+    AutoModerationRule, AutoModerationActionExecution,
+    AutoModerationRuleTriggerType, AutoModerationActionType,
+    EmbedBuilder,
+} from 'discord.js';
+import { EventCheckout } from '../../../tools/event_checkout';
+import { LogMinister, LogColor, idBlock, truncate } from '../utils/LogMinister';
 
-export async function onRuleUpdate(_old: AutoModerationRule | null, _new: AutoModerationRule, _client: Client) {
-    // TODO: diff — o que mudou na regra (palavras, ações, canais isentos)
-}
+const triggerLabel: Record<AutoModerationRuleTriggerType, string> = {
+    [AutoModerationRuleTriggerType.Keyword]:            'Palavra-chave',
+    [AutoModerationRuleTriggerType.Spam]:               'Spam',
+    [AutoModerationRuleTriggerType.KeywordPreset]:      'Lista predefinida',
+    [AutoModerationRuleTriggerType.MentionSpam]:        'Spam de menções',
+    [AutoModerationRuleTriggerType.MemberProfile]:      'Perfil de membro',
+};
 
-export async function onRuleDelete(_rule: AutoModerationRule, _client: Client) {
-    // TODO: regra removida; nome e tipo — quem removeu (audit log)
-}
+const actionLabel: Record<AutoModerationActionType, string> = {
+    [AutoModerationActionType.BlockMessage]:         '🚫 Mensagem bloqueada',
+    [AutoModerationActionType.SendAlertMessage]:     '⚠️ Alerta enviado',
+    [AutoModerationActionType.Timeout]:              '🔇 Timeout aplicado',
+    [AutoModerationActionType.BlockMemberInteraction]: '🚫 Interação bloqueada',
+};
 
-export async function onActionExecution(_execution: AutoModerationActionExecution, _client: Client) {
-    // TODO: quem disparou a regra, qual regra, ação tomada, conteúdo (se disponível)
-    // ⚠️ Volume potencialmente alto em servidores com filtros de spam/palavras ativos
-    //    Implementar com cooldown por usuário: máx 1 log por usuário a cada 30s por regra
-}
+EventCheckout.onAutoModerationRuleCreate('logs:autoModRuleCreate', async (rule: AutoModerationRule) => {
+    const lm = await LogMinister.for(rule.guild);
+    if (!lm || !lm.allows('automod')) return;
+
+    const embed = new EmbedBuilder()
+        .setColor(LogColor.automod)
+        .setDescription(`🛡️ Regra de AutoMod **${rule.name}** criada`)
+        .addFields(
+            { name: 'Tipo de gatilho', value: triggerLabel[rule.triggerType] ?? String(rule.triggerType), inline: true },
+            { name: 'Habilitada',      value: rule.enabled ? 'Sim' : 'Não', inline: true },
+            {
+                name:  'Ações',
+                value: rule.actions.map(a => actionLabel[a.type] ?? String(a.type)).join('\n') || '—',
+            },
+        )
+        .addFields({ name: '\u200B', value: idBlock({ Rule: rule.id }) })
+        .setTimestamp();
+
+    await lm.send(embed);
+});
+
+EventCheckout.onAutoModerationRuleDelete('logs:autoModRuleDelete', async (rule: AutoModerationRule) => {
+    const lm = await LogMinister.for(rule.guild);
+    if (!lm || !lm.allows('automod')) return;
+
+    const embed = new EmbedBuilder()
+        .setColor(LogColor.leave)
+        .setDescription(`🛡️ Regra de AutoMod **${rule.name}** deletada`)
+        .addFields({ name: '\u200B', value: idBlock({ Rule: rule.id }) })
+        .setTimestamp();
+
+    await lm.send(embed);
+});
+
+EventCheckout.onAutoModerationRuleUpdate('logs:autoModRuleUpdate', async (
+    _old: AutoModerationRule | null,
+    newRule: AutoModerationRule,
+) => {
+    const lm = await LogMinister.for(newRule.guild);
+    if (!lm || !lm.allows('automod')) return;
+
+    const embed = new EmbedBuilder()
+        .setColor(LogColor.automod)
+        .setDescription(`🛡️ Regra de AutoMod **${newRule.name}** atualizada`)
+        .addFields(
+            { name: 'Habilitada', value: newRule.enabled ? 'Sim' : 'Não', inline: true },
+        )
+        .addFields({ name: '\u200B', value: idBlock({ Rule: newRule.id }) })
+        .setTimestamp();
+
+    await lm.send(embed);
+});
+
+EventCheckout.onAutoModerationActionExecution('logs:autoModExecution', async (ex: AutoModerationActionExecution) => {
+    // Guard: filtrar antes de qualquer I/O
+    if (!ex.guild) return;
+    const lm = await LogMinister.for(ex.guild);
+    if (!lm || !lm.allows('automod')) return;
+
+    const action = actionLabel[ex.action.type] ?? String(ex.action.type);
+    const trigger = triggerLabel[ex.ruleTriggerType] ?? String(ex.ruleTriggerType);
+
+    const embed = new EmbedBuilder()
+        .setColor(LogColor.automod)
+        .setDescription(`🛡️ AutoMod disparou — ${action}`)
+        .addFields(
+            { name: 'Usuário',        value: `<@${ex.userId}>`, inline: true },
+            { name: 'Tipo de gatilho', value: trigger, inline: true },
+            { name: 'Canal',          value: ex.channelId ? `<#${ex.channelId}>` : 'DM', inline: true },
+            {
+                name:  'Conteúdo bloqueado',
+                value: truncate(ex.content || '*(sem conteúdo)*'),
+            },
+            ...(ex.matchedContent ? [{ name: 'Trecho que disparou', value: truncate(ex.matchedContent) }] : []),
+        )
+        .addFields({
+            name:  '\u200B',
+            value: idBlock({ User: ex.userId, Rule: ex.ruleId }),
+        })
+        .setTimestamp();
+
+    await lm.send(embed);
+});

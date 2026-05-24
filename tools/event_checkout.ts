@@ -1,8 +1,18 @@
 // RPTool/tools/event_checkout.ts
 // ─── Dispatcher Central de Eventos ───────────────────────────────────────────
-// ⚠️ FIX: Events.IntegrationCreate / IntegrationUpdate / IntegrationDelete
-//    não existem no enum Events do discord.js v14.
-//    Corrigido para string literals: 'integrationCreate' etc.
+//
+// ARQUITETURA:
+//   1. index.ts chama initEventCheckout(client) — registra client.on() para todos
+//      os eventos do Discord e os redireciona para dispatch() interno.
+//   2. Módulos (comandos, ferramentas, logs) chamam EventCheckout.onX(name, fn)
+//      ao serem importados — isso os inscreve no registry do dispatcher.
+//   3. Quando um evento Discord dispara → dispatch() chama TODOS os inscritos.
+//
+// VANTAGEM: adicionar ou remover um comando/handler não exige tocar no index.ts.
+// Basta exportar o default do módulo e o loadCommands() já o carrega.
+//
+// ⚠️ FIX: Events.IntegrationCreate/Update/Delete não existem no enum Events
+//    do discord.js v14 — usamos string literals 'integrationCreate' etc.
 import {
     Client,
     Events,
@@ -35,6 +45,7 @@ import {
     AutoModerationActionExecution,
     Collection,
     Snowflake,
+    PollAnswer,
 } from 'discord.js';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -45,7 +56,7 @@ interface HandlerEntry {
     fn:   AnyFn;
 }
 
-// ─── Registro interno ─────────────────────────────────────────────────────────
+// ─── Registry interno ─────────────────────────────────────────────────────────
 const registry = new Map<string, HandlerEntry[]>();
 
 function subscribe(event: string, name: string, fn: AnyFn): void {
@@ -57,7 +68,7 @@ function subscribe(event: string, name: string, fn: AnyFn): void {
     }
 }
 
-async function dispatch(event: string, ...args: any[]): Promise<void> {
+async function dispatchInternal(event: string, ...args: any[]): Promise<void> {
     const handlers = registry.get(event);
     if (!handlers?.length) return;
     for (const { name, fn } of handlers) {
@@ -71,6 +82,11 @@ async function dispatch(event: string, ...args: any[]): Promise<void> {
 
 // ─── API pública ──────────────────────────────────────────────────────────────
 export const EventCheckout = {
+
+    // ── Dispatch manual (para testes ou uso avançado) ─────────────────────────
+    // Normalmente não é necessário chamá-lo — initEventCheckout() faz isso
+    // automaticamente para todos os eventos do Discord.
+    dispatch: (event: string, ...args: any[]) => dispatchInternal(event, ...args),
 
     // ── InteractionCreate ─────────────────────────────────────────────────────
     onInteractionCreate: (name: string, fn: (i: Interaction) => Promise<boolean | void>) =>
@@ -96,13 +112,13 @@ export const EventCheckout = {
     onMessageReactionRemove: (name: string, fn: (r: MessageReaction | PartialMessageReaction, u: User | PartialUser) => Promise<void>) =>
         subscribe(Events.MessageReactionRemove, name, fn),
 
-    onMessageReactionRemoveAll: (name: string, fn: (r: MessageReaction | PartialMessageReaction) => Promise<void>) =>
+    onMessageReactionRemoveAll: (name: string, fn: (msg: Message | PartialMessage, reactions: Collection<string, MessageReaction>) => Promise<void>) =>
         subscribe(Events.MessageReactionRemoveAll, name, fn),
 
     onMessageReactionRemoveEmoji: (name: string, fn: (r: MessageReaction | PartialMessageReaction) => Promise<void>) =>
         subscribe(Events.MessageReactionRemoveEmoji, name, fn),
 
-    // ── GUILD_MEMBERS (1<<1) privileged ──────────────────────────────────────
+    // ── GUILD_MEMBERS (1<<1) ⚠️ privileged ───────────────────────────────────
     onGuildMemberAdd: (name: string, fn: (m: GuildMember) => Promise<void>) =>
         subscribe(Events.GuildMemberAdd, name, fn),
 
@@ -132,7 +148,7 @@ export const EventCheckout = {
     onChannelDelete: (name: string, fn: (c: DMChannel | NonThreadGuildBasedChannel) => Promise<void>) =>
         subscribe(Events.ChannelDelete, name, fn),
 
-    onChannelPinsUpdate: (name: string, fn: (c: any, time: Date | null) => Promise<void>) =>
+    onChannelPinsUpdate: (name: string, fn: (channel: any, time: Date | null) => Promise<void>) =>
         subscribe(Events.ChannelPinsUpdate, name, fn),
 
     // ── GUILDS (1<<0) — threads ───────────────────────────────────────────────
@@ -145,7 +161,7 @@ export const EventCheckout = {
     onThreadDelete: (name: string, fn: (t: ThreadChannel) => Promise<void>) =>
         subscribe(Events.ThreadDelete, name, fn),
 
-    onThreadMembersUpdate: (name: string, fn: (added: Collection<Snowflake, ThreadMember>, removed: Collection<Snowflake, ThreadMember>) => Promise<void>) =>
+    onThreadMembersUpdate: (name: string, fn: (added: Collection<Snowflake, ThreadMember>, removed: Collection<Snowflake, ThreadMember>, thread: ThreadChannel) => Promise<void>) =>
         subscribe(Events.ThreadMembersUpdate, name, fn),
 
     // ── GUILDS (1<<0) — cargos ────────────────────────────────────────────────
@@ -197,11 +213,21 @@ export const EventCheckout = {
     onGuildStickerDelete: (name: string, fn: (s: Sticker) => Promise<void>) =>
         subscribe(Events.GuildStickerDelete, name, fn),
 
+    // Soundboard — string literals (não existem no enum Events do djs v14)
+    onSoundboardSoundCreate: (name: string, fn: (sound: any) => Promise<void>) =>
+        subscribe('soundboardSoundCreate', name, fn),
+
+    onSoundboardSoundUpdate: (name: string, fn: (old: any, cur: any) => Promise<void>) =>
+        subscribe('soundboardSoundUpdate', name, fn),
+
+    onSoundboardSoundDelete: (name: string, fn: (sound: any) => Promise<void>) =>
+        subscribe('soundboardSoundDelete', name, fn),
+
     // ── GUILD_INTEGRATIONS (1<<4) + GUILD_WEBHOOKS (1<<5) ────────────────────
     onGuildIntegrationsUpdate: (name: string, fn: (g: Guild) => Promise<void>) =>
         subscribe(Events.GuildIntegrationsUpdate, name, fn),
 
-    // FIX: string literals — Events.IntegrationCreate/Update/Delete não existem
+    // ⚠️ FIX: string literals — Events.IntegrationCreate/Update/Delete não existem
     onIntegrationCreate: (name: string, fn: (i: Integration) => Promise<void>) =>
         subscribe('integrationCreate', name, fn),
 
@@ -225,6 +251,10 @@ export const EventCheckout = {
     onVoiceStateUpdate: (name: string, fn: (old: VoiceState, cur: VoiceState) => Promise<void>) =>
         subscribe(Events.VoiceStateUpdate, name, fn),
 
+    // Efeitos de voz (soundboard em call) — string literal, opt-in apenas
+    onVoiceChannelEffectSend: (name: string, fn: (effect: any) => Promise<void>) =>
+        subscribe('voiceChannelEffectSend', name, fn),
+
     // ── GUILD_SCHEDULED_EVENTS (1<<16) ────────────────────────────────────────
     onGuildScheduledEventCreate: (name: string, fn: (e: GuildScheduledEvent) => Promise<void>) =>
         subscribe(Events.GuildScheduledEventCreate, name, fn),
@@ -241,7 +271,7 @@ export const EventCheckout = {
     onGuildScheduledEventUserRemove: (name: string, fn: (e: GuildScheduledEvent | PartialGuildScheduledEvent, u: GuildMember | User) => Promise<void>) =>
         subscribe(Events.GuildScheduledEventUserRemove, name, fn),
 
-    // ── AUTO_MODERATION (1<<20 + 1<<21) ──────────────────────────────────────
+    // ── AUTO_MODERATION_CONFIGURATION (1<<20) + EXECUTION (1<<21) ────────────
     onAutoModerationRuleCreate: (name: string, fn: (r: AutoModerationRule) => Promise<void>) =>
         subscribe(Events.AutoModerationRuleCreate, name, fn),
 
@@ -254,7 +284,14 @@ export const EventCheckout = {
     onAutoModerationActionExecution: (name: string, fn: (e: AutoModerationActionExecution) => Promise<void>) =>
         subscribe(Events.AutoModerationActionExecution, name, fn),
 
-    // ── Utilitário de debug ───────────────────────────────────────────────────
+    // ── GUILD_MESSAGE_POLLS (1<<24) ───────────────────────────────────────────
+    onMessagePollVoteAdd: (name: string, fn: (answer: PollAnswer, userId: string) => Promise<void>) =>
+        subscribe(Events.MessagePollVoteAdd, name, fn),
+
+    onMessagePollVoteRemove: (name: string, fn: (answer: PollAnswer, userId: string) => Promise<void>) =>
+        subscribe(Events.MessagePollVoteRemove, name, fn),
+
+    // ── Debug ─────────────────────────────────────────────────────────────────
     listSubscribers(): void {
         console.log('\n📋 [EventCheckout] Inscritos por evento:');
         for (const [event, handlers] of registry.entries()) {
@@ -264,11 +301,13 @@ export const EventCheckout = {
 };
 
 // ─── Inicialização ────────────────────────────────────────────────────────────
+// Deve ser chamado APÓS carregar todos os comandos/supercomandos no index.ts,
+// para que as inscrições (EventCheckout.onX) já existam quando os eventos dispararem.
 export function initEventCheckout(client: Client): void {
     const bind = (event: string) =>
-        client.on(event, (...args: any[]) => dispatch(event, ...args));
+        client.on(event, (...args: any[]) => dispatchInternal(event, ...args));
 
-    // Sempre registrados
+    // Sempre ativos
     bind(Events.InteractionCreate);
     bind(Events.MessageCreate);
     bind(Events.MessageReactionAdd);
@@ -276,7 +315,7 @@ export function initEventCheckout(client: Client): void {
     bind(Events.GuildMemberAdd);
     bind(Events.GuildMemberRemove);
 
-    // Sob demanda (dispatch() retorna imediatamente sem handlers)
+    // Sob demanda (dispatch() retorna sem custo se não há subscribers)
     bind(Events.MessageUpdate);
     bind(Events.MessageDelete);
     bind(Events.MessageBulkDelete);
@@ -323,11 +362,16 @@ export function initEventCheckout(client: Client): void {
     bind(Events.AutoModerationRuleUpdate);
     bind(Events.AutoModerationRuleDelete);
     bind(Events.AutoModerationActionExecution);
+    bind(Events.MessagePollVoteAdd);
+    bind(Events.MessagePollVoteRemove);
 
-    // FIX: string literals para os três eventos de Integration
+    // ⚠️ FIX: string literals para eventos sem enum no discord.js v14
     bind('integrationCreate');
     bind('integrationUpdate');
     bind('integrationDelete');
+    bind('soundboardSoundCreate');
+    bind('soundboardSoundUpdate');
+    bind('soundboardSoundDelete');
 
-    console.log('✅ [EventCheckout] Dispatcher inicializado.');
+    console.log('✅ [EventCheckout] Dispatcher inicializado — todos os intents mapeados.');
 }

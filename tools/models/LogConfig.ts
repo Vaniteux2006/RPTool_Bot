@@ -1,36 +1,26 @@
 // RPTool/tools/models/LogConfig.ts
-// Schema de configuração do sistema de logs por servidor
-import { Schema, Document } from 'mongoose';
-import { mainConnection } from '../database';
-import { LogCategory } from '../../supercommands/logs/index';
+// ─── Schema do MongoDB para configuração de logs ──────────────────────────────
+import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface ILogConfig extends Document {
     guildId:    string;
-    channelId:  string | null;       // canal onde os logs são enviados
-    enabled:    boolean;             // liga/desliga sem perder o canal
-    categories: LogCategory[];       // categorias ativas (todas por padrão)
+    channelId:  string | null;
+    enabled:    boolean;
+    categories: Record<string, boolean>;
     updatedAt:  Date;
 }
 
 const LogConfigSchema = new Schema<ILogConfig>({
-    guildId:    { type: String, required: true, unique: true },
-    channelId:  { type: String, default: null },
-    enabled:    { type: Boolean, default: false },
-    categories: {
-        type:    [String],
-        default: [
-            // Categorias ativas por padrão (excluem as de alto volume)
-            'members', 'messages', 'channels', 'roles',
-            'moderation', 'voice', 'invites', 'integrations',
-            'expressions', 'threads', 'scheduled', 'automod',
-        ],
-    },
-    updatedAt: { type: Date, default: Date.now },
+    guildId:   { type: String, required: true, unique: true, index: true },
+    channelId: { type: String, default: null },
+    enabled:   { type: Boolean, default: false },
+    // categories: cada chave é uma LogCategory, valor true/false
+    // padrão implícito: ausente = ativo (ver LogMinister.allows())
+    categories: { type: Map, of: Boolean, default: {} },
+}, {
+    timestamps: true, // adiciona createdAt e updatedAt automaticamente
 });
 
-// Atualiza updatedAt automaticamente em qualquer save
-LogConfigSchema.pre('save', function () { this.updatedAt = new Date(); });
-
-export const LogModel =
-    mainConnection.models['LogConfig'] ??
-    mainConnection.model<ILogConfig>('LogConfig', LogConfigSchema);
+export const LogModel: Model<ILogConfig> =
+    mongoose.models.LogConfig as Model<ILogConfig>
+    ?? mongoose.model<ILogConfig>('LogConfig', LogConfigSchema);

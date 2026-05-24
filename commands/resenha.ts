@@ -55,7 +55,7 @@ export default {
             }
 
             const prompt = `
-            Atue como um juiz de "Resenha" (Caos/Zoeira) para um chat de Discord.
+            Preciso que atue como um juiz de "Resenha" (Caos/Zoeira) para um chat de Discord.
             Analise o histórico abaixo e classifique o estado atual.
 
             [CRITÉRIOS PARA "r-01" (RESENHA CONFIRMADA)]
@@ -72,7 +72,7 @@ export default {
             - Debate "aristocrático" (educado, green flag, sem baixaria).
             - Chat parado, apenas cumprimentos ou nada engraçado.
 
-            [HISTÓRICO]
+            [HISTÓRICO DE MENSAGENS DE DISCORD]
             ${history}
 
             [INSTRUÇÃO DE SAÍDA]

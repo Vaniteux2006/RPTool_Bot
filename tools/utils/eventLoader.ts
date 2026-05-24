@@ -1,20 +1,25 @@
 // RPTool/tools/utils/eventLoader.ts
-// ─── Carregador de eventos por intent ────────────────────────────────────────
-// Lê todos os arquivos de /events/ e registra os listeners no Client.
-// Cada arquivo exporta um array de { name, once, execute }.
+// ─── Loader de Subscriber Files ───────────────────────────────────────────────
 //
-// IMPORTANTE sobre duplicatas:
-//   - Events.MessageCreate é registrado no index.ts para o roteamento de comandos.
-//   - Os handlers de messageEvents.ts e dmEvents.ts fazem guard (isDMBased, etc.)
-//     para não conflitar. Manter essa separação de responsabilidade.
-//   - Events.GuildMemberAdd é registrado em memberEvents.ts;
-//     o bloco manual do index.ts deve ser REMOVIDO para evitar dupla execução.
-import { Client } from 'discord.js';
+// ⚠️  NOTA ARQUITETURAL:
+//   Com a introdução do initEventCheckout(), o roteamento de eventos do Discord
+//   para handlers já é feito automaticamente. Os arquivos em /events/ agora são
+//   "subscriber registrars" — ao serem importados, suas chamadas a
+//   EventCheckout.onX() registram os handlers no dispatcher.
+//
+//   Este loader existe para garantir que os arquivos de /events/ sejam carregados
+//   mesmo que nenhum comando os importe diretamente.
+//   Arquivos de /commands/ e /supercommands/ se auto-inscrevem ao ser carregados
+//   pelo loadCommands() no index.ts e NÃO precisam passar por aqui.
+//
+// USO NO index.ts:
+//   NÃO é mais necessário chamar loadEvents(client). Use initEventCheckout(client).
+//   Se quiser carregar os arquivos de /events/ mesmo assim (para os subscribers
+//   centrais deles), chame loadEventSubscribers() ANTES de initEventCheckout().
+
 import * as path from 'path';
 import * as fs from 'fs';
 
-// ─── Ordem de carregamento (por volume crescente de eventos) ──────────────────
-// Arquivos de maior volume ficam por último para facilitar debug dos primeiros.
 const EVENT_FILES_ORDER = [
     'memberEvents',
     'roleEvents',
@@ -25,20 +30,19 @@ const EVENT_FILES_ORDER = [
     'integrationEvents',
     'scheduledEventEvents',
     'autoModerationEvents',
-    'pollEvents',
+    'Pollevents',
     'reactionEvents',
     'messageEvents',
     'voiceEvents',
 ];
 
-export function loadEvents(client: Client): void {
+/** Carrega os arquivos de /events/ para disparar seus side-effects de inscrição. */
+export function loadEventSubscribers(): void {
     const eventsDir = path.join(__dirname, '../../events');
-    let totalLoaded = 0;
+    let loaded = 0;
 
     for (const fileName of EVENT_FILES_ORDER) {
         const filePath = path.join(eventsDir, `${fileName}.ts`);
-
-        // Tenta .ts primeiro; fallback .js para produção compilada
         const resolvedPath = fs.existsSync(filePath)
             ? filePath
             : filePath.replace('.ts', '.js');
@@ -49,32 +53,13 @@ export function loadEvents(client: Client): void {
         }
 
         try {
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const module = require(resolvedPath);
-            const handlers: any[] = Array.isArray(module.default)
-                ? module.default
-                : [module.default];
-
-            for (const handler of handlers) {
-                if (!handler?.name || typeof handler.execute !== 'function') {
-                    console.warn(`⚠️ [EventLoader] Handler inválido em ${fileName}`);
-                    continue;
-                }
-
-                if (handler.once) {
-                    client.once(handler.name, (...args) => handler.execute(...args, client));
-                } else {
-                    client.on(handler.name, (...args) => handler.execute(...args, client));
-                }
-
-                totalLoaded++;
-            }
-
-            console.log(`✅ [EventLoader] ${fileName} — ${handlers.length} handler(s) registrado(s)`);
+            require(resolvedPath); // side-effect: chama EventCheckout.onX() internamente
+            loaded++;
+            console.log(`✅ [EventLoader] ${fileName} carregado`);
         } catch (e) {
             console.error(`❌ [EventLoader] Erro ao carregar ${fileName}:`, e);
         }
     }
 
-    console.log(`🎯 [EventLoader] Total: ${totalLoaded} listener(s) registrado(s).`);
+    console.log(`🎯 [EventLoader] ${loaded} arquivo(s) de subscriber carregado(s).`);
 }

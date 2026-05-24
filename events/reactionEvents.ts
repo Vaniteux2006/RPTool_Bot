@@ -1,58 +1,36 @@
 // RPTool/events/reactionEvents.ts
-// ─── Intents ──────────────────────────────────────────────────────────────────
-// GUILD_MESSAGE_REACTIONS  (1 << 10): reaction add/remove em servidores
-// DIRECT_MESSAGE_REACTIONS (1 << 13): reaction add/remove em DMs
+// ─── Intent: GUILD_MESSAGE_REACTIONS (1 << 10) ───────────────────────────────
+// Eventos: MESSAGE_REACTION_ADD · MESSAGE_REACTION_REMOVE
+//          MESSAGE_REACTION_REMOVE_ALL · MESSAGE_REACTION_REMOVE_EMOJI
 //
-// ⚠️ FIX: importações corrigidas de interaction_checkout → reactionListener
-//    interaction_checkout não exporta handleReactionAdd/handleReactionRemove;
-//    essas funções vivem em tools/reactionListener.ts
-import {
-    Events,
-    MessageReaction,
-    PartialMessageReaction,
-    User,
-    PartialUser,
-    Client,
-} from 'discord.js';
-import { handleReactionAdd, handleReactionRemove } from '../tools/reactionListener';
+// Subscribers ativos:
+//   tools/reactionListener.ts
+//     → EventCheckout.onMessageReactionAdd('reactionRole', ...)
+//     → EventCheckout.onMessageReactionRemove('reactionRole', ...)
+//
+// Subscribers de log (stub):
+//   supercommands/logs/events/Messagelogs.ts (opt-in — volume alto)
+//
+// ⚠️ INTENTS REMOVIDOS: DIRECT_MESSAGE_REACTIONS (1 << 13) não está ativo.
+//    Se precisar de reactions em DMs futuramente, adicione o intent e um
+//    subscriber específico.
 
-export default [
+import { EventCheckout } from '../tools/event_checkout';
+import { MessageReaction, PartialMessageReaction, Message, PartialMessage, Collection } from 'discord.js';
 
-    // ── MESSAGE_REACTION_ADD ──────────────────────────────────────────────────
-    {
-        name:  Events.MessageReactionAdd,
-        once:  false,
-        execute: async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser, _client: Client) => {
-            await handleReactionAdd(reaction, user);
-            // TODO: supercommands/logs/events/messageLogs.ts → onReactionAdd
-        },
-    },
+// Slot central — a lógica de reaction roles está em tools/reactionListener.ts
+EventCheckout.onMessageReactionAdd('reactionEvents:central', async (_reaction: MessageReaction | PartialMessageReaction, _user: any) => {
+    // Slot para lógica que não seja reaction roles.
+});
 
-    // ── MESSAGE_REACTION_REMOVE ───────────────────────────────────────────────
-    {
-        name:  Events.MessageReactionRemove,
-        once:  false,
-        execute: async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser, _client: Client) => {
-            await handleReactionRemove(reaction, user);
-            // TODO: supercommands/logs/events/messageLogs.ts → onReactionRemove
-        },
-    },
+EventCheckout.onMessageReactionRemove('reactionEvents:central', async (_reaction: MessageReaction | PartialMessageReaction, _user: any) => {
+    // Slot para lógica que não seja reaction roles.
+});
 
-    // ── MESSAGE_REACTION_REMOVE_ALL ───────────────────────────────────────────
-    {
-        name:  Events.MessageReactionRemoveAll,
-        once:  false,
-        execute: async (_reaction: MessageReaction | PartialMessageReaction, _client: Client) => {
-            // TODO: todas as reações de uma mensagem removidas de uma vez
-        },
-    },
+EventCheckout.onMessageReactionRemoveAll('reactionEvents:central', async (_msg: Message | PartialMessage, _reactions: Collection<string, MessageReaction>) => {
+    // Todas as reações de uma mensagem removidas de uma vez.
+});
 
-    // ── MESSAGE_REACTION_REMOVE_EMOJI ─────────────────────────────────────────
-    {
-        name:  Events.MessageReactionRemoveEmoji,
-        once:  false,
-        execute: async (_reaction: MessageReaction | PartialMessageReaction, _client: Client) => {
-            // TODO: um emoji específico removido de todas as reações
-        },
-    },
-];
+EventCheckout.onMessageReactionRemoveEmoji('reactionEvents:central', async (_reaction: MessageReaction | PartialMessageReaction) => {
+    // Um emoji específico removido de todas as mensagens.
+});

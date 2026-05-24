@@ -1,43 +1,38 @@
 // RPTool/events/scheduledEventEvents.ts
 // ─── Intent: GUILD_SCHEDULED_EVENTS (1 << 16) ────────────────────────────────
-// Cobre: GUILD_SCHEDULED_EVENT_CREATE · UPDATE · DELETE
-//        GUILD_SCHEDULED_EVENT_USER_ADD · USER_REMOVE
+// Eventos: GUILD_SCHEDULED_EVENT_CREATE · UPDATE · DELETE
+//          GUILD_SCHEDULED_EVENT_USER_ADD · USER_REMOVE
+//
+// Subscribers de log: supercommands/logs/events/scheduledEventLogs.ts
+// Possível uso ativo: anunciar evento criado em canal dedicado.
+
+import { EventCheckout } from '../tools/event_checkout';
 import {
-    Events,
-    GuildScheduledEvent,
-    PartialGuildScheduledEvent,
-    GuildMember,
-    User,
-    Client,
+    GuildScheduledEvent, PartialGuildScheduledEvent,
+    GuildMember, User,
 } from 'discord.js';
 
-export default [
+EventCheckout.onGuildScheduledEventCreate('scheduledEvents:central', async (_event: GuildScheduledEvent) => {
+    // TODO ativo: anunciar em canal de eventos configurado
+});
 
-    { name: Events.GuildScheduledEventCreate, once: false,
-      execute: async (_event: GuildScheduledEvent, _client: Client) => {
-        // TODO: supercommands/logs/events/scheduledEventLogs.ts → onCreate
-        // Possível uso ativo: anunciar criação de evento em canal dedicado
-      }},
+EventCheckout.onGuildScheduledEventUpdate('scheduledEvents:central', async (
+    _old: GuildScheduledEvent | PartialGuildScheduledEvent | null,
+    _new: GuildScheduledEvent,
+) => {
+    // Detectar: evento iniciado (status ACTIVE), cancelado, horário alterado
+});
 
-    { name: Events.GuildScheduledEventUpdate, once: false,
-      execute: async (_old: GuildScheduledEvent | PartialGuildScheduledEvent | null, _new: GuildScheduledEvent, _client: Client) => {
-        // TODO: supercommands/logs/events/scheduledEventLogs.ts → onUpdate
-        // Detectar: evento iniciado (status ACTIVE), cancelado, horário alterado
-      }},
+EventCheckout.onGuildScheduledEventDelete('scheduledEvents:central', async (
+    _event: GuildScheduledEvent | PartialGuildScheduledEvent,
+) => {});
 
-    { name: Events.GuildScheduledEventDelete, once: false,
-      execute: async (_event: GuildScheduledEvent | PartialGuildScheduledEvent, _client: Client) => {
-        // TODO: supercommands/logs/events/scheduledEventLogs.ts → onDelete
-      }},
+EventCheckout.onGuildScheduledEventUserAdd('scheduledEvents:central', async (
+    _event: GuildScheduledEvent | PartialGuildScheduledEvent,
+    _user: GuildMember | User,
+) => {});
 
-    { name: Events.GuildScheduledEventUserAdd, once: false,
-      execute: async (_event: GuildScheduledEvent | PartialGuildScheduledEvent, _user: GuildMember | User, _client: Client) => {
-        // TODO: supercommands/logs/events/scheduledEventLogs.ts → onUserAdd
-        // Usuário marcou interesse no evento
-      }},
-
-    { name: Events.GuildScheduledEventUserRemove, once: false,
-      execute: async (_event: GuildScheduledEvent | PartialGuildScheduledEvent, _user: GuildMember | User, _client: Client) => {
-        // TODO: supercommands/logs/events/scheduledEventLogs.ts → onUserRemove
-      }},
-];
+EventCheckout.onGuildScheduledEventUserRemove('scheduledEvents:central', async (
+    _event: GuildScheduledEvent | PartialGuildScheduledEvent,
+    _user: GuildMember | User,
+) => {});

@@ -1,66 +1,26 @@
 // RPTool/events/expressionEvents.ts
 // ─── Intent: GUILD_EXPRESSIONS (1 << 3) ──────────────────────────────────────
-// Cobre: GUILD_EMOJIS_UPDATE · GUILD_STICKERS_UPDATE
-//        GUILD_SOUNDBOARD_SOUND_CREATE/UPDATE/DELETE/SOUNDS_UPDATE
-import {
-    Events,
-    Guild,
-    GuildEmoji,
-    Sticker,
-    Collection,
-    Snowflake,
-    Client,
-} from 'discord.js';
+// Eventos: GUILD_EMOJIS_UPDATE → GuildEmojiCreate/Update/Delete
+//          GUILD_STICKERS_UPDATE → GuildStickerCreate/Update/Delete
+//          GUILD_SOUNDBOARD_SOUND_CREATE/UPDATE/DELETE/SOUNDS_UPDATE
+//
+// ⚠️ Soundboard events usam string literals — sem enum no discord.js v14.
+// Subscribers de log: supercommands/logs/events/Expressionlogs.ts
 
-export default [
+import { EventCheckout } from '../tools/event_checkout';
+import { GuildEmoji, Sticker } from 'discord.js';
 
-    // ── GUILD_EMOJIS_UPDATE ───────────────────────────────────────────────────
-    // Discord.js agrupa criação/edição/deleção de emoji neste único evento
-    { name: Events.GuildEmojiCreate, once: false,
-      execute: async (_emoji: GuildEmoji, _client: Client) => {
-        // TODO: supercommands/logs/events/expressionLogs.ts → onEmojiCreate
-      }},
+// Emojis
+EventCheckout.onGuildEmojiCreate('expressionEvents:central', async (_emoji: GuildEmoji) => {});
+EventCheckout.onGuildEmojiUpdate('expressionEvents:central', async (_old: GuildEmoji, _new: GuildEmoji) => {});
+EventCheckout.onGuildEmojiDelete('expressionEvents:central', async (_emoji: GuildEmoji) => {});
 
-    { name: Events.GuildEmojiUpdate, once: false,
-      execute: async (_old: GuildEmoji, _new: GuildEmoji, _client: Client) => {
-        // TODO: supercommands/logs/events/expressionLogs.ts → onEmojiUpdate
-      }},
+// Stickers
+EventCheckout.onGuildStickerCreate('expressionEvents:central', async (_sticker: Sticker) => {});
+EventCheckout.onGuildStickerUpdate('expressionEvents:central', async (_old: Sticker, _new: Sticker) => {});
+EventCheckout.onGuildStickerDelete('expressionEvents:central', async (_sticker: Sticker) => {});
 
-    { name: Events.GuildEmojiDelete, once: false,
-      execute: async (_emoji: GuildEmoji, _client: Client) => {
-        // TODO: supercommands/logs/events/expressionLogs.ts → onEmojiDelete
-      }},
-
-    // ── GUILD_STICKERS_UPDATE ─────────────────────────────────────────────────
-    { name: Events.GuildStickerCreate, once: false,
-      execute: async (_sticker: Sticker, _client: Client) => {
-        // TODO: supercommands/logs/events/expressionLogs.ts → onStickerCreate
-      }},
-
-    { name: Events.GuildStickerUpdate, once: false,
-      execute: async (_old: Sticker, _new: Sticker, _client: Client) => {
-        // TODO: supercommands/logs/events/expressionLogs.ts → onStickerUpdate
-      }},
-
-    { name: Events.GuildStickerDelete, once: false,
-      execute: async (_sticker: Sticker, _client: Client) => {
-        // TODO: supercommands/logs/events/expressionLogs.ts → onStickerDelete
-      }},
-
-    // ── GUILD_SOUNDBOARD_SOUND_* ──────────────────────────────────────────────
-
-    { name: 'soundboardSoundCreate', once: false,
-    execute: async (_sound: any, _client: Client) => {
-    //     // TODO: supercommands/logs/events/expressionLogs.ts → onSoundCreate
-    }},
-
-    { name: 'soundboardSoundUpdate', once: false,
-    execute: async (_old: any, _new: any, _client: Client) => {
-    //     // TODO: supercommands/logs/events/expressionLogs.ts → onSoundUpdate
-    }},
-
-    { name: 'soundboardSoundDelete', once: false,
-    execute: async (_sound: any, _client: Client) => {
-    //     // TODO: supercommands/logs/events/expressionLogs.ts → onSoundDelete
-    }},
-];
+// Soundboard
+EventCheckout.onSoundboardSoundCreate('expressionEvents:central', async (_sound: any) => {});
+EventCheckout.onSoundboardSoundUpdate('expressionEvents:central', async (_old: any, _new: any) => {});
+EventCheckout.onSoundboardSoundDelete('expressionEvents:central', async (_sound: any) => {});
