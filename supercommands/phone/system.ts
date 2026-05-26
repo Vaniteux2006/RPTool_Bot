@@ -142,5 +142,5 @@ export async function notifyServer(client: Client, channelId: string, text: stri
     try {
         const channel = await client.channels.fetch(channelId);
         if (channel && channel.isTextBased()) await (channel as any).send(text);
-    } catch (e) {}
+    } catch (e) { console.warn('[PHONE] Falha ao enviar mensagem no canal:', channelId, e); }
 }

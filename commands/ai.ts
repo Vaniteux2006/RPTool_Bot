@@ -69,6 +69,7 @@ export default {
                 } catch (error: any) {
                     const errorMsg = error.message || error.toString();
                     if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
+                        console.warn(`[AI] Retry ${attempt} - Servidor sobrecarregado (503):`, errorMsg);
                         const retryMsg = `🔥 **ERRO 503: Servidores fritando!** 🍟\nEspera aí, a IA vai tentar de novo em 5 segundos... (Tentativa ${attempt})`;
                         if (isEdit) await target.edit(retryMsg); else await target.editReply(retryMsg);
                         

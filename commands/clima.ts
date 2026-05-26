@@ -59,7 +59,7 @@ async function getWeatherInstant(lat: number, lon: number) {
             temp: res.data.current.temperature_2m,
             code: res.data.current.weather_code
         };
-    } catch (e) { return null; }
+    } catch (e) { console.warn('[CLIMA] Falha ao buscar clima atual:', lat, lon, e); return null; }
 }
 
 async function getWeatherHistorical(lat: number, lon: number, date: Date) {
@@ -79,7 +79,7 @@ async function getWeatherHistorical(lat: number, lon: number, date: Date) {
             max: res.data.daily.temperature_2m_max[0],
             code: res.data.daily.weather_code[0]
         };
-    } catch { return null; }
+    } catch (e) { console.warn('[CLIMA] Falha ao buscar clima histórico:', lat, lon, e); return null; }
 }
 
 function wmoToText(code: number) {
@@ -95,7 +95,7 @@ export default {
     async execute(message: Message, args: string[]) {
         let ClockModel;
         try { ClockModel = mainConnection.model('Clock'); } 
-        catch (e) { return message.reply("❌ Use `rp!time` primeiro para inicializar o sistema."); }
+        catch (e) { console.warn('[CLIMA] ClockModel não encontrado - execute rp!time primeiro:', e); return message.reply("❌ Use `rp!time` primeiro para inicializar o sistema."); }
 
         if (args.length === 0) {
             return message.reply(

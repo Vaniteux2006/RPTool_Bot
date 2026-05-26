@@ -118,7 +118,7 @@ export default {
             
             let msg;
             try { msg = await channel.messages.fetch(config.messageId); } 
-            catch (e) { continue; } 
+            catch (e) { console.warn('[BIRTHDAY] Falha ao buscar mensagem do painel:', config.messageId, e); continue; } 
 
             const todaysBdays = await BirthdayModel.find({ guildId: config.guildId, day: currentDay, month: currentMonth });
 

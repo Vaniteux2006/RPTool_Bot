@@ -50,6 +50,7 @@ export const command: Command = {
             return message.reply(`✅ **Reaction Role Configurado!**\nQuem reagir com ${rawEmoji} na mensagem vai ganhar o cargo **${role.name}**.`);
 
         } catch (e: any) {
+            console.warn('[REACTION] Falha ao configurar reaction role:', { messageId, emoji: rawEmoji, role: role.id }, e.message);
             return message.reply(`❌ Erro: Mensagem não encontrada neste canal ou emoji inválido.\nDetalhes: \`${e.message}\``);
         }
     }

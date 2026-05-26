@@ -120,7 +120,7 @@ export default async function handleList(message: Message, args: string[], userI
                     await msg.edit({ embeds: newData.embeds, components: [row] });
                 }
             } catch (e) {
-                // Erro silencioso ou timeout do modal
+                console.warn('[OC/LIST] Erro ou timeout no modal de pular página:', e);
             }
             return;
         }

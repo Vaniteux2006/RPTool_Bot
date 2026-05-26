@@ -27,7 +27,7 @@ export default async function handleView(message: Message, args: string[], userI
             try {
                 const user = await message.client.users.fetch(t.adminId);
                 ownerName = `${user.username}`;
-            } catch (e) { }
+            } catch (e) { console.warn('[OC/WIKI] Falha ao buscar usuário dono do OC:', t.adminId, e); }
 
             const bday = t.realBirthday ? `${t.realBirthday.getDate()}/${t.realBirthday.getMonth() + 1}` : "???";
             const created = t.createdAt ? t.createdAt.toLocaleDateString('pt-BR') : "???";

@@ -41,6 +41,7 @@ class RPToolAPI {
                 return await this.generateGemini(config, prompt);
             }
         } catch (e) {
+            console.error('[API] Erro em generateRaw:', e);
             throw e;
         }
     }

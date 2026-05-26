@@ -109,7 +109,7 @@ class ChessBot {
             move = chess.move(user_move_san);
             if (!move) throw new Error("Lance ilegal");
         } catch (e) {
-
+            console.warn('[XADREZ] Lance inválido ou impossível:', user_move_san, e);
             const moveName = typeof user_move_san === 'string' 
                 ? user_move_san 
                 : `${user_move_san.from}${user_move_san.to}`;

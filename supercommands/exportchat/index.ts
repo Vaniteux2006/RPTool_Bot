@@ -29,7 +29,7 @@ function parseTimeRange(raw: string): TimeRange | null {
     const arrowIdx = raw.indexOf('->');
     if (arrowIdx === -1) return null;
 
-    const leftStr  = raw.slice(0, arrowIdx).trim();
+    const leftStr = raw.slice(0, arrowIdx).trim();
     const rightStr = raw.slice(arrowIdx + 2).trim();
 
     const parseOne = (s: string): Date | null => {
@@ -54,7 +54,7 @@ function parseTimeRange(raw: string): TimeRange | null {
     };
 
     const start = parseOne(leftStr);
-    const end   = parseOne(rightStr);
+    const end = parseOne(rightStr);
     if (!start || !end) return null;
 
     if (end <= start) {
@@ -65,6 +65,39 @@ function parseTimeRange(raw: string): TimeRange | null {
         }
     }
     return { start, end };
+}
+
+
+// ─── Safe reply ───────────────────────────────────────────────────────────────
+// message.reply() falha com MESSAGE_REFERENCE_UNKNOWN_MESSAGE se a mensagem
+// original foi deletada (ex: pelo clean/anti-spam) durante um fetch longo.
+// Fallback automático para channel.send() sem reply reference.
+//
+// ⚠️ NOTA DE TIPO: discord.js v14 inclui PartialGroupDMChannel na union de
+// channel, mas esse tipo não tem .send(). Bots não podem estar em group DMs,
+// então checamos a existência de send em runtime com 'send' in ch antes de
+// chamar — evita o erro de tipo sem precisar de cast inseguro.
+async function safeReply(message: Message, content: string): Promise<Message> {
+    try {
+        return await message.reply(content);
+    } catch {
+        const ch = message.channel;
+        if (!('send' in ch) || typeof (ch as any).send !== 'function') {
+            return message; // canal não suporta send — retorna msg original silenciosamente
+        }
+        return await (ch as any).send(`<@${message.author.id}> ${content}`) as Message;
+    }
+}
+
+async function safeEdit(msg: Message, content: string): Promise<void> {
+    try {
+        await msg.edit(content);
+    } catch {
+        // Mensagem de status foi deletada — enviar nova no canal sem reply.
+        const ch = msg.channel;
+        if (!('send' in ch) || typeof (ch as any).send !== 'function') return;
+        await (ch as any).send(content).catch(() => { });
+    }
 }
 
 // ─── Estado de cancelamento ───────────────────────────────────────────────────
@@ -81,17 +114,17 @@ export default {
 
         // ── 1. Parsear canal ──────────────────────────────────────────────────
         if (!args.length) {
-            return message.reply(
+            return safeReply(message,
                 '❌ Uso: `rp!exportchat #canal` (histórico completo)\n' +
                 'Ou com intervalo: `rp!exportchat #canal HH:MM -> HH:MM`\n' +
                 'Formatos aceitos: `DD/MM/AAAA -> DD/MM/AAAA` | `HH:MM DD/MM/AAAA -> HH:MM DD/MM/AAAA`',
             );
         }
 
-        const channelId     = args[0].replace(/\D/g, '');
+        const channelId = args[0].replace(/\D/g, '');
         const targetChannel = message.guild?.channels.cache.get(channelId) as TextChannel | undefined;
         if (!targetChannel?.isTextBased()) {
-            return message.reply('❌ Canal inválido! Mencione um canal de texto com #.');
+            return safeReply(message, '❌ Canal inválido! Mencione um canal de texto com #.');
         }
 
         // ── 2. Parsear intervalo (opcional) ───────────────────────────────────
@@ -101,7 +134,7 @@ export default {
         if (rangeStr.includes('->')) {
             range = parseTimeRange(rangeStr);
             if (!range) {
-                return message.reply(
+                return safeReply(message,
                     '❌ Intervalo inválido! Exemplos válidos:\n' +
                     '• `14:00 -> 18:30`\n' +
                     '• `01/06/2024 -> 30/06/2024`\n' +
@@ -111,7 +144,7 @@ export default {
         }
 
         // ── 3. Buscar mensagens ───────────────────────────────────────────────
-        const statusMsg = await message.reply(
+        const statusMsg = await safeReply(message,
             range
                 ? `⏳ Buscando mensagens em <#${targetChannel.id}> de **${range.start.toLocaleString('pt-BR')}** até **${range.end.toLocaleString('pt-BR')}**...`
                 : `⏳ Buscando **todo o histórico** de <#${targetChannel.id}>...`,
@@ -119,6 +152,11 @@ export default {
 
         const allMessages: Message[] = [];
         let afterId = range ? dateToSnowflake(new Date(range.start.getTime() - 1)) : '0';
+
+        // Atualiza a mensagem de status a cada 30s para o usuário saber que o bot
+        // ainda está trabalhando (chats grandes podem demorar vários minutos).
+        let lastProgressUpdate = Date.now();
+        const UPDATE_INTERVAL = 30_000; // 30 segundos
 
         try {
             while (true) {
@@ -135,14 +173,33 @@ export default {
 
                 if (passedEnd) break;
                 afterId = sorted[sorted.length - 1].id;
+
+                // Atualização de progresso a cada 30s
+                const now = Date.now();
+                if (now - lastProgressUpdate >= UPDATE_INTERVAL) {
+                    lastProgressUpdate = now;
+                    const oldest = allMessages[0]?.createdAt;
+                    const newest = allMessages[allMessages.length - 1]?.createdAt;
+                    const dateRange = oldest && newest
+                        ? ` *(${oldest.toLocaleDateString('pt-BR')} → ${newest.toLocaleDateString('pt-BR')})*`
+                        : '';
+                    await safeEdit(
+                        statusMsg,
+                        `⏳ Lendo histórico de <#${targetChannel.id}>...
+` +
+                        `📨 **${allMessages.length.toLocaleString('pt-BR')}** mensagens lidas até agora${dateRange}
+` +
+                        `-# Use \`rp!export end\` para cancelar`,
+                    );
+                }
             }
         } catch (err) {
             console.error('[exportchat] Erro ao buscar mensagens:', err);
-            return statusMsg.edit('❌ Erro ao buscar mensagens. Verifique as permissões do bot no canal.');
+            return void await safeEdit(statusMsg, '❌ Erro ao buscar mensagens. Verifique as permissões do bot no canal.');
         }
 
         if (allMessages.length === 0) {
-            return statusMsg.edit(
+            return void await safeEdit(statusMsg,
                 range ? '❌ Nenhuma mensagem encontrada no intervalo especificado.' : '❌ O canal está vazio!',
             );
         }
@@ -181,11 +238,11 @@ export default {
         }
 
         // ── 5. Buscar cores e nomes ────────────────────────────────────────────
-        await statusMsg.edit('⏳ Carregando dados dos membros...');
+        await safeEdit(statusMsg, '⏳ Carregando dados dos membros...');
 
-        const colorCache    = new Map<string, string>();
-        const nameCache     = new Map<string, string>();
-        const mentionedIds  = new Set<string>();
+        const colorCache = new Map<string, string>();
+        const nameCache = new Map<string, string>();
+        const mentionedIds = new Set<string>();
         for (const msg of allMessages) {
             for (const user of msg.mentions.users.values()) mentionedIds.add(user.id);
         }
@@ -209,10 +266,10 @@ export default {
         }
 
         // ── 6. Construir HTML via HtmlTranscript ───────────────────────────────
-        await statusMsg.edit(`⏳ Gerando HTML para **${allMessages.length}** mensagens...`);
+        await safeEdit(statusMsg, `⏳ Gerando HTML para **${allMessages.length}** mensagens...`);
 
         // buildChunks agora vem de HtmlTranscript.ts — mesma lógica, sem duplicação
-        const chunks     = buildChunks(allMessages, colorCache, nameCache);
+        const chunks = buildChunks(allMessages, colorCache, nameCache);
         const totalParts = chunks.length;
 
         // ── 7. Cancelamento via "rp!export end" ────────────────────────────────
@@ -231,43 +288,44 @@ export default {
         let dmChannel;
         try {
             dmChannel = await message.author.createDM();
-        } catch {
-            return statusMsg.edit('❌ Não consegui abrir seu DM. Verifique se permite mensagens diretas.');
+        } catch (err) {
+            console.error(`[exportchat] Erro ao abrir DM para ${message.author.username} (${message.author.id}):`, err);
+            return void await safeEdit(statusMsg, '❌ Não consegui abrir seu DM. Verifique se permite mensagens diretas.');
         }
 
-        await statusMsg.edit(`⏳ Iniciando envio de **${totalParts}** arquivo(s) no seu DM. Use \`rp!export end\` para cancelar.`);
+        await safeEdit(statusMsg, `⏳ Iniciando envio de **${totalParts}** arquivo(s) no seu DM. Use \`rp!export end\` para cancelar.`);
 
         for (let i = 0; i < totalParts; i++) {
             if (activeExports.get(exportKey)) {
                 cancelCollector.stop();
                 activeExports.delete(exportKey);
-                await statusMsg.edit(`🛑 **Encerrado!** (${i}/${totalParts} arquivos enviados)`);
+                await safeEdit(statusMsg, `🛑 **Encerrado!** (${i}/${totalParts} arquivos enviados)`);
                 await dmChannel.send('🛑 **Processo encerrado!**');
                 return;
             }
 
-            const chunk      = chunks[i];
-            const part       = i + 1;
-            const first      = new Date(chunk.messages[0].createdTimestamp).toLocaleString('pt-BR');
-            const last       = new Date(chunk.messages[chunk.messages.length - 1].createdTimestamp).toLocaleString('pt-BR');
+            const chunk = chunks[i];
+            const part = i + 1;
+            const first = new Date(chunk.messages[0].createdTimestamp).toLocaleString('pt-BR');
+            const last = new Date(chunk.messages[chunk.messages.length - 1].createdTimestamp).toLocaleString('pt-BR');
             const rangeLabel = `${first} → ${last} · ${chunk.messages.length} mensagens`;
 
             // htmlHeader agora vem de HtmlTranscript.ts
-            const fullHtml   = htmlHeader(targetChannel.name, rangeLabel, part, totalParts) +
-                               chunk.body + HTML_FOOTER;
+            const fullHtml = htmlHeader(targetChannel.name, rangeLabel, part, totalParts) +
+                chunk.body + HTML_FOOTER;
             const attachment = new AttachmentBuilder(Buffer.from(fullHtml, 'utf-8'), {
                 name: `export_${targetChannel.name}_parte${part}.html`,
             });
 
             await dmChannel.send({
                 content: `📦 **Parte ${part}/${totalParts}** — <#${targetChannel.id}>`,
-                files:   [attachment],
+                files: [attachment],
             });
         }
 
         // ── 9. Finalizar ───────────────────────────────────────────────────────
         cancelCollector.stop();
         activeExports.delete(exportKey);
-        await statusMsg.edit(`✅ **Exportação concluída!** ${totalParts} arquivo(s) enviados no seu DM.`);
+        await safeEdit(statusMsg, `✅ **Exportação concluída!** ${totalParts} arquivo(s) enviados no seu DM.`);
     },
 };

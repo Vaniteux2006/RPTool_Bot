@@ -617,7 +617,7 @@ async function askHalftimeSubstitutions(
 
             collector.on('end', () => resolve());
         });
-    } catch (_) { /* timeout silencioso */ }
+    } catch (e) { console.warn('[FUTEBOL] Erro durante o processo de substituições no intervalo:', e); }
 
     await halftimeMsg.delete().catch(() => null);
     return { homeSubsUsed, awaySubsUsed };

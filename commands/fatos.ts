@@ -312,6 +312,7 @@ async function startEducation(ctx: Message, target: User, channel: TextChannel |
         if (isChannel && channel) await channel.send(introMessage);
         else await target.send(introMessage);
     } catch (e) {
+        console.warn('[FATOS] Não foi possível enviar mensagem inicial (DM fechada ou canal inválido):', e);
         ctx.reply("❌ O aluno trancou a matrícula (DM fechada).");
         return;
     }
@@ -339,6 +340,7 @@ async function startEducation(ctx: Message, target: User, channel: TextChannel |
             paragraphIndex++; 
             await sleep(1500); 
         } catch (error) {
+            console.error(`[FATOS] Aula interrompida no fato #${i + 1}:`, error);
             await ctx.reply(`❌ A aula foi interrompida no fato #${i + 1}.`);
             return;
         }

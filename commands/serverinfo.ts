@@ -46,6 +46,7 @@ export default {
             try {
                 guild = await message.client.guilds.fetch(targetId);
             } catch (e) {
+                console.warn('[SERVERINFO] Guild não encontrada pelo ID:', targetId, e);
                 return message.reply("❌ Não consegui encontrar o servidor. O bot precisa estar nele para puxar os dados!");
             }
         }
@@ -68,7 +69,7 @@ export default {
         try {
              const bans = await guild.bans.fetch();
              banCount = bans.size;
-        } catch (e) { banCount = 0; }
+        } catch (e) { console.warn('[SERVERINFO] Sem permissão para listar banimentos em:', guild.id, e); banCount = 0; }
 
         const members = guild.members.cache;
         const oldMember = members

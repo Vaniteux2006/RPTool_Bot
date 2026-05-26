@@ -176,6 +176,7 @@ Log:\n${chunkLog.substring(0, 25000)}`;
                     } catch (error: any) {
                         const errorMsg = error.response?.data?.error?.message || error.message || error.toString();
                         if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
+                            console.warn(`[RESUME] Retry ${attempt} na parte ${i + 1} - Servidor sobrecarregado (503):`, errorMsg);
                             await loadMsg.edit(`🔥 **Servidores lotados (Erro 503)!**\n🔄 Tentando de novo parte ${i + 1} (Tentativa ${attempt})...`);
                             await new Promise(resolve => setTimeout(resolve, 5000)); // Espera 5 segundos
                             attempt++;
@@ -300,6 +301,7 @@ Log:\n${chunkLog.substring(0, 25000)}`;
                         } catch (error: any) {
                             const errorMsg = error.response?.data?.error?.message || error.message || error.toString();
                             if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
+                                console.warn(`[RESUME] Retry ${attempt} no super resumo - Servidor sobrecarregado (503):`, errorMsg);
                                 await finalMsg.edit({ content: `🔥 **ERRO 503!** 🍟 Servidores lotados.\n🔄 Tentando compilar o Resumo Definitivo de novo (Tentativa ${attempt})...` });
                                 await new Promise(resolve => setTimeout(resolve, 5000)); // Espera 5 segundos
                                 attempt++;

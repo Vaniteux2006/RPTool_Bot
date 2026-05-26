@@ -45,7 +45,7 @@ export default {
                 try {
                     const member = await guild.members.fetch(userId).catch(() => null);
                     if (member) isMember = true;
-                } catch (e) {}
+                } catch (e) { console.warn("[TOKEN] Erro ao verificar membro no servidor:", guild.id, e); }
             }
             if (isMember) mutualGuilds.push(guild);
         }
@@ -222,6 +222,7 @@ export default {
                 await selection.update({ content: `✅ Nova chave adicionada ao chaveiro como **${keyName}**! Te enviando o painel novamente...`, components: [] });
                 setTimeout(() => this.sendDashboard(dm, userId, guildId, guildName), 2000);
             } catch (e) {
+                console.warn('[TOKEN] Timeout ao selecionar modelo na tela inicial:', e);
                 await dm.send("⏱️ Você demorou muito para escolher o modelo.");
             }
         });
@@ -271,6 +272,7 @@ export default {
                 await selection.update({ content: `✅ Nova chave salva como **${keyName}**! Atualizando painel...`, components: [] });
                 setTimeout(() => this.renderDashboard(dmChannel, userId, client, dashMessage), 2000);
             } catch (e) {
+                console.warn('[TOKEN] Timeout ao selecionar modelo na adição de chave:', e);
                 await statusMsg.edit({ content: "⏱️ Tempo esgotado para escolher o modelo.", components: [] });
                 this.renderDashboard(dmChannel, userId, client, dashMessage);
             }
@@ -308,6 +310,7 @@ export default {
             await selection.update({ content: "✅ Chave removida com sucesso! Atualizando painel...", components: [] });
             setTimeout(() => this.renderDashboard(dmChannel, userId, client, dashMessage), 2000);
         } catch (e) {
+            console.warn('[TOKEN] Timeout ao deletar chave:', e);
             await msg.edit({ content: "⏱️ Operação cancelada por inatividade.", components: [] });
             this.renderDashboard(dmChannel, userId, client, dashMessage);
         }
@@ -351,6 +354,7 @@ export default {
                 setTimeout(() => this.renderDashboard(dmChannel, userId, client, dashMessage), 2000);
             });
         } catch (e) {
+            console.warn('[TOKEN] Timeout ao vincular chave ao servidor:', e);
             await msgKey.edit({ content: "⏱️ Operação cancelada por inatividade.", components: [] });
             this.renderDashboard(dmChannel, userId, client, dashMessage);
         }
@@ -383,6 +387,7 @@ export default {
             await selection.update({ content: "✅ Vínculo removido com sucesso!", components: [] });
             setTimeout(() => this.renderDashboard(dmChannel, userId, client, dashMessage), 2000);
         } catch (e) {
+            console.warn('[TOKEN] Timeout ao desvincular servidor:', e);
             await msg.edit({ content: "⏱️ Operação cancelada.", components: [] });
             this.renderDashboard(dmChannel, userId, client, dashMessage);
         }
@@ -437,6 +442,7 @@ export default {
             });
 
         } catch (e) {
+            console.warn('[TOKEN] Timeout ao renomear chave:', e);
             await msg.edit({ content: "⏱️ Operação cancelada por inatividade.", components: [] });
             this.renderDashboard(dmChannel, userId, client, dashMessage);
         }
@@ -457,7 +463,7 @@ export default {
                 return data.data.filter((m: any) => m.id.includes('gpt')).map((m: any) => m.id);
             }
             return [];
-        } catch (e) { return []; }
+        } catch (e) { console.warn('[TOKEN] Falha ao buscar lista de modelos da API:', e); return []; }
     },
 
     handleDashboardInteractions(dashMessage: Message, userId: string, client: any) {

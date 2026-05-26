@@ -55,7 +55,7 @@ export default {
             }
 
             const prompt = `
-            Preciso que atue como um juiz de "Resenha" (Caos/Zoeira) para um chat de Discord.
+            Atue como um juiz de "Resenha" (Caos/Zoeira) para um chat de Discord.
             Analise o histórico abaixo e classifique o estado atual.
 
             [CRITÉRIOS PARA "r-01" (RESENHA CONFIRMADA)]
@@ -72,7 +72,7 @@ export default {
             - Debate "aristocrático" (educado, green flag, sem baixaria).
             - Chat parado, apenas cumprimentos ou nada engraçado.
 
-            [HISTÓRICO DE MENSAGENS DE DISCORD]
+            [HISTÓRICO]
             ${history}
 
             [INSTRUÇÃO DE SAÍDA]
@@ -95,6 +95,7 @@ export default {
                 } catch (error: any) {
                     const errorMsg = error.message || error.toString();
                     if (errorMsg.includes('503') || errorMsg.includes('Overloaded')) {
+                        console.warn(`[RESENHA] Retry ${attempt} - Servidor sobrecarregado (503):`, errorMsg);
                         const retryMsg = `🔥 **ERRO 503: Servidores fritando!** 🍟\nDeu ruim na leitura da resenha, tentando de novo em 5 segundos... (Tentativa ${attempt})`;
                         if (loading.edit) await loading.edit(retryMsg);
                         await new Promise(resolve => setTimeout(resolve, 5000));

@@ -53,6 +53,7 @@ export default {
                 try {
                     targetUser = await message.client.users.fetch(targetId);
                 } catch (e) {
+                    console.warn('[USERINFO] Usuário não encontrado pelo ID:', targetId, e);
                     return message.reply("❌ Não consegui encontrar nenhum usuário com esse ID no Discord.");
                 }
             }
@@ -69,6 +70,7 @@ export default {
             try {
                 targetMember = await message.guild.members.fetch(targetUser.id);
             } catch (e) {
+                console.warn('[USERINFO] Membro não encontrado no servidor:', targetUser.id, e);
                 targetMember = undefined;
             }
         }

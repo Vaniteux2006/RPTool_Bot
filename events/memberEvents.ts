@@ -1,35 +1,116 @@
 // RPTool/events/memberEvents.ts
-// ─── Intent: GUILD_MEMBERS (1 << 1) ⚠️ Privileged ────────────────────────────
-// Eventos: GUILD_MEMBER_ADD · GUILD_MEMBER_UPDATE · GUILD_MEMBER_REMOVE
-//
-// Subscribers ativos (registrados em seus próprios arquivos):
-//   commands/autorole.ts   → EventCheckout.onGuildMemberAdd('autorole', ...)
-//   commands/welcome.ts    → EventCheckout.onGuildMemberAdd('welcome', ...)
-//                          → EventCheckout.onGuildMemberRemove('welcome', ...)
-//
-// Subscribers de log (stub — aguardando implementação):
-//   supercommands/logs/events/Memberlogs.ts
-//     → EventCheckout.onGuildMemberAdd('logs:memberAdd', ...)
-//     → EventCheckout.onGuildMemberRemove('logs:memberRemove', ...)
-//     → EventCheckout.onGuildMemberUpdate('logs:memberUpdate', ...)
-//
-// Este arquivo é reservado para handlers centrais que NÃO pertencem a nenhum
-// comando específico. Por enquanto serve como documentação do intent.
+// ─── Intent: GUILD_MEMBERS (1 << 1) — Privileged ────────────────────────────
+// Cobre: GUILD_MEMBER_ADD · GUILD_MEMBER_UPDATE · GUILD_MEMBER_REMOVE
+// Requer ativação manual no Discord Developer Portal
+import {
+    Events,
+    GuildMember,
+    PartialGuildMember,
+    Client,
+    EmbedBuilder,
+    AuditLogEvent,
+} from 'discord.js';
+import { WelcomeModel } from '../tools/models/Outros';
+import { getAverageColor } from 'fast-average-color-node';
+import autoroleCommand from '../commands/autorole';
 
-import { EventCheckout } from '../tools/event_checkout';
-import { GuildMember, PartialGuildMember } from 'discord.js';
+export default [
 
-// Slot de handler central — adicione aqui lógica que não pertença a um comando.
-// Exemplo futuro: detector de raid (muitos joins em curto tempo).
-EventCheckout.onGuildMemberAdd('memberEvents:central', async (_member: GuildMember) => {
-    // TODO: detector de raid / joins em burst
-    // TODO: cache de membros para correlação com outros eventos
-});
+    // ── GUILD_MEMBER_ADD ──────────────────────────────────────────────────────
+    {
+        name:  Events.GuildMemberAdd,
+        once:  false,
+        execute: async (member: GuildMember, client: Client) => {
 
-EventCheckout.onGuildMemberRemove('memberEvents:central', async (_member: GuildMember | PartialGuildMember) => {
-    // TODO: limpeza de dados temporários do membro
-});
+            // 1. Autorole — dá cargos automáticos configurados pelo ADM
+            try { await autoroleCommand.giveRole(member); }
+            catch (e) { console.error('❌ [memberEvents] Autorole falhou:', e); }
 
-EventCheckout.onGuildMemberUpdate('memberEvents:central', async (_old: GuildMember | PartialGuildMember, _new: GuildMember) => {
-    // TODO: detecção de mudança de nome/apelido fora de logs
-});
+            // 2. Mensagem de boas-vindas
+            try {
+                const config = await WelcomeModel.findOne({ guildId: member.guild.id });
+                if (config?.channelId) {
+                    const channel = member.guild.channels.cache.get(config.channelId);
+                    if (channel?.isTextBased()) {
+                        const msg = config.joinMsg
+                            .replace(/{user}/g,   `<@${member.id}>`)
+                            .replace(/{server}/g, member.guild.name)
+                            .replace(/{count}/g,  String(member.guild.memberCount));
+
+                        let color = 0x5865F2;
+                        try {
+                            const avg = await getAverageColor(member.user.displayAvatarURL({ extension: 'png', size: 256 }));
+                            color = parseInt(avg.hex.replace('#', ''), 16);
+                        } catch (e) { console.warn('[memberEvents] Falha ao calcular cor média do avatar:', member.user.id, e); }
+
+                        const embed = new EmbedBuilder()
+                            .setColor(color)
+                            .setDescription(msg)
+                            .setThumbnail(member.user.displayAvatarURL());
+
+                        await (channel as any).send({ embeds: [embed] });
+                    }
+                }
+            } catch (e) { console.error('❌ [memberEvents] Welcome falhou:', e); }
+
+            // ── LOG PLACEHOLDER ───────────────────────────────────────────────
+            // TODO: chamar supercommands/logs/events/memberLogs.ts → onMemberAdd
+        },
+    },
+
+    // ── GUILD_MEMBER_REMOVE ───────────────────────────────────────────────────
+    {
+        name:  Events.GuildMemberRemove,
+        once:  false,
+        execute: async (member: GuildMember | PartialGuildMember, client: Client) => {
+
+            // Mensagem de saída (ban/kick/leave)
+            try {
+                const config = await WelcomeModel.findOne({ guildId: member.guild.id });
+                if (config?.channelId) {
+                    const channel = member.guild.channels.cache.get(config.channelId);
+                    if (channel?.isTextBased()) {
+                        const banLogs  = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberBanAdd  }).catch(() => null);
+                        const kickLogs = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberKick    }).catch(() => null);
+                        const banEntry  = banLogs?.entries.first();
+                        const kickEntry = kickLogs?.entries.first();
+
+                        const isBan  = !!(banEntry  && banEntry.target?.id  === member.id && Date.now() - banEntry.createdTimestamp  < 5000);
+                        const isKick = !isBan && !!(kickEntry && kickEntry.target?.id === member.id && Date.now() - kickEntry.createdTimestamp < 5000);
+
+                        let rawMsg = config.leaveMsg;
+                        let color  = 0x1A2B4C;
+                        if (isBan)       { rawMsg = config.banMsg;  color = 0xFF0000; }
+                        else if (isKick) { rawMsg = config.kickMsg; color = 0xFFFFFF; }
+
+                        const msg = rawMsg
+                            .replace(/{user}/g,   `**${member.user?.username ?? 'Usuário'}**`)
+                            .replace(/{server}/g, member.guild.name)
+                            .replace(/{count}/g,  String(member.guild.memberCount));
+
+                        const embed = new EmbedBuilder()
+                            .setColor(color)
+                            .setDescription(msg)
+                            .setThumbnail(member.user?.displayAvatarURL() ?? null);
+
+                        await (channel as any).send({ embeds: [embed] });
+                    }
+                }
+            } catch (e) { console.error('❌ [memberEvents] Leave message falhou:', e); }
+
+            // ── LOG PLACEHOLDER ───────────────────────────────────────────────
+            // TODO: chamar supercommands/logs/events/memberLogs.ts → onMemberRemove
+        },
+    },
+
+    // ── GUILD_MEMBER_UPDATE ───────────────────────────────────────────────────
+    {
+        name:  Events.GuildMemberUpdate,
+        once:  false,
+        execute: async (_old: GuildMember | PartialGuildMember, _new: GuildMember, _client: Client) => {
+            // ── LOG PLACEHOLDER ───────────────────────────────────────────────
+            // TODO: chamar supercommands/logs/events/memberLogs.ts → onMemberUpdate
+            // Exemplo: nickname mudado, cargo adicionado/removido
+        },
+    },
+];
