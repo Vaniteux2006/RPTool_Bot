@@ -9,7 +9,7 @@
 import fs   from 'fs';
 import path from 'path';
 import { Message, Guild } from 'discord.js';
-import { esc, renderContent } from '../../logs/utils/HtmlTranscript';
+import { esc, renderContent } from '../../../tools/HtmlTranscript';
 
 export class SegmentRenderer {
     private lastAuthorKey = '';
