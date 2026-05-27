@@ -1,90 +1,40 @@
 // RPTool/supercommands/exportchat/index.ts
-// ─── Exportação de Chat para HTML ─────────────────────────────────────────────
-// Importa a geração de HTML de HtmlTranscript.ts (compartilhado com Messagelogs).
-// A lógica de busca de mensagens, confirmação e envio por DM permanece aqui.
+// ─── Exportação de Chat para HTML — v2 (workers paralelos + disco) ────────────
+//
+// Arquitetura:
+//   1. parseArgs    → valida canal + intervalo → buildDayQueue (fila de dias)
+//   2. confirm      → botão de confirmação se > 10 mensagens estimadas
+//   3. 3 workers    → consomem a fila de dias em paralelo, escrevem seg_YYYYMMDD.html em /data
+//   4. merger       → concatena segmentos em ordem → divide em arquivos de 7.5 MB
+//   5. Envia HTMLs  → DM do usuário, parte por parte
+//   6. cleanup      → deleta a pasta de sessão do disco
+//
+// RAM: O(mensagens de 1 batch de 100) — sem acumular em memória.
+// Disco: O(tamanho total do export) em /data/session_<userId>_<ts>/ — limpo após envio.
 
 import {
-    Message,
-    TextChannel,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    ComponentType,
-    AttachmentBuilder,
+    Message, TextChannel, AttachmentBuilder,
 } from 'discord.js';
+import path from 'path';
 
-// ── Importa geração de HTML do utilitário compartilhado ───────────────────────
-import { buildChunks, htmlHeader, HTML_FOOTER } from '../../tools/HtmlTranscript';
+import { parseChannel, parseTimeRange, buildDayQueue } from './modules/parseArgs';
+import { createSessionDir, deleteSession, cleanOrphanSessions } from './modules/cleanup';
+import { ProgressTracker }  from './modules/ProgressTracker';
+import { SegmentRenderer }  from './modules/SegmentRenderer';
+import { runWorker }        from './modules/worker';
+import { mergeSegments }    from './modules/merger';
+import { askConfirmation }  from './modules/confirm';
 
-// ─── Utilitários de Data / Snowflake ─────────────────────────────────────────
+// ─── Limpeza de sessões órfãs no boot ────────────────────────────────────────
+cleanOrphanSessions(4);
 
-function dateToSnowflake(date: Date): string {
-    const DISCORD_EPOCH = 1420070400000n;
-    return ((BigInt(date.getTime()) - DISCORD_EPOCH) << 22n).toString();
-}
-
-interface TimeRange { start: Date; end: Date; }
-
-function parseTimeRange(raw: string): TimeRange | null {
-    const arrowIdx = raw.indexOf('->');
-    if (arrowIdx === -1) return null;
-
-    const leftStr = raw.slice(0, arrowIdx).trim();
-    const rightStr = raw.slice(arrowIdx + 2).trim();
-
-    const parseOne = (s: string): Date | null => {
-        const now = new Date();
-
-        let m = s.match(/^(\d{1,2}):(\d{2})\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-        if (m) {
-            const year = m[5].length === 2 ? 2000 + +m[5] : +m[5];
-            return new Date(year, +m[4] - 1, +m[3], +m[1], +m[2], 0, 0);
-        }
-        m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-        if (m) {
-            const year = m[3].length === 2 ? 2000 + +m[3] : +m[3];
-            const isEnd = s === rightStr;
-            return new Date(year, +m[2] - 1, +m[1], isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, 0);
-        }
-        m = s.match(/^(\d{1,2}):(\d{2})$/);
-        if (m) {
-            return new Date(now.getFullYear(), now.getMonth(), now.getDate(), +m[1], +m[2], 0, 0);
-        }
-        return null;
-    };
-
-    const start = parseOne(leftStr);
-    const end = parseOne(rightStr);
-    if (!start || !end) return null;
-
-    if (end <= start) {
-        if (!leftStr.includes('/') && !rightStr.includes('/')) {
-            end.setDate(end.getDate() + 1);
-        } else {
-            return null;
-        }
-    }
-    return { start, end };
-}
-
-
-// ─── Safe reply ───────────────────────────────────────────────────────────────
-// message.reply() falha com MESSAGE_REFERENCE_UNKNOWN_MESSAGE se a mensagem
-// original foi deletada (ex: pelo clean/anti-spam) durante um fetch longo.
-// Fallback automático para channel.send() sem reply reference.
-//
-// ⚠️ NOTA DE TIPO: discord.js v14 inclui PartialGroupDMChannel na union de
-// channel, mas esse tipo não tem .send(). Bots não podem estar em group DMs,
-// então checamos a existência de send em runtime com 'send' in ch antes de
-// chamar — evita o erro de tipo sem precisar de cast inseguro.
+// ─── Safe reply/edit (guard para PartialGroupDMChannel) ──────────────────────
 async function safeReply(message: Message, content: string): Promise<Message> {
     try {
         return await message.reply(content);
     } catch {
         const ch = message.channel;
-        if (!('send' in ch) || typeof (ch as any).send !== 'function') {
-            return message; // canal não suporta send — retorna msg original silenciosamente
-        }
+        if (!('send' in ch) || typeof (ch as any).send !== 'function') return message;
         return await (ch as any).send(`<@${message.author.id}> ${content}`) as Message;
     }
 }
@@ -93,239 +43,232 @@ async function safeEdit(msg: Message, content: string): Promise<void> {
     try {
         await msg.edit(content);
     } catch {
-        // Mensagem de status foi deletada — enviar nova no canal sem reply.
         const ch = msg.channel;
         if (!('send' in ch) || typeof (ch as any).send !== 'function') return;
-        await (ch as any).send(content).catch(() => { });
+        await (ch as any).send(content).catch(() => {});
     }
 }
 
-// ─── Estado de cancelamento ───────────────────────────────────────────────────
+// ─── Estado de cancelamento por usuário ──────────────────────────────────────
 const activeExports = new Map<string, boolean>();
 
 // ─── Comando ──────────────────────────────────────────────────────────────────
 export default {
-    name: 'exportchat',
-    description: 'Exporta mensagens de um canal por intervalo de data/hora para HTML.',
-    aliases: ['exportar', 'backupchat'],
+    name:        'exportchat',
+    description: 'Exporta mensagens de um canal para HTML (workers paralelos).',
+    aliases:     ['exportar', 'backupchat'],
 
     async execute(message: Message, args: string[]) {
-        const commandChannel = message.channel as TextChannel;
+        if (!message.guild) return message.reply('❌ Este comando só funciona em servidores.');
 
         // ── 1. Parsear canal ──────────────────────────────────────────────────
         if (!args.length) {
             return safeReply(message,
-                '❌ Uso: `rp!exportchat #canal` (histórico completo)\n' +
-                'Ou com intervalo: `rp!exportchat #canal HH:MM -> HH:MM`\n' +
-                'Formatos aceitos: `DD/MM/AAAA -> DD/MM/AAAA` | `HH:MM DD/MM/AAAA -> HH:MM DD/MM/AAAA`',
+                '❌ Uso: `rp!exportchat #canal`\n' +
+                'Com intervalo: `rp!exportchat #canal DD/MM/AAAA -> DD/MM/AAAA`\n' +
+                'Com hora: `rp!exportchat #canal HH:MM DD/MM/AAAA -> HH:MM DD/MM/AAAA`',
             );
         }
 
-        const channelId = args[0].replace(/\D/g, '');
-        const targetChannel = message.guild?.channels.cache.get(channelId) as TextChannel | undefined;
-        if (!targetChannel?.isTextBased()) {
+        const targetChannel = parseChannel(args, message.guild);
+        if (!targetChannel) {
             return safeReply(message, '❌ Canal inválido! Mencione um canal de texto com #.');
         }
 
-        // ── 2. Parsear intervalo (opcional) ───────────────────────────────────
+        // ── 2. Parsear intervalo ──────────────────────────────────────────────
         const rangeStr = args.slice(1).join(' ').trim();
-        let range: TimeRange | null = null;
+        let rangeStart: Date;
+        let rangeEnd:   Date;
 
         if (rangeStr.includes('->')) {
-            range = parseTimeRange(rangeStr);
-            if (!range) {
+            const parsed = parseTimeRange(rangeStr);
+            if (!parsed) {
                 return safeReply(message,
-                    '❌ Intervalo inválido! Exemplos válidos:\n' +
-                    '• `14:00 -> 18:30`\n' +
+                    '❌ Intervalo inválido! Exemplos:\n' +
                     '• `01/06/2024 -> 30/06/2024`\n' +
                     '• `09:00 01/06/2024 -> 18:00 30/06/2024`',
                 );
             }
+            rangeStart = parsed.start;
+            rangeEnd   = parsed.end;
+        } else {
+            // Sem intervalo = histórico completo
+            // Pega a primeira mensagem do canal para saber o início real
+            rangeStart = new Date(0); // epoch — worker vai parar quando channel.messages retornar 0
+            rangeEnd   = new Date();
         }
 
-        // ── 3. Buscar mensagens ───────────────────────────────────────────────
+        // ── 3. Construir fila de dias ─────────────────────────────────────────
+        // Para histórico completo, pega a data da msg mais antiga do canal
+        let effectiveStart = rangeStart;
+        if (rangeStart.getTime() === 0) {
+            const statusFetch = await safeReply(message, '⏳ Identificando início do histórico...');
+            try {
+                const oldest = await targetChannel.messages.fetch({ limit: 1, after: '0' });
+                if (oldest.size > 0) {
+                    effectiveStart = new Date(oldest.first()!.createdTimestamp);
+                    effectiveStart.setHours(0, 0, 0, 0);
+                } else {
+                    return safeEdit(statusFetch, '❌ O canal está vazio!');
+                }
+            } catch {
+                return safeEdit(statusFetch, '❌ Sem permissão para ler mensagens neste canal.');
+            }
+            await statusFetch.delete().catch(() => {});
+        }
+
+        const dayQueue  = buildDayQueue(effectiveStart, rangeEnd);
+        const totalDays = dayQueue.length;
+
+        // ── 4. Confirmação ────────────────────────────────────────────────────
+        // Estimativa: média de ~2700 msgs por 30s sequencial; com 3 workers ~4x mais rápido
+        // Arquivos: estimativa de ~500k chars por parte de 7.5 MB
+        const estimatedFiles = Math.max(1, Math.ceil(totalDays * 0.5));
+
+        if (totalDays > 3) {
+            const commandCh = message.channel as TextChannel;
+            const confirmed = await askConfirmation(commandCh, message.author.id, estimatedFiles);
+            if (!confirmed) return;
+        }
+
+        // ── 5. Status inicial ─────────────────────────────────────────────────
         const statusMsg = await safeReply(message,
-            range
-                ? `⏳ Buscando mensagens em <#${targetChannel.id}> de **${range.start.toLocaleString('pt-BR')}** até **${range.end.toLocaleString('pt-BR')}**...`
-                : `⏳ Buscando **todo o histórico** de <#${targetChannel.id}>...`,
+            `⏳ Iniciando export de <#${targetChannel.id}> (${totalDays} dia(s))...\n` +
+            `-# Use \`rp!export end\` para cancelar`,
         );
 
-        const allMessages: Message[] = [];
-        let afterId = range ? dateToSnowflake(new Date(range.start.getTime() - 1)) : '0';
+        // ── 6. Criar sessão no disco ──────────────────────────────────────────
+        const sessionPath = createSessionDir(message.author.id);
 
-        // Atualiza a mensagem de status a cada 30s para o usuário saber que o bot
-        // ainda está trabalhando (chats grandes podem demorar vários minutos).
-        let lastProgressUpdate = Date.now();
-        const UPDATE_INTERVAL = 30_000; // 30 segundos
-
-        try {
-            while (true) {
-                const fetched = await (targetChannel as TextChannel).messages.fetch({ limit: 100, after: afterId });
-                if (fetched.size === 0) break;
-
-                const sorted = [...fetched.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-                let passedEnd = false;
-
-                for (const msg of sorted) {
-                    if (range && msg.createdTimestamp > range.end.getTime()) { passedEnd = true; break; }
-                    if (!range || msg.createdTimestamp >= range.start.getTime()) allMessages.push(msg);
-                }
-
-                if (passedEnd) break;
-                afterId = sorted[sorted.length - 1].id;
-
-                // Atualização de progresso a cada 30s
-                const now = Date.now();
-                if (now - lastProgressUpdate >= UPDATE_INTERVAL) {
-                    lastProgressUpdate = now;
-                    const oldest = allMessages[0]?.createdAt;
-                    const newest = allMessages[allMessages.length - 1]?.createdAt;
-                    const dateRange = oldest && newest
-                        ? ` *(${oldest.toLocaleDateString('pt-BR')} → ${newest.toLocaleDateString('pt-BR')})*`
-                        : '';
-                    await safeEdit(
-                        statusMsg,
-                        `⏳ Lendo histórico de <#${targetChannel.id}>...
-` +
-                        `📨 **${allMessages.length.toLocaleString('pt-BR')}** mensagens lidas até agora${dateRange}
-` +
-                        `-# Use \`rp!export end\` para cancelar`,
-                    );
-                }
-            }
-        } catch (err) {
-            console.error('[exportchat] Erro ao buscar mensagens:', err);
-            return void await safeEdit(statusMsg, '❌ Erro ao buscar mensagens. Verifique as permissões do bot no canal.');
-        }
-
-        if (allMessages.length === 0) {
-            return void await safeEdit(statusMsg,
-                range ? '❌ Nenhuma mensagem encontrada no intervalo especificado.' : '❌ O canal está vazio!',
-            );
-        }
-
-        // ── 4. Confirmação se > 10 mensagens ──────────────────────────────────
-        const estimatedFiles = Math.ceil(allMessages.length / 1000);
-
-        if (allMessages.length > 10) {
-            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder().setCustomId('exp_yes').setLabel('✅ Confirmar').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('exp_no').setLabel('❌ Cancelar').setStyle(ButtonStyle.Secondary),
-            );
-
-            const confirmMsg = await commandChannel.send({
-                content: `<@${message.author.id}> ⚠️ **Atenção**, exportar esse chat precisará de por volta de **${estimatedFiles}** arquivo(s).\nTem certeza?`,
-                components: [row],
-            });
-
-            try {
-                const btn = await confirmMsg.awaitMessageComponent({
-                    filter: i => i.user.id === message.author.id && ['exp_yes', 'exp_no'].includes(i.customId),
-                    componentType: ComponentType.Button,
-                    time: 60_000,
-                });
-                await btn.deferUpdate();
-                if (btn.customId === 'exp_no') {
-                    await confirmMsg.edit({ content: '🚫 Exportação cancelada.', components: [] });
-                    return;
-                }
-            } catch {
-                await confirmMsg.edit({ content: '⏱️ Tempo esgotado. Exportação cancelada.', components: [] });
-                return;
-            }
-
-            await confirmMsg.edit({ content: '✅ Confirmado! Iniciando exportação...', components: [] });
-        }
-
-        // ── 5. Buscar cores e nomes ────────────────────────────────────────────
-        await safeEdit(statusMsg, '⏳ Carregando dados dos membros...');
-
-        const colorCache = new Map<string, string>();
-        const nameCache = new Map<string, string>();
-        const mentionedIds = new Set<string>();
-        for (const msg of allMessages) {
-            for (const user of msg.mentions.users.values()) mentionedIds.add(user.id);
-        }
-        const uniqueIds = [...new Set([...allMessages.map(m => m.author.id), ...mentionedIds])];
-
-        for (const uid of uniqueIds) {
-            try {
-                const member = await message.guild?.members.fetch(uid).catch(() => null);
-                if (member) {
-                    const hex = member.displayHexColor;
-                    colorCache.set(uid, hex === '#000000' ? '#ffffff' : hex);
-                    nameCache.set(uid, member.displayName);
-                } else {
-                    colorCache.set(uid, '#ffffff');
-                    const user = message.client.users.cache.get(uid);
-                    if (user) nameCache.set(uid, user.username);
-                }
-            } catch {
-                colorCache.set(uid, '#ffffff');
-            }
-        }
-
-        // ── 6. Construir HTML via HtmlTranscript ───────────────────────────────
-        await safeEdit(statusMsg, `⏳ Gerando HTML para **${allMessages.length}** mensagens...`);
-
-        // buildChunks agora vem de HtmlTranscript.ts — mesma lógica, sem duplicação
-        const chunks = buildChunks(allMessages, colorCache, nameCache);
-        const totalParts = chunks.length;
-
-        // ── 7. Cancelamento via "rp!export end" ────────────────────────────────
+        // ── 7. Setup de cancelamento ──────────────────────────────────────────
         const exportKey = message.author.id;
         activeExports.set(exportKey, false);
 
-        const cancelCollector = commandChannel.createMessageCollector({
+        const cancelCollector = (message.channel as TextChannel).createMessageCollector({
             filter: (m: Message) =>
                 m.author.id === message.author.id &&
                 m.content.trim().toLowerCase() === 'rp!export end',
-            time: 3 * 60 * 60 * 1000,
+            time: 6 * 60 * 60 * 1000, // 6 horas máximo
         });
-        cancelCollector.on('collect', () => activeExports.set(exportKey, true));
+        cancelCollector.on('collect', () => {
+            activeExports.set(exportKey, true);
+            console.log(`[exportchat] Cancelamento solicitado por ${message.author.tag}`);
+        });
 
-        // ── 8. Abrir DM e enviar arquivos ──────────────────────────────────────
+        const isCancelled = () => activeExports.get(exportKey) === true;
+
+        // ── 8. Progress tracker ───────────────────────────────────────────────
+        const progress = new ProgressTracker(statusMsg, targetChannel.id, totalDays);
+        progress.start();
+
+        // ── 9. Caches compartilhados entre workers ────────────────────────────
+        const colorCache   = new Map<string, string>();
+        const nameCache    = new Map<string, string>();
+        const pendingFetch = new Set<string>(); // evita fetch duplicado do mesmo userId
+
+        const makeRenderer = () => new SegmentRenderer(colorCache, nameCache, message.guild!, pendingFetch);
+
+        // ── 10. Lançar 3 workers em paralelo ──────────────────────────────────
+        // A fila é um array compartilhado — .shift() é atômico em JS single-thread.
+        // Cada worker pega o próximo dia disponível ao terminar o atual.
+        const sharedQueue = [...dayQueue]; // cópia da fila para os workers consumirem
+
+        const NUM_WORKERS = 3;
+        const workerPromises = Array.from({ length: NUM_WORKERS }, (_, i) =>
+            runWorker(i + 1, sharedQueue, sessionPath, targetChannel, makeRenderer(), progress, isCancelled),
+        );
+
+        let workerResults;
+        try {
+            workerResults = await Promise.all(workerPromises);
+        } catch (err) {
+            await progress.stop();
+            cancelCollector.stop();
+            activeExports.delete(exportKey);
+            deleteSession(sessionPath);
+            console.error('[exportchat] Erro fatal nos workers:', err);
+            return safeEdit(statusMsg, '❌ Erro fatal durante a exportação. Tente novamente.');
+        }
+
+        // Cancelamento durante os workers
+        if (isCancelled()) {
+            await progress.stop();
+            cancelCollector.stop();
+            activeExports.delete(exportKey);
+            deleteSession(sessionPath);
+            const totalRead = workerResults.reduce((s, r) => s + r.totalMessages, 0);
+            return safeEdit(statusMsg, `🛑 Export cancelado. (${totalRead.toLocaleString('pt-BR')} mensagens lidas até o cancelamento)`);
+        }
+
+        await progress.stop(`⚙️ Processando e dividindo arquivos...`);
+
+        // ── 11. Merge dos segmentos → arquivos de output ──────────────────────
+        const totalRead = workerResults.reduce((s, r) => s + r.totalMessages, 0);
+        const errors    = workerResults.flatMap(r => r.errors);
+
+        const dateStr  = new Date().toLocaleDateString('pt-BR');
+        const subtitle = `${totalRead.toLocaleString('pt-BR')} mensagens · exportado em ${dateStr}`;
+
+        let mergeResult;
+        try {
+            mergeResult = await mergeSegments(sessionPath, targetChannel.name, subtitle);
+        } catch (err) {
+            cancelCollector.stop();
+            activeExports.delete(exportKey);
+            deleteSession(sessionPath);
+            console.error('[exportchat] Erro no merge:', err);
+            return safeEdit(statusMsg, '❌ Erro ao montar os arquivos de saída.');
+        }
+
+        const { outputFiles, totalParts } = mergeResult;
+
+        // ── 12. Abrir DM e enviar ─────────────────────────────────────────────
         let dmChannel;
         try {
             dmChannel = await message.author.createDM();
-        } catch (err) {
-            console.error(`[exportchat] Erro ao abrir DM para ${message.author.username} (${message.author.id}):`, err);
-            return void await safeEdit(statusMsg, '❌ Não consegui abrir seu DM. Verifique se permite mensagens diretas.');
+        } catch {
+            cancelCollector.stop();
+            activeExports.delete(exportKey);
+            deleteSession(sessionPath);
+            return safeEdit(statusMsg, '❌ Não consegui abrir seu DM. Verifique se permite mensagens diretas.');
         }
 
-        await safeEdit(statusMsg, `⏳ Iniciando envio de **${totalParts}** arquivo(s) no seu DM. Use \`rp!export end\` para cancelar.`);
+        await safeEdit(statusMsg,
+            `📤 Enviando **${totalParts}** arquivo(s) no seu DM...\n` +
+            `-# Use \`rp!export end\` para cancelar`,
+        );
 
-        for (let i = 0; i < totalParts; i++) {
-            if (activeExports.get(exportKey)) {
-                cancelCollector.stop();
-                activeExports.delete(exportKey);
-                await safeEdit(statusMsg, `🛑 **Encerrado!** (${i}/${totalParts} arquivos enviados)`);
-                await dmChannel.send('🛑 **Processo encerrado!**');
-                return;
-            }
+        for (let i = 0; i < outputFiles.length; i++) {
+            if (isCancelled()) break;
 
-            const chunk = chunks[i];
-            const part = i + 1;
-            const first = new Date(chunk.messages[0].createdTimestamp).toLocaleString('pt-BR');
-            const last = new Date(chunk.messages[chunk.messages.length - 1].createdTimestamp).toLocaleString('pt-BR');
-            const rangeLabel = `${first} → ${last} · ${chunk.messages.length} mensagens`;
-
-            // htmlHeader agora vem de HtmlTranscript.ts
-            const fullHtml = htmlHeader(targetChannel.name, rangeLabel, part, totalParts) +
-                chunk.body + HTML_FOOTER;
-            const attachment = new AttachmentBuilder(Buffer.from(fullHtml, 'utf-8'), {
-                name: `export_${targetChannel.name}_parte${part}.html`,
-            });
+            const part       = i + 1;
+            const filePath   = outputFiles[i];
+            const fileName   = `${targetChannel.name}_parte${part}de${totalParts}.html`;
+            const attachment = new AttachmentBuilder(filePath, { name: fileName });
 
             await dmChannel.send({
                 content: `📦 **Parte ${part}/${totalParts}** — <#${targetChannel.id}>`,
-                files: [attachment],
+                files:   [attachment],
             });
         }
 
-        // ── 9. Finalizar ───────────────────────────────────────────────────────
+        // ── 13. Finalizar ─────────────────────────────────────────────────────
         cancelCollector.stop();
         activeExports.delete(exportKey);
-        await safeEdit(statusMsg, `✅ **Exportação concluída!** ${totalParts} arquivo(s) enviados no seu DM.`);
+        deleteSession(sessionPath); // limpa o disco
+
+        const errWarn = errors.length
+            ? `\n⚠️ ${errors.length} dia(s) com erro foram ignorados.`
+            : '';
+
+        if (isCancelled()) {
+            return safeEdit(statusMsg, `🛑 Envio interrompido. Verifique seu DM pelos arquivos já enviados.`);
+        }
+
+        return safeEdit(statusMsg,
+            `✅ **Export concluído!**\n` +
+            `📨 ${totalRead.toLocaleString('pt-BR')} mensagens · ${totalParts} arquivo(s) enviados no seu DM.` +
+            errWarn,
+        );
     },
 };
