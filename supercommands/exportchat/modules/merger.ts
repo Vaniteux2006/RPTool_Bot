@@ -7,7 +7,7 @@
 import fs   from 'fs';
 import path from 'path';
 import { listSegmentFiles } from './cleanup';
-import { htmlHeader, HTML_FOOTER } from '../../../supercommands/logs/utils/HtmlTranscript';
+import { htmlHeader, HTML_FOOTER } from '../../../tools/HtmlTranscript';
 
 const MAX_BYTES = 7.5 * 1024 * 1024; // 7.5 MB com margem abaixo dos 8 MB do Discord
 

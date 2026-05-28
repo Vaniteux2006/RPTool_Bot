@@ -203,8 +203,9 @@ export default {
         await progress.stop(`⚙️ Processando e dividindo arquivos...`);
 
         // ── 11. Merge dos segmentos → arquivos de output ──────────────────────
-        const totalRead = workerResults.reduce((s, r) => s + r.totalMessages, 0);
-        const errors    = workerResults.flatMap(r => r.errors);
+        const totalRead   = workerResults.reduce((s, r) => s + r.totalMessages, 0);
+        const skippedDays = workerResults.reduce((s, r) => s + r.skippedDays, 0);
+        const errors      = workerResults.flatMap(r => r.errors);
 
         const dateStr  = new Date().toLocaleDateString('pt-BR');
         const subtitle = `${totalRead.toLocaleString('pt-BR')} mensagens · exportado em ${dateStr}`;
@@ -265,10 +266,14 @@ export default {
             return safeEdit(statusMsg, `🛑 Envio interrompido. Verifique seu DM pelos arquivos já enviados.`);
         }
 
+        const skippedNote = skippedDays > 0
+            ? `\n-# ${skippedDays} dia(s) sem mensagens ignorados`
+            : '';
+
         return safeEdit(statusMsg,
             `✅ **Export concluído!**\n` +
             `📨 ${totalRead.toLocaleString('pt-BR')} mensagens · ${totalParts} arquivo(s) enviados no seu DM.` +
-            errWarn,
+            errWarn + skippedNote,
         );
     },
 };
