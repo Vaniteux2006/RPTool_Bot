@@ -12,7 +12,7 @@
 import { TextChannel } from 'discord.js';
 import { DaySegment, dateToSnowflake } from './parseArgs';
 
-const NUM_SCANNERS   = 8;   // mais scanners pois cada um faz só 1 fetch
+const NUM_SCANNERS   = 3;   // mesmo número dos workers de export — evita pressão extra no rate limit
 const SCAN_DELAY_MS  = 150; // ~6 req/s por scanner → ~48 req/s total, dentro do limite
 const MAX_RETRIES    = 2;
 
