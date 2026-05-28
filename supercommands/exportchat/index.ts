@@ -24,6 +24,7 @@ import { SegmentRenderer }  from './modules/SegmentRenderer';
 import { runWorker }        from './modules/worker';
 import { mergeSegments }    from './modules/merger';
 import { askConfirmation }  from './modules/confirm';
+import { scanActiveDays }   from './modules/Scanner';
 
 // ─── Limpeza de sessões órfãs no boot ────────────────────────────────────────
 cleanOrphanSessions(4);
@@ -117,12 +118,54 @@ export default {
             await statusFetch.delete().catch(() => {});
         }
 
-        const dayQueue  = buildDayQueue(effectiveStart, rangeEnd);
-        const totalDays = dayQueue.length;
+        const rawDayQueue = buildDayQueue(effectiveStart, rangeEnd);
+        const totalRawDays = rawDayQueue.length;
 
-        // ── 4. Confirmação ────────────────────────────────────────────────────
-        // Estimativa: média de ~2700 msgs por 30s sequencial; com 3 workers ~4x mais rápido
-        // Arquivos: estimativa de ~500k chars por parte de 7.5 MB
+        // ── 4. Pre-scan: filtrar dias com mensagens ───────────────────────────
+        // Antes de exportar, verifica rapidamente (1 fetch por dia) quais dias
+        // têm mensagens. Dias vazios são descartados antes de qualquer trabalho.
+        const scanStatus = await safeReply(message,
+            `🔍 Verificando ${totalRawDays} dia(s) de histórico...`,
+        );
+
+        let dayQueue:  typeof rawDayQueue;
+        let totalDays: number;
+        let skippedByScanner: number;
+
+        try {
+            let lastScanUpdate = Date.now();
+            const { activeDays, skippedDays } = await scanActiveDays(
+                rawDayQueue,
+                targetChannel,
+                async (scanned, total) => {
+                    // Atualiza o status a cada 5s durante o scan
+                    if (Date.now() - lastScanUpdate > 5000) {
+                        lastScanUpdate = Date.now();
+                        await safeEdit(scanStatus,
+                            `🔍 Verificando dias... **${scanned}/${total}** analisados`,
+                        );
+                    }
+                },
+            );
+            dayQueue         = activeDays;
+            totalDays        = activeDays.length;
+            skippedByScanner = skippedDays;
+        } catch (err) {
+            await safeEdit(scanStatus, '❌ Erro ao verificar os dias. Tente novamente.');
+            console.error('[exportchat] Erro no scan:', err);
+            return;
+        }
+
+        if (totalDays === 0) {
+            return safeEdit(scanStatus, '❌ Nenhuma mensagem encontrada no período especificado.');
+        }
+
+        await safeEdit(scanStatus,
+            `✅ Scan concluído: **${totalDays}** dia(s) com mensagens` +
+            (skippedByScanner > 0 ? ` · ${skippedByScanner} dia(s) vazio(s) ignorados` : ''),
+        );
+
+        // ── 5. Confirmação ────────────────────────────────────────────────────
         const estimatedFiles = Math.max(1, Math.ceil(totalDays * 0.5));
 
         if (totalDays > 3) {
@@ -131,16 +174,16 @@ export default {
             if (!confirmed) return;
         }
 
-        // ── 5. Status inicial ─────────────────────────────────────────────────
+        // ── 6. Status inicial ─────────────────────────────────────────────────
         const statusMsg = await safeReply(message,
-            `⏳ Iniciando export de <#${targetChannel.id}> (${totalDays} dia(s))...\n` +
+            `⏳ Iniciando export de <#${targetChannel.id}> (${totalDays} dia(s) com mensagens)...\n` +
             `-# Use \`rp!export end\` para cancelar`,
         );
 
-        // ── 6. Criar sessão no disco ──────────────────────────────────────────
+        // ── 7. Criar sessão no disco ──────────────────────────────────────────
         const sessionPath = createSessionDir(message.author.id);
 
-        // ── 7. Setup de cancelamento ──────────────────────────────────────────
+        // ── 8. Setup de cancelamento ──────────────────────────────────────────
         const exportKey = message.author.id;
         activeExports.set(exportKey, false);
 
@@ -157,7 +200,7 @@ export default {
 
         const isCancelled = () => activeExports.get(exportKey) === true;
 
-        // ── 8. Progress tracker ───────────────────────────────────────────────
+        // ── 9. Progress tracker ───────────────────────────────────────────────
         const progress = new ProgressTracker(statusMsg, targetChannel.id, totalDays);
         progress.start();
 
