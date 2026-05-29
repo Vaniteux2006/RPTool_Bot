@@ -123,12 +123,54 @@ export class SegmentRenderer {
             piece += `<div class="grp cont"><div class="sp"></div><div class="col">`;
         }
 
-        // Conteúdo textual
-        if (msg.content) {
-            const rendered   = renderContent(msg.content, this.nameCache);
+        // ── Reply block ───────────────────────────────────────────────────────
+        // Caso 1: formato Tupperbox no content  → [Reply to](<url>): @user\n\nquote\n\nreply
+        // Caso 2: reply nativo do Discord       → msg.reference + msg.mentions.repliedUser
+        let contentToRender = msg.content;
+
+        if (contentToRender) {
+            const tupper = parseTupperReply(contentToRender);
+            if (tupper) {
+                piece += renderReplyBlock(tupper.user, null, tupper.quotedContent);
+                contentToRender = tupper.actualContent;
+            }
+        }
+
+        if (!contentToRender && msg.reference?.messageId) {
+            // Sem conteúdo Tupperbox mas tem referência nativa
+        }
+        if (msg.reference?.messageId && !parseTupperReply(msg.content ?? '')) {
+            const repliedUser = msg.mentions.repliedUser;
+            const replyName   = repliedUser
+                ? (this.nameCache.get(repliedUser.id) ?? repliedUser.username)
+                : 'Mensagem';
+            const replyAvatar = repliedUser
+                ? repliedUser.displayAvatarURL({ size: 16, extension: 'png', forceStatic: true })
+                : null;
+            piece += renderReplyBlock(replyName, replyAvatar, null);
+        }
+
+        // ── Conteúdo textual ──────────────────────────────────────────────────
+        if (contentToRender) {
+            let rendered = renderContent(contentToRender, this.nameCache);
+
+            // FIX: @@ID — renderContent usa "@${id}" no fallback do nameCache,
+            // e o span já adiciona "@", resultando em "@@123456"
+            rendered = rendered.replace(
+                /<span class="mention">@@(\d+)<\/span>/g,
+                (_, id) => `<span class="mention">@${id}</span>`,
+            );
+
+            // FIX: <#channelId> — menções de canal não tratadas pelo renderContent
+            rendered = rendered.replace(/&lt;#(\d+)&gt;/g, (_, id) => {
+                const ch   = this.guild.channels.cache.get(id);
+                const name = ch ? esc(ch.name) : id;
+                return `<span class="mention">#${name}</span>`;
+            });
+
             const onlyEmojis =
-                /^(\s|<a?:[^:]+:\d+>|\p{Emoji_Presentation}|\p{Extended_Pictographic})+$/u.test(msg.content.trim()) &&
-                msg.content.trim().length > 0;
+                /^(\s|<a?:[^:]+:\d+>|\p{Emoji_Presentation}|\p{Extended_Pictographic})+$/u.test(contentToRender.trim()) &&
+                contentToRender.trim().length > 0;
             piece += onlyEmojis
                 ? `<div class="txt">${rendered.replace(/class="emoji"/g, 'class="emoji-jumbo"')}</div>`
                 : `<div class="txt">${rendered}</div>`;
@@ -176,6 +218,58 @@ export class SegmentRenderer {
 }
 
 // ─── Helpers privados ─────────────────────────────────────────────────────────
+
+/**
+ * Detecta o formato de reply do Tupperbox no conteúdo da mensagem.
+ * Formato: "[Reply to](<URL>): @Username\n\n<citação>\n\n<resposta>"
+ */
+function parseTupperReply(content: string): {
+    user:           string;
+    quotedContent:  string;
+    actualContent:  string;
+} | null {
+    const firstNL = content.indexOf('\n');
+    const firstLine = firstNL === -1 ? content : content.slice(0, firstNL);
+    const m = firstLine.match(/^\[Reply to\]\(<[^>]+>\):\s*@?(.+)$/);
+    if (!m) return null;
+
+    // O restante tem formato: \n<citação>\n\n<resposta real>
+    const rest = (firstNL === -1 ? '' : content.slice(firstNL + 1)).replace(/^\n/, '');
+    const split = rest.indexOf('\n\n');
+    return {
+        user:          m[1].trim(),
+        quotedContent: split === -1 ? '' : rest.slice(0, split).trim(),
+        actualContent: split === -1 ? rest.trim() : rest.slice(split + 2).trim(),
+    };
+}
+
+/**
+ * Gera o bloco visual de reply (estilo Discord) com inline-styles
+ * para não depender do CSS do HtmlTranscript.
+ */
+function renderReplyBlock(
+    username:      string,
+    avatarUrl:     string | null,
+    quotedContent: string | null,
+): string {
+    const avatarHtml = avatarUrl
+        ? `<img style="width:16px;height:16px;border-radius:50%;flex-shrink:0;object-fit:cover" src="${avatarUrl}" onerror="this.style.display='none'"/>`
+        : `<span style="width:16px;height:16px;border-radius:50%;background:#4f545c;flex-shrink:0;display:inline-block"></span>`;
+
+    const preview = quotedContent
+        ? `<span style="color:#949ba4;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(quotedContent.slice(0, 120))}</span>`
+        : '';
+
+    return (
+        `<div style="display:flex;align-items:center;gap:6px;padding:3px 8px;margin-bottom:2px;` +
+        `border-radius:4px 4px 0 0;background:rgba(0,0,0,.25);max-width:520px;overflow:hidden;` +
+        `border-left:2px solid #4f545c">` +
+        avatarHtml +
+        `<span style="color:#949ba4;font-size:12px;font-weight:600;flex-shrink:0">@${esc(username)}</span>` +
+        (preview ? `<span style="color:#6c6f75;font-size:12px;margin:0 2px">—</span>${preview}` : '') +
+        `</div>`
+    );
+}
 
 function slugify(s: string): string {
     return s
