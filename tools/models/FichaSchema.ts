@@ -9,18 +9,20 @@ export interface ITemplate extends Document {
     guildId:        string;
     rawText:        string;
     fields:         any[];
-    checkChannelId: string | null;  // rp!ficha check #canal  → aprovação
-    showChannelId:  string | null;  // rp!ficha show  #canal  → exibição pública
-    ocPrefixLabel:  string | null;  // label do campo {prefix} no template
+    checkChannelId:  string | null;  // rp!ficha check  #canal → aprovação
+    showChannelId:   string | null;  // rp!ficha show   #canal → exibição pública
+    submitChannelId: string | null;  // rp!ficha submit #canal → envio livre
+    ocPrefixLabel:   string | null;  // label do campo {prefix} no template
 }
 
 const TemplateSchema = new Schema({
     guildId:        { type: String, required: true, unique: true },
     rawText:        { type: String, default: '' },
     fields:         { type: Array,  default: [] },
-    checkChannelId: { type: String, default: null },
-    showChannelId:  { type: String, default: null },
-    ocPrefixLabel:  { type: String, default: null },
+    checkChannelId:  { type: String, default: null },
+    showChannelId:   { type: String, default: null },
+    submitChannelId: { type: String, default: null },
+    ocPrefixLabel:   { type: String, default: null },
 });
 
 export interface IFicha extends Document {
