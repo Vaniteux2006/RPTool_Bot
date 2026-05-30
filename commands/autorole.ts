@@ -1,137 +1,144 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, GuildMember, Message } from 'discord.js';
-import fs from 'fs';
-import path from 'path';
+// RPTool/commands/autorole.ts
+import {
+    SlashCommandBuilder,
+    ChatInputCommandInteraction,
+    PermissionFlagsBits,
+    GuildMember,
+    Message,
+} from 'discord.js';
+import { AutoroleModel } from '../tools/models/AutoroleConfig';
+import { EventCheckout } from '../tools/event_checkout';
 
-// não mexa nisso. por algum motivo o código funciona mesmo sem existir a pasta
-const dbPath = path.join(__dirname, '../../Data');
-
-interface ServerConfig {
-    server: string;
-    autorole: string[];
-}
-
-function lerDB(): ServerConfig[] {
-    try {
-        if (!fs.existsSync(dbPath)) return [];
-        const raw = fs.readFileSync(dbPath, 'utf-8');
-        const data = JSON.parse(raw);
-        return Array.isArray(data) ? data : [];
-    } catch (e) {
-        console.error("❌ [AUTOROLE] Erro ao ler DB:", e);
-        return [];
-    }
-}
-
-function salvarDB(data: ServerConfig[]) {
-    try {
-        const dir = path.dirname(dbPath);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
-    } catch (e) {
-        console.error("❌ [AUTOROLE] Erro ao salvar DB:", e);
-    }
-}
-
-export default {
+const autorole = {
     name: 'autorole',
     description: 'Gerencia cargos automáticos ao entrar (add, del, list)',
-    
+
     data: new SlashCommandBuilder()
         .setName('autorole')
-        .setDescription('Configura cargos automáticos para novos membros')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
-        .addSubcommand(sub => 
+        .setDescription('Configura o sistema de cargos automáticos')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addSubcommand(sub =>
             sub.setName('add')
-               .setDescription('Adiciona um cargo à lista de autorole')
-               .addRoleOption(op => op.setName('cargo').setDescription('O cargo a ser dado').setRequired(true))
-        )
-        .addSubcommand(sub => 
+                .setDescription('Adiciona um cargo ao autorole')
+                .addRoleOption(opt =>
+                    opt.setName('cargo').setDescription('Cargo a ser dado').setRequired(true)))
+        .addSubcommand(sub =>
             sub.setName('del')
-               .setDescription('Remove um cargo da lista de autorole')
-               .addRoleOption(op => op.setName('cargo').setDescription('O cargo a ser removido').setRequired(true))
-        )
-        .addSubcommand(sub => 
+                .setDescription('Remove um cargo do autorole')
+                .addRoleOption(opt =>
+                    opt.setName('cargo').setDescription('Cargo a ser removido').setRequired(true)))
+        .addSubcommand(sub =>
             sub.setName('list')
-               .setDescription('Lista os cargos configurados atualmente')
-        ),
+                .setDescription('Lista os cargos configurados no autorole')),
 
-    async giveRole(member: GuildMember) {
-        console.log(`\n🔍 [AUTOROLE] Verificando entrada de: ${member.user.tag} em ${member.guild.name}`);
-        
-        const db = lerDB();
-        const config = db.find(entry => entry.server === member.guild.id);
-
-        if (!config || !config.autorole || config.autorole.length === 0) {
-            console.log(`   -> 🚫 Nenhum autorole configurado para este servidor.`);
-            return;
-        }
-
-        console.log(`   -> 📜 Cargos a adicionar: ${config.autorole.length}`);
-
-        for (const roleId of config.autorole) {
-            try {
-                const role = member.guild.roles.cache.get(roleId) || await member.guild.roles.fetch(roleId);
-
-                if (role) {
-                    await member.roles.add(role);
-                    console.log(`   -> ✅ Cargo inserido: @${role.name}`);
-                } else {
-                    console.log(`   -> ⚠️ Cargo ID ${roleId} não encontrado no servidor.`);
-                }
-            } catch (err) {
-                console.error(`   -> ❌ Erro ao dar cargo (${roleId}):`, err);
+    // ─── Lógica de negócio ────────────────────────────────────────────────────
+    // Separada dos handlers de comando para poder ser chamada pelo EventCheckout.
+    async giveRole(member: GuildMember): Promise<void> {
+        try {
+            const config = await AutoroleModel.findOne({ guildId: member.guild.id });
+            if (!config?.autorole?.length) return;
+            for (const roleId of config.autorole) {
+                const role = member.guild.roles.cache.get(roleId);
+                if (role) await member.roles.add(role).catch(() => {});
             }
+        } catch (e) {
+            console.error('❌ [autorole] giveRole falhou:', e);
         }
     },
 
-    async executeSlash(interaction: ChatInputCommandInteraction) {
-        if (!interaction.guildId) return interaction.reply("Comando apenas para servidores.");
+    // ─── Slash command (/autorole) ────────────────────────────────────────────
+    executeSlash: async (interaction: ChatInputCommandInteraction) => {
+        const sub     = interaction.options.getSubcommand();
+        const guildId = interaction.guildId;
+        if (!guildId) return;
 
-        const sub = interaction.options.getSubcommand();
-        const db = lerDB();
-        let config = db.find(e => e.server === interaction.guildId);
-
-        if (!config) {
-            config = { server: interaction.guildId, autorole: [] };
-            db.push(config);
-        }
+        let config = await AutoroleModel.findOne({ guildId });
+        if (!config) config = new AutoroleModel({ guildId, autorole: [] });
 
         if (sub === 'add') {
             const role = interaction.options.getRole('cargo');
             if (!role) return;
-
-            if (config.autorole.includes(role.id)) {
+            if (config.autorole.includes(role.id))
                 return interaction.reply({ content: `⚠️ O cargo **${role.name}** já está na lista.`, ephemeral: true });
-            }
-
             config.autorole.push(role.id);
-            salvarDB(db);
+            await config.save();
             return interaction.reply(`✅ Cargo **${role.name}** adicionado ao Autorole.`);
         }
 
         if (sub === 'del') {
             const role = interaction.options.getRole('cargo');
             if (!role) return;
-
-            if (!config.autorole.includes(role.id)) {
-                return interaction.reply({ content: `⚠️ O cargo **${role.name}** não está configurado no Autorole.`, ephemeral: true });
-            }
-
-            config.autorole = config.autorole.filter(id => id !== role.id);
-            salvarDB(db);
+            if (!config.autorole.includes(role.id))
+                return interaction.reply({ content: `⚠️ O cargo **${role.name}** não está configurado.`, ephemeral: true });
+            config.autorole = config.autorole.filter((id: string) => id !== role.id);
+            await config.save();
             return interaction.reply(`🗑️ Cargo **${role.name}** removido do Autorole.`);
         }
 
         if (sub === 'list') {
-            if (config.autorole.length === 0) {
-                return interaction.reply("📭 Nenhum cargo configurado para autorole.");
-            }
-            const rolesMentions = config.autorole.map(id => `<@&${id}>`).join(', ');
-            return interaction.reply(`📋 **Cargos Automáticos:**\n${rolesMentions}`);
+            if (!config.autorole?.length)
+                return interaction.reply('📭 Nenhum cargo configurado para autorole.');
+            return interaction.reply(`📋 **Cargos Automáticos:**\n${config.autorole.map((id: string) => `<@&${id}>`).join(', ')}`);
         }
     },
 
-    async execute(message: Message, args: string[]) {
-        message.reply("⚠️ Por favor, use `/autorole` (Slash Command) para configurar isso.");
-    }
+    // ─── Texto (rp!autorole add/del/list @cargo) ──────────────────────────────
+    execute: async (message: Message, args: string[]) => {
+        const sub     = args[0]?.toLowerCase();
+        const guildId = message.guild?.id;
+        if (!guildId) return;
+
+        if (!sub || sub === 'help') {
+            return message.reply(
+                '⚙️ **Autorole — Comandos de Texto**\n' +
+                '`rp!autorole add @cargo` — adiciona cargo ao autorole\n' +
+                '`rp!autorole del @cargo` — remove cargo do autorole\n' +
+                '`rp!autorole list` — lista os cargos configurados\n\n' +
+                '-# Também disponível via `/autorole`',
+            );
+        }
+
+        if (!message.member?.permissions.has(PermissionFlagsBits.Administrator))
+            return message.reply('❌ Apenas administradores podem gerenciar o autorole.');
+
+        let config = await AutoroleModel.findOne({ guildId });
+        if (!config) config = new AutoroleModel({ guildId, autorole: [] });
+
+        if (sub === 'add') {
+            const role = message.mentions.roles.first();
+            if (!role) return message.reply('❌ Mencione o cargo! Ex: `rp!autorole add @Membro`');
+            if (config.autorole.includes(role.id))
+                return message.reply(`⚠️ O cargo **${role.name}** já está na lista.`);
+            config.autorole.push(role.id);
+            await config.save();
+            return message.reply(`✅ Cargo **${role.name}** adicionado ao Autorole.`);
+        }
+
+        if (sub === 'del') {
+            const role = message.mentions.roles.first();
+            if (!role) return message.reply('❌ Mencione o cargo! Ex: `rp!autorole del @Membro`');
+            if (!config.autorole.includes(role.id))
+                return message.reply(`⚠️ O cargo **${role.name}** não está configurado.`);
+            config.autorole = config.autorole.filter((id: string) => id !== role.id);
+            await config.save();
+            return message.reply(`🗑️ Cargo **${role.name}** removido do Autorole.`);
+        }
+
+        if (sub === 'list') {
+            if (!config.autorole?.length)
+                return message.reply('📭 Nenhum cargo configurado para autorole.');
+            return message.reply(`📋 **Cargos Automáticos:**\n${config.autorole.map((id: string) => `<@&${id}>`).join(', ')}`);
+        }
+
+        return message.reply('❌ Subcomando inválido. Use `rp!autorole help`.');
+    },
 };
+
+// ─── Auto-inscrição no EventCheckout ─────────────────────────────────────────
+// Este bloco roda uma vez quando o módulo é carregado pelo loadCommands().
+// Não precisa tocar no index.ts — se o arquivo for deletado, a inscrição some.
+EventCheckout.onGuildMemberAdd('autorole', async (member: GuildMember) => {
+    await autorole.giveRole(member);
+});
+
+export default autorole;

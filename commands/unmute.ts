@@ -28,6 +28,7 @@ export default {
             await target.timeout(null);
             message.reply(`🗣️ **${target.user.tag}** está livre!`);
         } catch (error) {
+            console.warn('[UNMUTE] Falha ao remover timeout:', target.user.tag, error);
             message.reply('Erro ao remover castigo.');
         }
     },
@@ -43,6 +44,7 @@ export default {
             await target.timeout(null);
             await interaction.reply(`🗣️ **${target.user.tag}** está livre!`);
         } catch (error) {
+            console.warn('[UNMUTE] Falha ao desmutar via slash:', target.user.tag, error);
             await interaction.reply({ content: 'Erro ao desmutar.', ephemeral: true });
         }
     }

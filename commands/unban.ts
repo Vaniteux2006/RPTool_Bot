@@ -24,6 +24,7 @@ export default {
             await message.guild?.members.unban(userId);
             message.reply(`✅ ID **${userId}** desbanido!`);
         } catch (error) {
+            console.warn('[UNBAN] Falha ao desbanir usuário:', userId, error);
             message.reply('❌ Erro: ID inválido ou não banido.');
         }
     },
@@ -35,6 +36,7 @@ export default {
             await interaction.guild?.members.unban(userId);
             await interaction.reply(`✅ ID **${userId}** desbanido!`);
         } catch (error) {
+            console.warn('[UNBAN] Falha ao desbanir via slash:', userId, error);
             await interaction.reply({ content: '❌ Erro ao desbanir.', ephemeral: true });
         }
     }

@@ -1,12 +1,5 @@
 node_modules
+dist
 .env
-__pycache__/
-*.pyc
-python_api/__pycache__/
-tuppers.json
-*.o
-*.obj
-*.exe
-Data/*.json
-bin/*.exe
 bin/stockfish_linux
+docs

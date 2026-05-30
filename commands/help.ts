@@ -50,7 +50,9 @@ export default {
                                `├─ \`rank user\` • Top 5 usuários mais ativos (Gráfico)\n` +
                                `├─ \`rank channel\` • Top 5 canais mais ativos (Gráfico)\n` +
                                `├─ \`rank words\` • Top 15 palavras mais usadas\n` +
-                               `└─ \`[@user|#canal|"OC"]\` • Gráfico específico do alvo` 
+                               `└─ \`[@user|#canal|"OC"]\` • Gráfico específico do alvo\n`  +
+                               `**${p}ignorar**\n` +
+                               `└─ \`[vazio]\` • Ignora uma palavra no rank words` 
                     },
                     {
                         name: '🧮 Ferramentas de Desenvolvedor',
@@ -95,7 +97,7 @@ export default {
             },
             {
                 title: '🎭 Personagens Originais (OCs)',
-                description: 'Criação, edição e organização de Tuppers.',
+                description: 'Criação, edição e organização de OCs.',
                 fields: [
                     { 
                         name: '👤 Criação e Identidade', 

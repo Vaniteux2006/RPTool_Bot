@@ -48,6 +48,7 @@ export default {
             try {
                 targetUser = await message.client.users.fetch(args[0]);
             } catch (error) {
+                console.warn('[BAN] Usuário não encontrado pelo ID:', args[0], error);
                 return message.reply('❌ Usuário não encontrado com esse ID.');
             }
         }
