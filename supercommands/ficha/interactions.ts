@@ -9,11 +9,42 @@ import {
 } from 'discord.js';
 import { FichaModel, TemplateModel } from '../../tools/models/FichaSchema';
 import { OCModel, WikiModel }        from '../../tools/models/OCSchema';
+import { compilarTemplate }          from './handlers/template';
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 
 export async function handleFichaInteraction(interaction: any) {
     if (!interaction.isButton() && !interaction.isModalSubmit()) return;
+
+    // ── Modal: /ficha template (slash) ──
+    if (interaction.isModalSubmit() && interaction.customId === 'ficha_templateModal') {
+        const rawText = interaction.fields.getTextInputValue('template_text');
+        const { fields, ocPrefixLabel } = compilarTemplate(rawText);
+
+        if (fields.length === 0) {
+            return interaction.reply({
+                content: '❌ Nenhum campo válido encontrado. Use o formato `Campo: {tipo}` (ex: `Nome: {string_name}`).',
+                ephemeral: true,
+            });
+        }
+
+        await TemplateModel.findOneAndUpdate(
+            { guildId: interaction.guildId },
+            { guildId: interaction.guildId, rawText, fields, ocPrefixLabel },
+            { upsert: true, new: true }
+        );
+
+        const fieldList = fields.map((f: any, i: number) => {
+            let tags = (f.isName ? ' 🏷️nome' : '') + (f.isAvatar ? ' 🖼️avatar' : '') + (f.isPrefix ? ' 🔗prefix' : '');
+            let extra = f.type === 'if' ? ` → Escolha: ${f.options.join(', ')}` : '';
+            return `${i + 1}. **${f.name}**${tags}${extra}`;
+        }).join('\n');
+
+        return interaction.reply({
+            content: `✅ **Modelo registrado com ${fields.length} campo(s):**\n${fieldList}`,
+            ephemeral: true,
+        });
+    }
 
     // ── Botão: Rejeitar → abre Modal para motivo ──
     if (interaction.isButton() && interaction.customId.startsWith('ficha_reject_')) {

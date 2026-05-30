@@ -22,12 +22,14 @@ export default async function handleView(message: Message, args: string[]) {
         .setColor(0x2B2D31);
 
     // Info de canais
-    const checkInfo = template.checkChannelId ? `<#${template.checkChannelId}>` : '*(não definido — use `rp!ficha check #canal`)*';
-    const showInfo  = template.showChannelId  ? `<#${template.showChannelId}>`  : '*(não definido — use `rp!ficha show #canal`)*';
+    const checkInfo  = template.checkChannelId  ? `<#${template.checkChannelId}>`  : '*(não definido — use `rp!ficha check #canal`)*';
+    const showInfo   = template.showChannelId   ? `<#${template.showChannelId}>`   : '*(não definido — use `rp!ficha show #canal`)*';
+    const submitInfo = (template as any).submitChannelId ? `<#${(template as any).submitChannelId}>` : '*(não definido — use `rp!ficha submit #canal`)*';
 
     embed.setDescription(
         `**Canal de aprovação:** ${checkInfo}\n` +
-        `**Canal de exibição:** ${showInfo}`
+        `**Canal de exibição:** ${showInfo}\n` +
+        `**Canal de envio direto:** ${submitInfo}`
     );
 
     // Lista de campos

@@ -26,7 +26,7 @@ import { TemplateModel } from '../../../tools/models/FichaSchema';
  * ──────────────────────────────────────────────────────
  */
 
-function compilarTemplate(rawText: string): { fields: any[]; ocPrefixLabel: string | null } {
+export function compilarTemplate(rawText: string): { fields: any[]; ocPrefixLabel: string | null } {
     const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);
     const fields: any[] = [];
     let ocPrefixLabel: string | null = null;
