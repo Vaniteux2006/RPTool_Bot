@@ -9,17 +9,30 @@ import { mainConnection } from '../tools/database';
 
 
 const WMO_TABLE: {[key: number]: string} = {
-    0: "Céu Limpo ☀️", 
-    1: "Poucas Nuvens 🌤️", 
-    2: "Parcialmente Nublado ⛅", 
+    0: "Céu Limpo ☀️",
+    1: "Poucas Nuvens 🌤️",
+    2: "Parcialmente Nublado ⛅",
     3: "Nublado ☁️",
-    45: "Nevoeiro 🌫️", 
-    51: "Garoa 🌧️", 
-    61: "Chuva ☔", 
+    45: "Nevoeiro 🌫️",
+    51: "Garoa 🌧️",
+    61: "Chuva ☔",
     63: "Chuva Moderada ☔",
-    71: "Neve 🌨️", 
+    71: "Neve 🌨️",
     95: "Tempestade ⚡"
 };
+
+const STANDARD_WEATHERS = Object.values(WMO_TABLE);
+
+// Remove emojis para comparação case-insensitive sem emoji
+function stripEmojis(str: string) {
+    return str.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}️⃐-⃿]/gu, '').trim();
+}
+
+// Tenta casar o input com uma condição padrão WMO (ignorando emojis e case)
+function matchStandardWeather(input: string): string | null {
+    const norm = stripEmojis(input).toLowerCase();
+    return STANDARD_WEATHERS.find(w => stripEmojis(w).toLowerCase() === norm) ?? null;
+}
 
 
 async function getCoords(query: string) {
@@ -176,41 +189,66 @@ export default {
                 "Ex: `rp!clima force Moscovo Tempestade ⚡`"
             );
 
-            const val = (['null', 'auto', 'automático', '🚫', 'reset'].includes(condition.toLowerCase())) ? null : condition;
+            const isReset = ['null', 'auto', 'automático', '🚫', 'reset'].includes(condition.toLowerCase());
+            const matched = isReset ? null : (matchStandardWeather(condition) ?? condition);
 
-            const query = clockName.startsWith('<#')
+            const clockQuery = clockName.startsWith('<#')
                 ? { channelId: clockName.replace(/[<#>]/g, '') }
                 : { name: clockName };
-            const res = await ClockModel.updateOne(query, { forcedWeather: val });
+            const res = await ClockModel.updateOne(clockQuery, { forcedWeather: matched });
 
             if (res.matchedCount === 0) return message.reply(`❌ Relógio **${clockName}** não encontrado.`);
 
-            if (val === null) return message.reply(`🔄 Clima de **${clockName}** voltou ao **automático**.`);
-            return message.reply(`⚠️ Clima de **${clockName}** definido para: **${val}**.`);
+            if (matched === null) return message.reply(`🔄 Clima de **${clockName}** voltou ao **automático**.`);
+            const isStd = STANDARD_WEATHERS.includes(matched);
+            return message.reply(`⚠️ Clima de **${clockName}** definido para: **${matched}**${isStd ? '' : '\n-# ⚠️ Condição não reconhecida — será exibida como Anomalia.'}.`);
         }
 
         if (action === 'sync') {
-            const clockName = args[1];
-            const query = args.slice(2).join(' ');
-            if (!clockName || !query) return message.reply("❌ Uso: `rp!clima sync <Relógio> <Lugar>`");
+            // Suporta duas sintaxes:
+            //   rp!clima sync #canal <Local>        → canal como identificador do relógio
+            //   rp!clima sync <Local> #canal        → canal como identificador do relógio (ordem inversa)
+            //   rp!clima sync <NomeRelógio> <Local> → relógio por nome
+            const chanIdx = args.findIndex((a, i) => i >= 1 && a.startsWith('<#'));
 
-            if (query.startsWith('<#') || query.startsWith('#')) {
-                return message.reply("❌ O local deve ser o nome de uma cidade ou coordenadas, não um canal Discord.\nEx: `rp!clima sync Moscovo Moscow, Russia`");
+            let clockFilter: Record<string, string>;
+            let locationQuery: string;
+            let clockLabel: string;
+
+            if (chanIdx === 1) {
+                // #canal no início: rp!clima sync #canal <Local>
+                clockFilter  = { channelId: args[1].replace(/[<#>]/g, '') };
+                clockLabel   = args[1];
+                locationQuery = args.slice(2).join(' ');
+            } else if (chanIdx > 1) {
+                // #canal no final: rp!clima sync <Local> #canal
+                locationQuery = args.slice(1, chanIdx).join(' ');
+                clockFilter  = { channelId: args[chanIdx].replace(/[<#>]/g, '') };
+                clockLabel   = args[chanIdx];
+            } else {
+                // Sem canal: rp!clima sync <NomeRelógio> <Local>
+                clockFilter  = { name: args[1] ?? '' };
+                clockLabel   = args[1] ?? '';
+                locationQuery = args.slice(2).join(' ');
+            }
+
+            if (!clockLabel || !locationQuery) {
+                return message.reply(
+                    "⚠️ **Uso:** `rp!clima sync <#canal> <Local>` ou `rp!clima sync <NomeRelógio> <Local>`\n" +
+                    "Ex: `rp!clima sync #planos Porto Alegre`"
+                );
             }
 
             const msg = await message.reply("🔍 Buscando...");
-            const geo = await getCoords(query);
-            if (!geo) return msg.edit(`❌ Local não encontrado: **${query}**`);
+            const geo = await getCoords(locationQuery);
+            if (!geo) return msg.edit(`❌ Local não encontrado: **${locationQuery}**`);
 
-            const filter = clockName.startsWith('<#')
-                ? { channelId: clockName.replace(/[<#>]/g, '') }
-                : { name: clockName };
             const res = await ClockModel.updateOne(
-                filter,
+                clockFilter,
                 { latitude: geo.lat, longitude: geo.lon, locationName: `${geo.name}${geo.country ? `, ${geo.country}` : ''}`, forcedWeather: null }
             );
-            if (res.matchedCount === 0) return msg.edit(`❌ Relógio **${clockName}** não encontrado.`);
-            return msg.edit(`🌍 **${clockName}** agora está em **${geo.name}${geo.country ? `, ${geo.country}` : ''}**.\n📡 Coordenadas: \`${geo.lat.toFixed(4)}, ${geo.lon.toFixed(4)}\``);
+            if (res.matchedCount === 0) return msg.edit(`❌ Relógio **${clockLabel}** não encontrado.`);
+            return msg.edit(`🌍 **${clockLabel}** agora está em **${geo.name}${geo.country ? `, ${geo.country}` : ''}**.\n📡 Coordenadas: \`${geo.lat.toFixed(4)}, ${geo.lon.toFixed(4)}\``);
         }
 
         const query = args.join(' ');
