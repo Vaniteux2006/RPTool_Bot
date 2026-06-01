@@ -23,8 +23,10 @@ const WMO_TABLE: {[key: number]: string} = {
 
 
 async function getCoords(query: string) {
-    const coordRegex = /([0-9]+[.,]?[0-9]*)\s*([NS])?[,\s]*([0-9]+[.,]?[0-9]*)\s*([WE])?/i;
-    const match = query.match(coordRegex);
+    if (query.trim().startsWith('<#') || query.trim().startsWith('#')) return null;
+
+    const coordRegex = /^(-?[0-9]+[.,]?[0-9]*)\s*([NS])?\s*[,\s]+\s*(-?[0-9]+[.,]?[0-9]*)\s*([WE])?$/i;
+    const match = query.trim().match(coordRegex);
 
     if (match) {
         let lat = parseFloat(match[1].replace(',', '.'));
@@ -110,6 +112,17 @@ export default {
 
         const action = args[0].toLowerCase();
 
+        if (action === 'help' || action === 'ajuda') {
+            return message.reply(
+                "🌦️ **Sistema Climático**\n\n" +
+                "`rp!clima <Local>` (Consulta Rápida)\n" +
+                "`rp!clima #canal` (Consulta RP do relógio do canal)\n" +
+                "`rp!clima sync <Relógio> <Local>` (Vincular localização ao relógio)\n" +
+                "`rp!clima force <Relógio> <Condição>` (Forçar clima — use `auto` para resetar)\n" +
+                "`rp!clima def` (Ver lista de condições padrão WMO)"
+            );
+        }
+
         if (action.startsWith('<#')) {
             const cid = action.replace(/[<#>]/g, '');
             const clock = await ClockModel.findOne({ channelId: cid });
@@ -157,13 +170,23 @@ export default {
         if (action === 'force') {
             const clockName = args[1];
             const condition = args.slice(2).join(' ');
-            if (!clockName || !condition) return message.reply("❌ Uso: `rp!clima force <Relógio> <Texto>`");
-            
-            // Permite resetar com "null" ou "🚫"
-            const val = (condition === '🚫' || condition === 'null') ? null : condition;
-            
-            await ClockModel.updateOne({ name: clockName }, { forcedWeather: val });
-            return message.reply(`⚠️ Clima de **${clockName}** definido para: **${val || 'Automático'}**.`);
+            if (!clockName || !condition) return message.reply(
+                "⚠️ **Uso:** `rp!clima force <Relógio> <Condição>`\n" +
+                "Use `auto` para voltar ao clima automático.\n" +
+                "Ex: `rp!clima force Moscovo Tempestade ⚡`"
+            );
+
+            const val = (['null', 'auto', 'automático', '🚫', 'reset'].includes(condition.toLowerCase())) ? null : condition;
+
+            const query = clockName.startsWith('<#')
+                ? { channelId: clockName.replace(/[<#>]/g, '') }
+                : { name: clockName };
+            const res = await ClockModel.updateOne(query, { forcedWeather: val });
+
+            if (res.matchedCount === 0) return message.reply(`❌ Relógio **${clockName}** não encontrado.`);
+
+            if (val === null) return message.reply(`🔄 Clima de **${clockName}** voltou ao **automático**.`);
+            return message.reply(`⚠️ Clima de **${clockName}** definido para: **${val}**.`);
         }
 
         if (action === 'sync') {
@@ -171,16 +194,23 @@ export default {
             const query = args.slice(2).join(' ');
             if (!clockName || !query) return message.reply("❌ Uso: `rp!clima sync <Relógio> <Lugar>`");
 
+            if (query.startsWith('<#') || query.startsWith('#')) {
+                return message.reply("❌ O local deve ser o nome de uma cidade ou coordenadas, não um canal Discord.\nEx: `rp!clima sync Moscovo Moscow, Russia`");
+            }
+
             const msg = await message.reply("🔍 Buscando...");
             const geo = await getCoords(query);
-            if (!geo) return msg.edit("❌ Local não encontrado.");
+            if (!geo) return msg.edit(`❌ Local não encontrado: **${query}**`);
 
+            const filter = clockName.startsWith('<#')
+                ? { channelId: clockName.replace(/[<#>]/g, '') }
+                : { name: clockName };
             const res = await ClockModel.updateOne(
-                { name: clockName },
-                { latitude: geo.lat, longitude: geo.lon, locationName: `${geo.name}, ${geo.country}`, forcedWeather: null }
+                filter,
+                { latitude: geo.lat, longitude: geo.lon, locationName: `${geo.name}${geo.country ? `, ${geo.country}` : ''}`, forcedWeather: null }
             );
-            if (res.matchedCount === 0) return msg.edit("❌ Relógio não encontrado.");
-            return msg.edit(`🌍 **${clockName}** agora está em **${geo.name}**.`);
+            if (res.matchedCount === 0) return msg.edit(`❌ Relógio **${clockName}** não encontrado.`);
+            return msg.edit(`🌍 **${clockName}** agora está em **${geo.name}${geo.country ? `, ${geo.country}` : ''}**.\n📡 Coordenadas: \`${geo.lat.toFixed(4)}, ${geo.lon.toFixed(4)}\``);
         }
 
         const query = args.join(' ');

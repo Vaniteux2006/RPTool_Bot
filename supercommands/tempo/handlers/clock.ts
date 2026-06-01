@@ -80,18 +80,16 @@ export async function handleSet(message: Message, args: string[]) {
     let timeStr    = '';
     let modsStart  = 0;
 
-    // Detecta onde está o #canal (pode ser args[1] ou args[2])
-    if (args[1]?.startsWith('<#')) {
-        const cid = args[1].replace(/[<#>]/g, '');
+    // Detecta onde está o #canal escaneando todos os args (suporta nomes com espaços)
+    const chanIdx = args.findIndex((a, i) => i >= 1 && a.startsWith('<#'));
+    if (chanIdx !== -1) {
+        name    = args.slice(1, chanIdx).join(' ');
+        const cid = args[chanIdx].replace(/[<#>]/g, '');
         const ch  = message.guild?.channels.cache.get(cid) as TextChannel | undefined;
         if (ch) targetCh = ch;
-        name = args[2] ?? ''; dateStr = args[3] ?? ''; timeStr = args[4] ?? ''; modsStart = 5;
-    } else if (args[2]?.startsWith('<#')) {
-        name = args[1] ?? '';
-        const cid = args[2].replace(/[<#>]/g, '');
-        const ch  = message.guild?.channels.cache.get(cid) as TextChannel | undefined;
-        if (ch) targetCh = ch;
-        dateStr = args[3] ?? ''; timeStr = args[4] ?? ''; modsStart = 5;
+        dateStr  = args[chanIdx + 1] ?? '';
+        timeStr  = args[chanIdx + 2] ?? '';
+        modsStart = chanIdx + 3;
     } else {
         name = args[1] ?? ''; dateStr = args[2] ?? ''; timeStr = args[3] ?? ''; modsStart = 4;
     }
