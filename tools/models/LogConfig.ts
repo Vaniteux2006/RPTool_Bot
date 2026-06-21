@@ -1,6 +1,7 @@
 // RPTool/tools/models/LogConfig.ts
 // ─── Schema do MongoDB para configuração de logs ──────────────────────────────
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import { Schema, Document, Model } from 'mongoose';
+import { mainConnection } from '../database';
 
 export interface ILogConfig extends Document {
     guildId:    string;
@@ -22,5 +23,5 @@ const LogConfigSchema = new Schema<ILogConfig>({
 });
 
 export const LogModel: Model<ILogConfig> =
-    mongoose.models.LogConfig as Model<ILogConfig>
-    ?? mongoose.model<ILogConfig>('LogConfig', LogConfigSchema);
+    mainConnection.models.LogConfig as Model<ILogConfig>
+    ?? mainConnection.model<ILogConfig>('LogConfig', LogConfigSchema);

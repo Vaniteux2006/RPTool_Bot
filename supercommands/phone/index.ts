@@ -1,6 +1,7 @@
 // RPTool/supercommands/phone/index.ts
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
 import { phoneSystem } from './system';
+import { EventCheckout } from '../../tools/event_checkout';
 
 // Importando os handlers
 import handleRegister from './handlers/register';
@@ -70,3 +71,9 @@ export default {
         return await phoneSystem.processPhoneMessage(message);
     }
 };
+
+// ─── Auto-inscrição no EventCheckout ─────────────────────────────────────────
+// Relê das mensagens de uma chamada ativa: enquanto dois servidores estão
+// conectados, cada mensagem normal (sem prefixo) é repassada ao parceiro.
+// processPhoneMessage já filtra bots/prefixos/DMs e devolve boolean.
+EventCheckout.onMessageCreate('phone:relay', (msg: Message) => phoneSystem.processPhoneMessage(msg));

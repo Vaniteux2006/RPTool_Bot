@@ -12,6 +12,8 @@ import '../commands/42';
 import '../commands/roll';
 import '../supercommands/phone';
 import '../supercommands/tempo';
+import './webhook';        // proxy de OC (oc:proxy) — auto-registra no MessageCreate
+import './utils/aiUtils';  // IA de OC (oc:ai)      — auto-registra no MessageCreate
 
 // ─── Rotinas de inicialização ─────────────────────────────────────────────────
 import birthdayCmd from '../commands/birthday';

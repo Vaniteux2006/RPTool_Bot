@@ -1,6 +1,7 @@
 import { Message, TextChannel, Webhook } from "discord.js";
 import { OCModel, IOC } from "./models/OCSchema";
 import ServerStats from "./models/ServerStats";
+import { EventCheckout } from "./event_checkout";
 
 function sanitizeOutput(text: string): string {
     if (!text) return text;
@@ -181,3 +182,9 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
         return false;
     }
 }
+
+// ─── Auto-inscrição no EventCheckout ─────────────────────────────────────────
+// Proxy de OC (tupper): toda mensagem cujo conteúdo começa com o prefixo de um
+// personagem do autor é reenviada via webhook (nome + avatar do OC) e a original
+// é apagada. handleOCMessage já filtra bots/DMs e devolve boolean.
+EventCheckout.onMessageCreate('oc:proxy', (msg: Message) => handleOCMessage(msg));

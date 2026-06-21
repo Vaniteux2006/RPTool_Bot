@@ -3,6 +3,7 @@ import { Message, TextChannel } from "discord.js";
 import { OCModel } from "../models/OCSchema";
 import { getGuildAIConfig } from './tokenHelper';
 import { sanitizeOutput } from './textUtils';
+import { EventCheckout } from '../event_checkout';
 
 export const autoTimers = new Map<string, NodeJS.Timeout>();
 
@@ -43,6 +44,7 @@ export async function chamarIA(prompt: string, config: any): Promise<string> {
 
 export async function handleAIMessage(message: Message): Promise<boolean> {
     if (message.author.bot || message.content.startsWith("rp!")) return false;
+    if (!message.guild) return false;
 
     const activeOCs = await OCModel.find({ "ai.enabled": true, "ai.activeChannelId": message.channel.id });
     if (activeOCs.length === 0) return false;
@@ -119,7 +121,7 @@ Exemplo de formato esperado:
 "novas_memorias": ["Conheci um estranho na taverna", "O estranho sabe o meu nome verdadeiro"]
 }`;
 
-    const aiConfig = getGuildAIConfig(channel.guild.id);
+    const aiConfig = await getGuildAIConfig(channel.guild.id);
 
     if (!aiConfig) {
         await channel.send("❌ **Erro:** Nenhuma IA está configurada ou liberada para este servidor. Use `rp!token` para arrumar isso.");
@@ -195,3 +197,9 @@ Exemplo de formato esperado:
         console.error("Erro ao enviar webhook da IA:", err);
     }
 }
+
+// ─── Auto-inscrição no EventCheckout ─────────────────────────────────────────
+// IA de OC (auto-responder de NPC): mensagens em canais com um OC de IA ativo
+// disparam geração — por gatilho manual (ai:prefixo) ou autoMode com delay.
+// handleAIMessage já filtra bots/prefixos/DMs e devolve boolean.
+EventCheckout.onMessageCreate('oc:ai', (msg: Message) => handleAIMessage(msg));

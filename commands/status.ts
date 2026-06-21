@@ -9,6 +9,10 @@ import axios from 'axios';
 import ServerStats from '../tools/models/ServerStats';
 import { OCModel } from '../tools/models/OCSchema';
 
+// Janela de coleta (em dias) — espelha o "lookback" do Statbot.
+// Trocar aqui ajusta TODOS os textos e gráficos do comando de uma vez.
+const LOOKBACK_DAYS = 14;
+
 export default {
     name: 'status',
     description: 'Dashboard de estatísticas do servidor, usuários ou canais',
@@ -48,13 +52,13 @@ export default {
         const targetArg = args.join(' ').toLowerCase();
 
         const now = new Date();
-        const last15Days = Array.from({ length: 15 }, (_, i) => {
+        const lookbackDays = Array.from({ length: LOOKBACK_DAYS }, (_, i) => {
             const d = new Date(now);
             d.setUTCDate(d.getUTCDate() - i);
             return d.toISOString().split('T')[0];
         });
 
-        const stats = await ServerStats.find({ guildId, date: { $in: last15Days } });
+        const stats = await ServerStats.find({ guildId, date: { $in: lookbackDays } });
         if (!stats.length) return message.reply('📉 Ainda não coletei dados suficientes.');
 
         if (targetArg === 'rank user' || targetArg === 'rank users') {
@@ -101,7 +105,7 @@ export default {
                 `🏆 Ranking de Atividade: Top 5 Usuários`,
                 chartLabels,
                 chartData,
-                [{ name: 'Os Mais Ativos (15 Dias)', value: embedFields.join('\n'), inline: false }]
+                [{ name: `Os Mais Ativos (${LOOKBACK_DAYS} Dias)`, value: embedFields.join('\n'), inline: false }]
             );
         }
 
@@ -139,7 +143,7 @@ export default {
                 `📊 Ranking de Atividade: Top 5 Canais`,
                 chartLabels,
                 chartData,
-                [{ name: 'Canais Mais Ativos (15 Dias)', value: embedFields.join('\n'), inline: false }]
+                [{ name: `Canais Mais Ativos (${LOOKBACK_DAYS} Dias)`, value: embedFields.join('\n'), inline: false }]
             );
         }
 
@@ -168,7 +172,7 @@ export default {
             const embed = new EmbedBuilder()
                 .setColor(0x2b2d31)
                 .setTitle(`📝 Palavras Mais Usadas (Top 15)`)
-                .setDescription(`As palavras mais frequentes dos últimos **15 dias** neste servidor.\n\n${embedFields.join('\n')}`)
+                .setDescription(`As palavras mais frequentes dos últimos **${LOOKBACK_DAYS} dias** neste servidor.\n\n${embedFields.join('\n')}`)
                 .setFooter({ text: 'RPTool | Ranking de Palavras', iconURL: message.guild.iconURL() });
 
             return await message.reply({ embeds: [embed] });
@@ -214,15 +218,15 @@ export default {
 
             const chartLabels: string[] = [];
             const dailyChartData: number[] = [];
-            [...last15Days].reverse().forEach(day => {
+            [...lookbackDays].reverse().forEach(day => {
                 const dateObj = new Date(day);
                 chartLabels.push(`${dateObj.getUTCDate()}/${dateObj.getUTCMonth() + 1}`);
                 dailyChartData.push(dailyChartMap[day] || 0);
             });
 
-            return await this.buildAndSend(message, `Estatísticas de ${message.guild.name}`, total15d, total7d, total24h, chartLabels, dailyChartData, null, [
-                { name: 'Top 5 Ativos', value: topUsersResolved.join('\n'), inline: false },
-                { name: 'Top 3 Canais', value: topChannelsText, inline: false }
+            return await this.buildAndSend(message, `📊 ${message.guild.name} — Visão Geral de Mensagens`, total15d, total7d, total24h, chartLabels, dailyChartData, null, [
+                { name: '👥 Top 5 Usuários', value: topUsersResolved.join('\n'), inline: false },
+                { name: '💬 Top 3 Canais', value: topChannelsText, inline: false }
             ]);
         }
 
@@ -269,7 +273,7 @@ export default {
 
         const chartLabels: string[] = [];
         const dailyChartData: number[] = [];
-        [...last15Days].reverse().forEach(day => {
+        [...lookbackDays].reverse().forEach(day => {
             const dateObj = new Date(day);
             chartLabels.push(`${dateObj.getUTCDate()}/${dateObj.getUTCMonth() + 1}`);
             dailyChartData.push(dailyChartMap[day] || 0);
@@ -311,7 +315,7 @@ export default {
                 },
                 scales: {
                     x: { ticks: { color: '#8e9297', font: { size: 11 } }, grid: { display: false } },
-                    y: { beginAtZero: true, ticks: { color: '#8e9297', font: { size: 10 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, suggestedMax: Math.max(...data) + 2 }
+                    y: { beginAtZero: true, ticks: { color: '#8e9297', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' }, suggestedMax: Math.ceil(Math.max(...data) * 1.15) }
                 }
             }
         };
@@ -323,7 +327,7 @@ export default {
         const embed = new EmbedBuilder()
             .setColor(0x2b2d31)
             .setTitle(title)
-            .setDescription(`Comparativo de atividade total dos últimos **15 dias**.`)
+            .setDescription(`Comparativo de atividade total dos últimos **${LOOKBACK_DAYS} dias**.`)
             .setImage('attachment://rank.png')
             .addFields(fields)
             .setFooter({ text: 'RPTool | Ranking', iconURL: message.guild.iconURL() });
@@ -335,17 +339,28 @@ export default {
         const chartConfig = {
             type: 'line',
             data: { labels, datasets: [{ data, borderColor: '#5865F2', backgroundColor: 'rgba(88, 101, 242, 0.15)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] },
-            options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8e9297', font: { size: 10 } }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: '#8e9297', font: { size: 10 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' } } } }
+            // stepSize removido: deixa o Chart.js escolher a escala (1k, 2k…) — essencial em servidores grandes
+            options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8e9297', font: { size: 10 } }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: '#8e9297', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } } } }
         };
 
         const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&bkg=${encodeURIComponent('#2b2d31')}&w=600&h=200&v=3`;
         const response = await axios.get(chartUrl, { responseType: 'arraybuffer' });
         const attachment = new AttachmentBuilder(Buffer.from(response.data), { name: 'stats.png' });
 
+        const fmt = (n: number) => n.toLocaleString('pt-BR');
+        const somaMensagens =
+            `**${LOOKBACK_DAYS} Dias:** \`${fmt(t15)}\` mensagens\n` +
+            `**7 Dias:** \`${fmt(t7)}\` mensagens\n` +
+            `**24 Horas:** \`${fmt(t24)}\` mensagens`;
+
         const embed = new EmbedBuilder()
-            .setColor(0x2b2d31).setTitle(title).setDescription(`Estatísticas dos últimos **15 dias**.`).setImage('attachment://stats.png')
-            .addFields({ name: 'Mensagens', value: `15 Dias: \`${t15}\` | 7 Dias: \`${t7}\` | 24h: \`${t24}\`` }, ...fields)
-            .setFooter({ text: 'RPTool | Status', iconURL: message.guild.iconURL() });
+            .setColor(0x2b2d31)
+            .setTitle(title)
+            .setDescription(`Estatísticas de mensagens dos últimos **${LOOKBACK_DAYS} dias**.\n*Todos os horários são exibidos no fuso UTC (GMT±0).*`)
+            .setImage('attachment://stats.png')
+            .addFields({ name: '🧮 Soma de Mensagens', value: somaMensagens, inline: false }, ...fields)
+            .setFooter({ text: 'RPTool | Status', iconURL: message.guild.iconURL() })
+            .setTimestamp();
 
         if (avatar) embed.setThumbnail(avatar);
         await message.reply({ embeds: [embed], files: [attachment] });
