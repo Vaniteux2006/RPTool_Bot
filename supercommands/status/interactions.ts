@@ -66,11 +66,15 @@ function formatBR(iso: string): string {
 }
 
 // ─── Componentes ──────────────────────────────────────────────────────────────
+// Os botões de troca usam o marcador `:r:` (reset → página 1) em vez de `:1:`.
+// Isso evita colisão de customId com o botão "◀ anterior" da pageRow quando se
+// está na página 2 (que geraria `stats_<tipo>:1:<uid>`, idêntico ao de troca).
+// O roteador resolve `r` como página 1 (parseInt('r') || 1).
 function switchRow(uid: string): ActionRowBuilder<ButtonBuilder> {
     return new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`stats_users:1:${uid}`).setLabel('Users').setEmoji('👥').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`stats_chats:1:${uid}`).setLabel('Chats').setEmoji('💬').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`stats_ocs:1:${uid}`).setLabel('OCs').setEmoji('🎭').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`stats_users:r:${uid}`).setLabel('Users').setEmoji('👥').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`stats_chats:r:${uid}`).setLabel('Chats').setEmoji('💬').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`stats_ocs:r:${uid}`).setLabel('OCs').setEmoji('🎭').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`stats_day:${uid}`).setLabel('Dia').setEmoji('📅').setStyle(ButtonStyle.Primary),
     );
 }
