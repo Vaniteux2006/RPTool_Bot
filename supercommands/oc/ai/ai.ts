@@ -16,19 +16,23 @@ export default async function handleAI(message: Message, args: string[], userId:
     if (extracted.rest) {
         if (extracted.rest.toLowerCase() === "off") {
             oc.ai.enabled = false;
+            oc.ai.activeChannelId = null; // encerra a sessão no canal
+            oc.markModified('ai');
             await oc.save();
             return message.reply(`🔴 IA de **${oc.name}** foi desligada.`);
         }
 
         oc.ai.persona = extracted.rest; // Usando persona (Schema)
         oc.ai.enabled = true;
+        oc.ai.activeChannelId = message.channel.id; // ativa a sessão NESTE canal
         oc.markModified('ai');
         await oc.save();
-        return message.reply(`🟢 IA de **${oc.name}** ativada e persona atualizada!`);
+        return message.reply(`🟢 IA de **${oc.name}** ativada **neste canal** e persona atualizada!`);
     }
 
     oc.ai.enabled = true;
+    oc.ai.activeChannelId = message.channel.id; // ativa a sessão NESTE canal
     oc.markModified('ai');
     await oc.save();
-    return message.reply(`🟢 IA de **${oc.name}** ativada.`);
+    return message.reply(`🟢 IA de **${oc.name}** ativada **neste canal**.`);
 }

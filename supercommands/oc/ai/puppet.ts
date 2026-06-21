@@ -16,6 +16,8 @@ export default async function handlePuppet(message: Message, args: string[], use
 
     // "Revoga o livre-arbítrio" (Desliga a IA)
     oc.ai.enabled = false;
+    oc.ai.activeChannelId = null; // encerra a sessão de IA
+    oc.markModified('ai');
     await oc.save();
 
     return message.reply(`🎭 O livre-arbítrio de **${oc.name}** foi revogado. Ele agora é um fantoche controlado apenas por você.`);

@@ -9,18 +9,27 @@ export default async function handleDelay(message: Message, args: string[], user
     const oc = await OCModel.findOne({ adminId: userId, name: extracted.name });
     if (!oc) return message.reply("❌ OC não encontrado.");
 
-    const delaySeconds = parseInt(extracted.rest);
-    if (isNaN(delaySeconds) || delaySeconds < 0 || delaySeconds > 60) {
-        return message.reply("⚠️ O delay deve ser um número entre 0 e 60 segundos.");
+    // Aceita "120", "120s" ou "2m" — é o intervalo do autoMode (entre respostas automáticas)
+    const raw = extracted.rest.trim().toLowerCase();
+    const m = raw.match(/^(\d+)\s*(m|min|s|seg)?$/);
+    if (!m) return message.reply("⚠️ Uso: `rp!oc delay \"NomeOC\" <tempo>` (ex: `90`, `90s` ou `2m`).");
+
+    const value = parseInt(m[1]);
+    const isMinutes = m[2] === 'm' || m[2] === 'min';
+    const delaySeconds = isMinutes ? value * 60 : value;
+
+    if (isNaN(delaySeconds) || delaySeconds < 0 || delaySeconds > 3600) {
+        return message.reply("⚠️ O intervalo deve ficar entre **0** e **3600s** (1 hora).");
     }
 
     if (!oc.ai) {
-        oc.ai = { enabled: false, persona: "", activeChannelId: null, autoMode: false, replyDelay: 30, memories: [] };
+        oc.ai = { enabled: false, persona: "", activeChannelId: null, autoMode: false, replyDelay: 120, memories: [] };
     }
-    
-    oc.ai.replyDelay = delaySeconds; // Usando replyDelay (Schema)
+
+    oc.ai.replyDelay = delaySeconds; // intervalo do autoMode (Schema)
     oc.markModified('ai');
     await oc.save();
 
-    return message.reply(`⏳ Delay de resposta de **${oc.name}** definido para **${delaySeconds}s**.`);
+    const human = delaySeconds >= 60 ? `${Math.round(delaySeconds / 60 * 10) / 10} min` : `${delaySeconds}s`;
+    return message.reply(`⏳ Intervalo do autoMode de **${oc.name}** definido para **${human}**.`);
 }

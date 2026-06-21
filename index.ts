@@ -10,7 +10,7 @@ import ReturnVersion from './tools/ReturnVersion';
 import runSystemChecks from './tools/command_checkout';
 import runInteractionChecks from './tools/interaction_checkout';
 import { BotStatusModel } from './tools/models/Outros';
-import timeCommand from './commands/time';
+import { startClockEngine } from './supercommands/tempo/clockEngine';
 import { initEventCheckout } from './tools/event_checkout';
 
 // ─── Permissões do Stockfish ──────────────────────────────────────────────────
@@ -168,7 +168,7 @@ client.once(Events.ClientReady, async (readyClient) => {
 
     const CLIENT_ID = process.env.CLIENT_ID || readyClient.user.id;
     const TOKEN = process.env.xdTOKEN;
-    await timeCommand.checkAndRestoreClocks(client);
+    await startClockEngine(client);
 
     if (TOKEN) {
         const rest = new REST().setToken(TOKEN);

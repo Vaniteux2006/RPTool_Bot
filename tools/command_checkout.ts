@@ -66,11 +66,42 @@ async function trackMessageStats(message: Message): Promise<void> {
     ).catch(e => console.error('[DB] ServerStats:', e));
 }
 
+// ─── Tracking de mensagens de webhook (OCs: RPTool / Tupperbox / PluralKit) ────
+// Webhooks não entram em trackMessageStats (são "bot"). Aqui contamos o personagem
+// pelo nome de exibição da mensagem (username), que é o identificador real de um OC
+// — um único webhookId serve vários personagens (caso do Tupperbox).
+function sanitizeOCKey(name: string): string {
+    // Chaves de Map no Mongo não podem conter '.' nem começar com '$'.
+    return (name || 'Desconhecido').replace(/[.$]/g, '').trim().slice(0, 80) || 'Desconhecido';
+}
+
+async function trackWebhookStats(message: Message): Promise<void> {
+    if (!message.guild) return;
+
+    const ocKey   = sanitizeOCKey(message.author.username);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const hour    = new Date().getUTCHours();
+
+    ServerStats.findOneAndUpdate(
+        { guildId: message.guild.id, date: dateStr, hour },
+        { $inc: { total: 1, [`ocs.${ocKey}`]: 1, [`channels.${message.channel.id}`]: 1 } },
+        { upsert: true },
+    ).catch(e => console.error('[DB] ServerStats (OC):', e));
+}
+
 // ─── Handler central registrado no EventCheckout ──────────────────────────────
 EventCheckout.onMessageCreate('__system.checkout', async (message: Message) => {
-    if (message.author.bot) return false;
-    trackMessageStats(message).catch(() => null);
     await initRoutines(message.client as Client);
+
+    if (message.webhookId) {
+        // Mensagem de OC (RPTool/Tupperbox/PluralKit/...) → contabiliza por personagem
+        trackWebhookStats(message).catch(() => null);
+    } else if (!message.author.bot) {
+        // Humano → estatísticas normais (users/channels/words)
+        trackMessageStats(message).catch(() => null);
+    }
+    // Outros bots (sem webhookId) são ignorados.
+
     return false; // não consome — outros handlers continuam
 });
 

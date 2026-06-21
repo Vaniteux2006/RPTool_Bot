@@ -14,6 +14,8 @@ import handleEdit from './handlers/edit';
 import handlePrefix from './handlers/prefix';
 import handlePurge from './handlers/purge';
 import handleAI from './ai/ai';
+import handleAuto from './ai/auto';
+import handlePersona from './ai/persona';
 import handleAlzheimer from './ai/alzheimer';
 import handleGaslight from './ai/gaslight';
 import handleForget from './ai/forget';
@@ -93,6 +95,8 @@ Use \`rp!help oc\` para detalhes.
                 case 'prefix': return handlePrefix(message, args, userId);
                 case 'purge': return handlePurge(message, args, userId);
                 case 'ai': return handleAI(message, args, userId);
+                case 'auto': case 'livre': return handleAuto(message, args, userId);
+                case 'persona': return handlePersona(message, args);
                 case 'alzheimer': return handleAlzheimer(message, args, userId);
                 case 'gaslight': return handleGaslight(message, args, userId);
                 case 'forget': return handleForget(message, args, userId);

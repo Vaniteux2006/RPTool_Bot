@@ -7,6 +7,31 @@ import { EventCheckout } from '../event_checkout';
 
 export const autoTimers = new Map<string, NodeJS.Timeout>();
 
+// Cooldown por OC (em memória): última vez que o NPC respondeu sozinho no autoMode.
+const lastAutoReply = new Map<string, number>();
+const MENTION_DELAY_MS = 5000; // "tempo de digitação" antes de responder
+
+function normalizeText(s: string): string {
+    return (s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+}
+function escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+// O conteúdo cita o nome do OC? (qualquer palavra significativa do nome, com limite de palavra)
+function mentionsOC(content: string, oc: any): boolean {
+    const text = normalizeText(content);
+    const nameWords = normalizeText(oc.name).split(/\s+/).filter((w: string) => w.length >= 3);
+    return nameWords.some((w: string) => new RegExp(`\\b${escapeRegex(w)}\\b`).test(text));
+}
+function scheduleAutoReply(id: string, oc: any, channel: TextChannel, delayMs: number): void {
+    const timer = setTimeout(() => {
+        autoTimers.delete(id);
+        lastAutoReply.set(id, Date.now());
+        triggerAIGeneration(channel, oc).catch(e => console.error('[IA] Erro no autoMode:', e));
+    }, delayMs);
+    autoTimers.set(id, timer);
+}
+
 export async function chamarIA(prompt: string, config: any): Promise<string> {
     try {
         if (config.provider === 'gemini') {
@@ -49,31 +74,35 @@ export async function handleAIMessage(message: Message): Promise<boolean> {
     const activeOCs = await OCModel.find({ "ai.enabled": true, "ai.activeChannelId": message.channel.id });
     if (activeOCs.length === 0) return false;
 
+    const channel = message.channel as TextChannel;
+    const now = Date.now();
     let triggered = false;
 
     for (const aiOC of activeOCs) {
+        // ── Gatilho manual: ai:<prefixo><sufixo> → resposta imediata ──
         const manualTrigger = `ai:${aiOC.prefix}${aiOC.suffix}`.trim();
-        const isManual = message.content.trim().toLowerCase() === manualTrigger.toLowerCase();
-
-        if (isManual) {
+        if (message.content.trim().toLowerCase() === manualTrigger.toLowerCase()) {
             message.delete().catch(() => { });
-            triggerAIGeneration(message.channel as TextChannel, aiOC);
+            triggerAIGeneration(channel, aiOC).catch(e => console.error('[IA] Erro no gatilho manual:', e));
             triggered = true;
             continue;
         }
 
-        if (aiOC.ai.autoMode) {
-            if (autoTimers.has(aiOC.id)) {
-                clearTimeout(autoTimers.get(aiOC.id)!);
-            }
+        // ── autoMode: o NPC participa sozinho da conversa ──
+        if (!aiOC.ai.autoMode) continue;
 
-            const delayMs = (aiOC.ai.replyDelay || 30) * 1000;
-            const timer = setTimeout(() => {
-                triggerAIGeneration(message.channel as TextChannel, aiOC);
-                autoTimers.delete(aiOC.id);
-            }, delayMs);
+        const id = aiOC.id;
+        if (autoTimers.has(id)) continue; // já há uma resposta agendada nesta janela
 
-            autoTimers.set(aiOC.id, timer);
+        const cooldownMs = Math.max(5, aiOC.ai.replyDelay || 120) * 1000;
+        const last = lastAutoReply.get(id) || 0;
+
+        if (mentionsOC(message.content, aiOC)) {
+            // Citaram o nome / perguntaram pra ele → responde rápido, ignorando o cooldown
+            scheduleAutoReply(id, aiOC, channel, MENTION_DELAY_MS);
+        } else if (now - last >= cooldownMs) {
+            // Conversa normal → participa periodicamente, respeitando o intervalo
+            scheduleAutoReply(id, aiOC, channel, MENTION_DELAY_MS);
         }
     }
 
@@ -83,7 +112,7 @@ export async function handleAIMessage(message: Message): Promise<boolean> {
 export async function triggerAIGeneration(channel: TextChannel, oc: any) {
     await channel.sendTyping().catch(() => { });
 
-    const rawMsgs = await channel.messages.fetch({ limit: 15 });
+    const rawMsgs = await channel.messages.fetch({ limit: 25 });
 
     const msgs = Array.from(rawMsgs.values())
         .reverse()
@@ -106,7 +135,9 @@ ${mems || "Ainda não tens memórias adicionais."}
 E esse é o Histórico recente de mensagens:
 ${chatHistory}
 
-Responda de forma natural à última mensagem da conversa, agindo como se estivesse participando da conversa e agindo ESTRITAMENTE IGUAL ao teu personagem. Não dê avisos de IA.
+Use os NOMES que aparecem no histórico para saber quem é quem, e leve em conta as tuas memórias acima. Responda de forma natural à conversa, agindo como se estivesses participando dela e ESTRITAMENTE IGUAL ao teu personagem. Não dê avisos de IA.
+
+Se neste momento o teu personagem não tem nada relevante a dizer (a conversa não é com ele nem lhe interessa), retorna "resposta" como string vazia "" para ficar calado.
 
 ⚠️ REGRA CRUCIAL DE FORMATAÇÃO ⚠️
 Você deve retornar EXCLUSIVAMENTE um objeto JSON válido (sem blocos de código markdown ou crases) contendo duas chaves:
@@ -179,6 +210,9 @@ Exemplo de formato esperado:
         await oc.save();
         console.log(`🧠 [IA] ${novasMemorias.length} novas memórias salvas para ${oc.name}.`);
     }
+
+    // Personagem optou por ficar em silêncio (resposta vazia) → não envia nada
+    if (!respostaDaIA || !respostaDaIA.trim()) return;
 
     try {
         const hooks = await channel.fetchWebhooks();

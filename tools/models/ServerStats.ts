@@ -18,7 +18,8 @@ const statSchema = new mongoose.Schema({
     total: { type: Number, default: 0 },
     users: { type: Map, of: Number, default: {} },
     channels: { type: Map, of: Number, default: {} },
-    words: { type: Map, of: Number, default: {} }
+    words: { type: Map, of: Number, default: {} },
+    ocs: { type: Map, of: Number, default: {} }
 });
 
 statSchema.index({ guildId: 1, date: 1, hour: 1 }, { unique: true });

@@ -1,6 +1,5 @@
 import { Message, TextChannel, Webhook } from "discord.js";
 import { OCModel, IOC } from "./models/OCSchema";
-import ServerStats from "./models/ServerStats";
 import { EventCheckout } from "./event_checkout";
 
 function sanitizeOutput(text: string): string {
@@ -162,15 +161,8 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
 
             match.messageCount += 1;
             match.save().catch(()=>{});
-
-            const dateStr = new Date().toISOString().split('T')[0];
-            const hour = new Date().getUTCHours();
-            
-            ServerStats.findOneAndUpdate(
-                { guildId: message.guild.id, date: dateStr, hour },
-                { $inc: { [`users.${match._id.toString()}`]: 1 } }, 
-                { upsert: true }
-            ).catch(() => {});
+            // Estatísticas do OC são contabilizadas em command_checkout.trackWebhookStats
+            // (pela mensagem de webhook reenviada), por nome — não duplicar aqui.
         }
 
         message.delete().catch(() => {});

@@ -1,6 +1,6 @@
 import { Message, MessageCollector, TextChannel } from "discord.js";
 import { OCModel } from "../../../tools/models/OCSchema";
-import { extractName } from "../../../tools/utils/textUtils";
+import { extractName } from "../utils";
 
 export default async function handlePersona(message: Message, args: string[]) {
     const userId = message.author.id;
@@ -39,11 +39,13 @@ export default async function handlePersona(message: Message, args: string[]) {
     
     collector.on('end', async (_, reason) => {
         if (reason === "finished") {
-            // Salva a nova persona e ativa a IA
+            // Salva a nova persona e ativa a IA neste canal
             oc.ai.enabled = true;
             oc.ai.persona = personaText.trim();
+            oc.ai.activeChannelId = channel.id; // ativa a sessão NESTE canal
+            oc.markModified('ai');
             await oc.save();
-            message.reply(`🤖 IA Ativada e configurada com sucesso para **${oc.name}**!`);
+            message.reply(`🤖 IA Ativada e configurada com sucesso para **${oc.name}** **neste canal**!`);
         } else {
             // Caso o tempo esgote sem o usuário digitar "END"
             message.reply("⏱️ O tempo limite de 5 minutos para configurar a persona esgotou. Tente novamente.");
