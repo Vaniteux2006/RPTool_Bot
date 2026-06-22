@@ -12,7 +12,7 @@
 //   • webhook → total + ocs (por nome) + channels   (OCs: RPTool/Tupperbox/PluralKit)
 //   • outros bots → ignorados
 import {
-    Message, TextChannel, ChannelType, PermissionsBitField, GuildBasedChannel,
+    Message, TextChannel, ChannelType, PermissionsBitField, GuildBasedChannel, EmbedBuilder,
 } from 'discord.js';
 import ServerStats from '../../../tools/models/ServerStats';
 
@@ -95,6 +95,7 @@ async function scanChannel(
     sinceTime: number,
     buckets: Map<string, Bucket>,
     onRead: () => void,
+    onBatch: (oldestTs: number) => Promise<void>,
 ): Promise<void> {
     let before: string | undefined;
 
@@ -103,13 +104,16 @@ async function scanChannel(
         if (!batch || batch.size === 0) break;
 
         let reachedEnd = false;
+        let oldestTs = 0;
         for (const msg of batch.values()) {
             if (msg.createdTimestamp < sinceTime) { reachedEnd = true; continue; }
             countMessage(msg, buckets);
             onRead();
+            oldestTs = msg.createdTimestamp; // mensagens vêm do mais novo ao mais antigo
         }
 
         before = batch.last()?.id;
+        await onBatch(oldestTs);   // ⬅️ heartbeat: atualiza o progresso DENTRO do canal
         if (reachedEnd || batch.size < 100 || !before) break;
         await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
     }
@@ -174,47 +178,97 @@ export async function handleDocpast(message: Message, args: string[]): Promise<a
     }
 
     activeBackfills.add(message.guild.id);
+    const guildName = message.guild.name;
     const buckets = new Map<string, Bucket>();
     let totalRead = 0;
     let channelsDone = 0;
+    let currentName = '—';
+    let currentChannelRead = 0;
+    let currentCursor = '';   // data mais antiga já alcançada no canal atual
     let lastEdit = 0;
+    const startedAt = Date.now();
 
-    const status = await message.reply(
-        `🔎 **Varredura do passado** iniciada (desde ${sinceLabel}).\n` +
-        `Lendo ${channelList.length} canais... isso pode demorar.`,
-    );
+    const status = await message.reply('🔎 Iniciando varredura do passado...');
 
-    const editProgress = async (currentName: string, force = false) => {
+    const bar = (done: number, total: number): string => {
+        const slots = 14;
+        const filled = total > 0 ? Math.round((done / total) * slots) : 0;
+        return '▰'.repeat(filled) + '▱'.repeat(slots - filled);
+    };
+
+    const renderEmbed = (state: 'run' | 'save' | 'done' | 'err', extra = ''): EmbedBuilder => {
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        const tempo = `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`;
+        const titles = {
+            run:  '🔎 Varrendo o passado...',
+            save: '💾 Gravando no banco...',
+            done: '✅ Backfill concluído!',
+            err:  '🚨 Backfill interrompido por erro',
+        };
+        const embed = new EmbedBuilder()
+            .setColor(state === 'done' ? 0x2ecc71 : state === 'err' ? 0xe74c3c : 0x5865F2)
+            .setTitle(titles[state])
+            .addFields(
+                { name: 'Progresso', value: `${bar(channelsDone, channelList.length)}  \`${channelsDone}/${channelList.length}\` canais`, inline: false },
+                { name: 'Mensagens lidas', value: `\`${totalRead.toLocaleString('pt-BR')}\``, inline: true },
+                { name: 'Tempo', value: `\`${tempo}\``, inline: true },
+            );
+        if (state === 'run') {
+            embed.addFields({
+                name: 'Canal atual',
+                value: `${currentName} — \`${currentChannelRead.toLocaleString('pt-BR')}\` msgs`
+                     + (currentCursor ? `\n📅 já recuou até **${currentCursor}**` : ''),
+                inline: false,
+            });
+        }
+        if (extra) embed.addFields({ name: '​', value: extra, inline: false });
+        // O timestamp (rodapé) avança a cada edição → serve de "heartbeat": se parar de andar, o bot morreu.
+        return embed.setFooter({ text: `desde ${sinceLabel} • heartbeat` }).setTimestamp();
+    };
+
+    const pushProgress = async (force = false) => {
         const now = Date.now();
         if (!force && now - lastEdit < PROGRESS_MS) return;
         lastEdit = now;
-        await status.edit(
-            `⏳ **Varrendo o passado...**\n` +
-            `Canais: \`${channelsDone}/${channelList.length}\` • Mensagens lidas: \`${totalRead.toLocaleString('pt-BR')}\`\n` +
-            `Atual: ${currentName}`,
-        ).catch(() => {});
+        await status.edit({ content: null, embeds: [renderEmbed('run')] }).catch(() => {});
     };
+
+    console.log(`🔎 [Backfill] Iniciado em "${guildName}" — ${channelList.length} canais, desde ${sinceLabel}.`);
 
     try {
         for (const ch of channelList) {
-            await editProgress(`<#${ch.id}>`);
-            await scanChannel(ch, sinceTime, buckets, () => { totalRead++; });
+            currentName = `<#${ch.id}>`;
+            currentChannelRead = 0;
+            currentCursor = '';
+            console.log(`   [Backfill] (${channelsDone + 1}/${channelList.length}) varrendo #${ch.name}...`);
+            await pushProgress(true);
+
+            await scanChannel(
+                ch, sinceTime, buckets,
+                () => { totalRead++; currentChannelRead++; },
+                async (oldestTs: number) => {
+                    if (oldestTs) currentCursor = new Date(oldestTs).toLocaleDateString('pt-BR');
+                    await pushProgress();
+                },
+            );
+
             channelsDone++;
+            console.log(`   [Backfill] #${ch.name} ✓ ${currentChannelRead} msgs (total acumulado: ${totalRead}).`);
         }
 
-        await status.edit('💾 Gravando no banco (sem sobrescrever o que já existe)...').catch(() => {});
+        await status.edit({ content: null, embeds: [renderEmbed('save')] }).catch(() => {});
         const inserted = await flush(buckets, message.guild.id);
+        console.log(`✅ [Backfill] Concluído em "${guildName}": ${totalRead} msgs lidas, ${inserted} registros novos gravados.`);
 
-        await status.edit(
-            `✅ **Backfill concluído!**\n` +
-            `• Mensagens lidas: \`${totalRead.toLocaleString('pt-BR')}\`\n` +
-            `• Canais varridos: \`${channelsDone}/${channelList.length}\`\n` +
-            `• Registros novos gravados: \`${inserted}\` (buckets que já existiam foram preservados)\n\n` +
-            `Use \`rp!status\` para ver os dados atualizados. 📊`,
-        ).catch(() => {});
+        await status.edit({
+            content: null,
+            embeds: [renderEmbed('done',
+                `• Registros novos gravados: \`${inserted}\` (buckets já existentes foram preservados)\n`
+                + `Use \`rp!status\` para ver os dados. 📊`)],
+        }).catch(() => {});
     } catch (e) {
-        console.error('[Status] Erro no backfill:', e);
-        await status.edit('🚨 Erro durante a varredura. Parte dos dados pode não ter sido gravada.').catch(() => {});
+        console.error(`🚨 [Backfill] Erro em "${guildName}":`, e);
+        await status.edit({ content: null, embeds: [renderEmbed('err', 'Parte dos dados pode não ter sido gravada.')] }).catch(() => {});
     } finally {
         activeBackfills.delete(message.guild.id);
     }

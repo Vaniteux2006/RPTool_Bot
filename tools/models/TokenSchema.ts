@@ -12,16 +12,35 @@ export interface ITokenKey {
     model: string;
 }
 
+export interface ITokenAssignment {
+    guildId: string;
+    keyId: string;
+}
+
 export interface ITokenUser extends Document {
     userId: string;
     keys: ITokenKey[];
-    assignments: { guildId: string; keyId: string }[];
+    assignments: ITokenAssignment[];
 }
 
-const TokenSchema = new Schema({
-    userId: { type: String, required: true, unique: true },
-    keys: { type: Array, default: [] },
-    assignments: { type: Array, default: [] }
+// Subdocumentos tipados (_id:false mantém a forma compatível com os dados já gravados)
+const KeySchema = new Schema<ITokenKey>({
+    id:       { type: String, required: true },
+    name:     { type: String, default: '' },
+    provider: { type: String, enum: ['gemini', 'openai'], required: true },
+    value:    { type: String, required: true },
+    model:    { type: String, default: '' },
+}, { _id: false });
+
+const AssignmentSchema = new Schema<ITokenAssignment>({
+    guildId: { type: String, required: true },
+    keyId:   { type: String, required: true },
+}, { _id: false });
+
+const TokenSchema = new Schema<ITokenUser>({
+    userId:      { type: String, required: true, unique: true },
+    keys:        { type: [KeySchema], default: [] },
+    assignments: { type: [AssignmentSchema], default: [] },
 });
 
 export const TokenModel = restanteConnection.model<ITokenUser>('Token', TokenSchema);

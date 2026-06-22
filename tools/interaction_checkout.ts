@@ -2,6 +2,7 @@ import { Client, Interaction } from 'discord.js';
 import { handleFutebolInteraction } from '../supercommands/futebol/interactions';
 import { handleFichaInteraction }   from '../supercommands/ficha/interactions';
 import { handleStatusInteraction }  from '../supercommands/status/interactions';
+import { handleTokenInteraction }   from '../supercommands/token/interactions';
 
 export default async function runInteractionChecks(interaction: Interaction, client: Client): Promise<boolean> {
 
@@ -20,6 +21,16 @@ export default async function runInteractionChecks(interaction: Interaction, cli
         (interaction.isModalSubmit() && interaction.customId.startsWith('stats_'))
     ) {
         await handleStatusInteraction(interaction);
+        return true;
+    }
+
+    // ── Token: painel de chaves de IA (botões, selects e modais) ──
+    if (
+        (interaction.isButton()           && interaction.customId.startsWith('token_')) ||
+        (interaction.isStringSelectMenu() && interaction.customId.startsWith('token_')) ||
+        (interaction.isModalSubmit()      && interaction.customId.startsWith('token_'))
+    ) {
+        await handleTokenInteraction(interaction);
         return true;
     }
 
