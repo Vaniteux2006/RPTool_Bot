@@ -28,6 +28,12 @@ import axios from 'axios';
 import ServerStats from '../../tools/models/ServerStats';
 import { OCModel } from '../../tools/models/OCSchema';
 import { handleDocpast } from './handlers/backfill';
+import { handleHeatmap } from './handlers/heatmap';
+import { handleHistorico } from './handlers/historico';
+import { handleProfile } from './handlers/profile';
+import { handleWrapped } from './handlers/wrapped';
+import { handleExplore } from './handlers/explore';
+import { handleTrending } from './handlers/trending';
 
 // Janela de coleta (em dias) — espelha o "lookback" do Statbot.
 // Trocar aqui ajusta TODOS os textos e gráficos do comando de uma vez.
@@ -75,6 +81,22 @@ export default {
         // ── Backfill do passado (admin): rp!status docpast [DD/MM/AAAA] ──
         if (args[0]?.toLowerCase() === 'docpast') {
             return handleDocpast(message, args);
+        }
+
+        // ── Suíte de estatística histórica ──
+        switch (args[0]?.toLowerCase()) {
+            case 'heatmap': case 'mapa': case 'calor':
+                return handleHeatmap(message, args);
+            case 'historico': case 'histórico': case 'timeline': case 'linha':
+                return handleHistorico(message, args);
+            case 'perfil': case 'profile':
+                return handleProfile(message, args);
+            case 'wrapped': case 'retrospectiva': case 'recap':
+                return handleWrapped(message, args);
+            case 'explorar': case 'explore': case 'query': case 'ver':
+                return handleExplore(message, args);
+            case 'trending': case 'alta': case 'hot': case 'tendencias': case 'tendências':
+                return handleTrending(message, args);
         }
 
         const now = new Date();
@@ -255,13 +277,17 @@ export default {
                 new ButtonBuilder().setCustomId(`stats_users:1:${invokerId}`).setLabel('Ranking Users').setEmoji('👥').setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder().setCustomId(`stats_chats:1:${invokerId}`).setLabel('Ranking Chats').setEmoji('💬').setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder().setCustomId(`stats_ocs:1:${invokerId}`).setLabel('Ranking OCs').setEmoji('🎭').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId(`stats_day:${invokerId}`).setLabel('Ranking do Dia').setEmoji('📅').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`stats_day:${invokerId}`).setLabel('Ranking do Dia').setEmoji('📅').setStyle(ButtonStyle.Secondary),
+            );
+            const toolRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId(`stats_exp:all:all:timeline:_:${invokerId}`).setLabel('Explorar').setEmoji('🔎').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`stats_trend:7d:now:${invokerId}`).setLabel('Em Alta').setEmoji('🔥').setStyle(ButtonStyle.Primary),
             );
 
             return await this.buildAndSend(message, `📊 ${message.guild.name} — Visão Geral de Mensagens`, total15d, total7d, total24h, chartLabels, dailyChartData, null, [
                 { name: '👥 Top 5 Usuários', value: topUsersResolved.join('\n'), inline: false },
                 { name: '💬 Top 3 Canais', value: topChannelsText, inline: false }
-            ], [navRow]);
+            ], [navRow, toolRow]);
         }
 
         const originalArg = args.join(' ');

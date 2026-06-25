@@ -13,6 +13,8 @@ import {
 } from 'discord.js';
 import ServerStats from '../../tools/models/ServerStats';
 import { LOOKBACK_DAYS } from './index';
+import { handleExploreInteraction } from './handlers/explore';
+import { handleTrendingInteraction } from './handlers/trending';
 
 const PER_PAGE = 10;
 
@@ -152,6 +154,13 @@ async function openDayModal(interaction: ButtonInteraction, uid: string) {
 
 // ─── Roteador ─────────────────────────────────────────────────────────────────
 export async function handleStatusInteraction(interaction: Interaction): Promise<void> {
+    // Explorador e Trending têm os próprios roteadores
+    if ((interaction as any).customId?.startsWith('stats_exp')) {
+        return handleExploreInteraction(interaction);
+    }
+    if ((interaction as any).customId?.startsWith('stats_trend')) {
+        return handleTrendingInteraction(interaction);
+    }
     try {
         if (interaction.isButton()) {
             const id = interaction.customId;

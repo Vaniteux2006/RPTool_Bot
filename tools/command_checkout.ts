@@ -17,7 +17,8 @@ import './utils/aiUtils';  // IA de OC (oc:ai)      — auto-registra no Message
 
 // ─── Rotinas de inicialização ─────────────────────────────────────────────────
 import birthdayCmd from '../commands/birthday';
-import ServerStats from './models/ServerStats';
+import ServerStats, { UserChannelModel } from './models/ServerStats';
+import { STOPWORDS } from './utils/stopwords';
 
 let routinesInitialized = false;
 
@@ -37,19 +38,13 @@ async function initRoutines(client: Client): Promise<void> {
 async function trackMessageStats(message: Message): Promise<void> {
     if (!message.guild) return;
 
-    const stopWords = new Set([
-        'como','para','você','isso','mais','pelo','pela','esse','essa',
-        'este','esta','tudo','nada','quem','onde','quando','porque','qual',
-        'aqui','sobre','então','muito','dela','dele','https','view','tenor',
-        'cara','minha','tenho','tava','fazer','pode','acho','assim','agora',
-    ]);
-
     const content  = message.content.toLowerCase();
     const rawWords = content.match(/[a-záàâãéèêíïóôõöúçñ]+/g) ?? [];
     const wordCounts: Record<string, number> = {};
 
     for (const w of rawWords) {
-        if (w.length > 4 && !stopWords.has(w)) {
+        // palavras de 3+ letras que não sejam funcionais (ver tools/utils/stopwords.ts)
+        if (w.length >= 3 && !STOPWORDS.has(w)) {
             const key = `words.${w}`;
             wordCounts[key] = (wordCounts[key] ?? 0) + 1;
         }
@@ -64,6 +59,13 @@ async function trackMessageStats(message: Message): Promise<void> {
         { $inc: { total: 1, [`users.${userId}`]: 1, [`channels.${message.channel.id}`]: 1, ...wordCounts } },
         { upsert: true },
     ).catch(e => console.error('[DB] ServerStats:', e));
+
+    // Cruzamento user × canal (agregado, prospectivo) — alimenta "canal favorito"
+    UserChannelModel.updateOne(
+        { guildId: message.guild.id, userId },
+        { $inc: { [`channels.${message.channel.id}`]: 1 } },
+        { upsert: true },
+    ).catch(e => console.error('[DB] UserChannelStats:', e));
 }
 
 // ─── Tracking de mensagens de webhook (OCs: RPTool / Tupperbox / PluralKit) ────

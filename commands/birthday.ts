@@ -116,10 +116,6 @@ export default {
             const channel = guild.channels.cache.get(config.channelId) as TextChannel;
             if (!channel) continue;
             
-            let msg;
-            try { msg = await channel.messages.fetch(config.messageId); } 
-            catch (e) { console.warn('[BIRTHDAY] Falha ao buscar mensagem do painel:', config.messageId, e); continue; } 
-
             const todaysBdays = await BirthdayModel.find({ guildId: config.guildId, day: currentDay, month: currentMonth });
 
             const embed = new EmbedBuilder()
@@ -134,7 +130,7 @@ export default {
                     let ageStr = "";
                     if (b.year) {
                         const age = currentYear - b.year;
-                        ageStr = ` (**${age} anos**)`; 
+                        ageStr = ` (**${age} anos**)`;
                     }
                     const nameDisplay = b.isUser ? `<@${b.identifier}>` : `**${b.identifier}**`;
                     desc += `🎁 ${nameDisplay}${ageStr}\n`;
@@ -142,7 +138,22 @@ export default {
                 embed.setDescription(desc).setColor(0xFFD700);
             }
 
-            await msg.edit({ embeds: [embed] });
+            // Edita o painel; se a mensagem foi apagada (10008), recria UMA vez e salva o novo id —
+            // assim a rotina horária para de tentar buscar pra sempre uma mensagem que não existe.
+            try {
+                const msg = await channel.messages.fetch(config.messageId);
+                await msg.edit({ embeds: [embed] });
+            } catch (e: any) {
+                if (e?.code === 10008) {
+                    const novo = await channel.send({ embeds: [embed] }).catch(() => null);
+                    if (novo) {
+                        await BirthdayConfigModel.updateOne({ guildId: config.guildId }, { $set: { messageId: novo.id } });
+                        console.log(`🎂 [BIRTHDAY] Painel recriado em "${guild.name}" (a mensagem anterior tinha sido apagada).`);
+                    }
+                } else {
+                    console.warn(`[BIRTHDAY] Falha ao atualizar painel em "${guild.name}":`, e?.message ?? e);
+                }
+            }
         }
     },
 
