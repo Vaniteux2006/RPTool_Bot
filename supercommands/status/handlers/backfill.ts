@@ -151,7 +151,17 @@ export async function handleDocpast(message: Message, args: string[]): Promise<a
         return message.reply('⏳ Já existe um backfill rodando neste servidor. Espere ele terminar.');
     }
 
+    // Reset: limpa os cursores → o próximo docpast recomeça a varredura do zero.
+    if (args[1]?.toLowerCase() === 'reset') {
+        const res = await BackfillStateModel.deleteMany({ guildId });
+        return message.reply(
+            `🔄 Cursores de backfill limpos (**${res.deletedCount}** canais). O próximo \`rp!status docpast <data>\` recomeça do zero.\n` +
+            `⚠️ Se um backfill anterior já tinha **gravado** dados, rodar de novo soma por cima (dobra).`,
+        );
+    }
+
     // Data inicial (args[1] = data opcional)
+    // Semântica: a data é o INÍCIO — lê DESDE ela ATÉ hoje. (docpast 14/05/2023 = de 2023 até agora.)
     let sinceTime: number, sinceLabel: string;
     if (args[1]) {
         const iso = parseDate(args[1]);

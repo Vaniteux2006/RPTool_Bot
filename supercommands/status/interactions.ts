@@ -168,11 +168,7 @@ export async function handleStatusInteraction(interaction: Interaction): Promise
 
             if (id.startsWith('stats_noop')) { await interaction.deferUpdate().catch(() => {}); return; }
 
-            if (interaction.user.id !== uid) {
-                await interaction.reply({ content: '🔒 Esse painel é de quem usou `rp!status`. Rode o seu para navegar!', ephemeral: true });
-                return;
-            }
-
+            // Painel público: qualquer um pode navegar.
             if (id.startsWith('stats_day:'))     return await openDayModal(interaction, uid);
 
             if (id.startsWith('stats_dayres:')) {
@@ -188,11 +184,6 @@ export async function handleStatusInteraction(interaction: Interaction): Promise
 
         if (interaction.isModalSubmit() && interaction.customId.startsWith('stats_daymodal:')) {
             const uid = interaction.customId.split(':').pop() as string;
-            if (interaction.user.id !== uid) {
-                await interaction.reply({ content: '🔒 Esse painel não é seu.', ephemeral: true });
-                return;
-            }
-
             const iso = parseDate(interaction.fields.getTextInputValue('data'));
             if (!iso) {
                 await interaction.reply({ content: '❌ Data inválida. Use `DD/MM` ou `DD/MM/AAAA` (ex: `15/06` ou `15/06/2026`).', ephemeral: true });

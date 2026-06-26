@@ -45,9 +45,11 @@ const renderKey = (view: string, k: string) =>
 function periodRow(s: State): ActionRowBuilder<ButtonBuilder> {
     const mk = (label: string, emoji: string, preset: string) => {
         const { from, to } = presetRange(preset);
-        return new ButtonBuilder()
-            .setCustomId(`stats_exp:${sg(from)}:${sg(to)}:${s.view}:${ag(s.arg)}:${s.uid}`)
-            .setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Secondary);
+        // Botão do período ATUAL vira noop (evita customId duplicado com a dimensão ativa)
+        if (from === s.from && to === s.to) {
+            return new ButtonBuilder().setCustomId(`stats_expnoop:per:${s.uid}`).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Primary).setDisabled(true);
+        }
+        return new ButtonBuilder().setCustomId(`stats_exp:${sg(from)}:${sg(to)}:${s.view}:${ag(s.arg)}:${s.uid}`).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Secondary);
     };
     return new ActionRowBuilder<ButtonBuilder>().addComponents(
         mk('Tudo', '🌐', 'all'), mk('Este ano', '📅', 'year'), mk('Ano passado', '🗓️', 'lastyear'), mk('30 dias', '⏱️', '30d'),
@@ -57,9 +59,10 @@ function periodRow(s: State): ActionRowBuilder<ButtonBuilder> {
 function dimRow(s: State): ActionRowBuilder<ButtonBuilder> {
     return new ActionRowBuilder<ButtonBuilder>().addComponents(
         DIMS.map(([v, label, emoji]) =>
-            new ButtonBuilder()
-                .setCustomId(`stats_exp:${sg(s.from)}:${sg(s.to)}:${v}:${v === 'timeline' ? '_' : '1'}:${s.uid}`)
-                .setLabel(label).setEmoji(emoji).setStyle(s.view === v ? ButtonStyle.Primary : ButtonStyle.Secondary)),
+            s.view === v
+                // Dimensão ATUAL vira noop (mesma proteção contra customId duplicado)
+                ? new ButtonBuilder().setCustomId(`stats_expnoop:dim:${s.uid}`).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Primary).setDisabled(true)
+                : new ButtonBuilder().setCustomId(`stats_exp:${sg(s.from)}:${sg(s.to)}:${v}:${v === 'timeline' ? '_' : '1'}:${s.uid}`).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Secondary)),
     );
 }
 function pageRow(s: State, totalPages: number): ActionRowBuilder<ButtonBuilder> {
@@ -136,7 +139,8 @@ export async function handleExplore(message: Message, _args: string[]): Promise<
 export async function handleExploreInteraction(interaction: any): Promise<void> {
     const id: string = interaction.customId;
     const uid = id.split(':').pop();
-    if (interaction.user.id !== uid) { await interaction.reply({ content: '🔒 Esse painel não é seu.' }).catch(() => {}); return; }
+    // Painel público: qualquer um navega.
+    if (id.startsWith('stats_expnoop')) { await interaction.deferUpdate?.().catch(() => {}); return; }
 
     try {
         // ── Botões que abrem modal ──

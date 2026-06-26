@@ -39,10 +39,12 @@ function windowRow(s: State): ActionRowBuilder<ButtonBuilder> {
     );
 }
 function navRow(s: State): ActionRowBuilder<ButtonBuilder> {
+    const atNow = s.anchor === 'now';
     return new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`stats_trend:${s.window}:${shiftAnchor(s.anchor, s.window, -1)}:${s.uid}`).setEmoji('◀️').setLabel('Antes').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`stats_trenddate:${s.window}:${s.uid}`).setEmoji('📅').setLabel('Ir pra data').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`stats_trend:${s.window}:${shiftAnchor(s.anchor, s.window, 1)}:${s.uid}`).setEmoji('▶️').setLabel('Depois').setStyle(ButtonStyle.Secondary).setDisabled(s.anchor === 'now'),
+        // Quando já é "agora", o ▶️ fica desabilitado com customId próprio (evita colidir com o botão de janela ativa, que também é :now)
+        new ButtonBuilder().setCustomId(atNow ? `stats_trendnoop:${s.uid}` : `stats_trend:${s.window}:${shiftAnchor(s.anchor, s.window, 1)}:${s.uid}`).setEmoji('▶️').setLabel('Depois').setStyle(ButtonStyle.Secondary).setDisabled(atNow),
     );
 }
 
@@ -95,7 +97,8 @@ export async function handleTrending(message: Message, args: string[]): Promise<
 export async function handleTrendingInteraction(interaction: any): Promise<void> {
     const id: string = interaction.customId;
     const uid = id.split(':').pop();
-    if (interaction.user.id !== uid) { await interaction.reply({ content: '🔒 Esse painel não é seu.' }).catch(() => {}); return; }
+    // Painel público: qualquer um navega.
+    if (id.startsWith('stats_trendnoop')) { await interaction.deferUpdate?.().catch(() => {}); return; }
 
     try {
         if (interaction.isButton() && id.startsWith('stats_trenddate:')) {

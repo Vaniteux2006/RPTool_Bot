@@ -95,8 +95,22 @@ export default {
                 return handleWrapped(message, args);
             case 'explorar': case 'explore': case 'query': case 'ver':
                 return handleExplore(message, args);
-            case 'trending': case 'alta': case 'hot': case 'tendencias': case 'tendências':
+            case 'trending': case 'alta': case 'hot': case 'tendencias': case 'tendências': case 'tendencia': case 'tendência':
                 return handleTrending(message, args);
+            case 'help': case 'ajuda': case 'comandos': case 'cmds':
+                return message.reply(
+                    `📊 **Comandos do Status**\n` +
+                    `\`rp!status\` — visão geral (14 dias) com botões\n` +
+                    `\`rp!status @user | #canal | "OC"\` — atividade de um alvo\n` +
+                    `\`rp!status explorar\` — explorador: período × dimensão, Ngram, alvo\n` +
+                    `\`rp!status trending [dia|semana|mes] [DD/MM/AAAA]\` — em alta + momentos quentes (viaja no tempo)\n` +
+                    `\`rp!status heatmap [@user]\` — mapa de calor dia × hora\n` +
+                    `\`rp!status historico [@user]\` — linha do tempo mensal\n` +
+                    `\`rp!status perfil @user\` — perfil temporal\n` +
+                    `\`rp!status wrapped [ano] [@user]\` — retrospectiva\n` +
+                    `\`rp!status rank user|channel|words\` — rankings em gráfico\n` +
+                    `\`rp!status docpast [DD/MM/AAAA | reset]\` — varre o histórico (admin)`,
+                );
         }
 
         const now = new Date();
@@ -310,7 +324,7 @@ export default {
                 const u = await message.client.users.fetch(originalArg).catch(() => null);
                 if (u) targetAvatar = u.displayAvatarURL();
             } else {
-                return message.reply(`❌ Alvo **${targetName}** não encontrado.`);
+                return message.reply(`❌ Alvo **${targetName}** não encontrado. (Use \`rp!status help\` para ver os comandos.)`);
             }
         }
 
