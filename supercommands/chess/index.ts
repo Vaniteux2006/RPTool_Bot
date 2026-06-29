@@ -68,10 +68,25 @@ function playerLabel(game: ChessGame, color: 'w' | 'b'): string {
     return `<@${id}>`;
 }
 
-function boardImageUrl(fen: string, lastMoveUci?: string): string {
-    const params = new URLSearchParams({ fen, theme: 'green', piece: 'cburnett' });
-    if (lastMoveUci) params.set('lastMove', lastMoveUci);
-    return `https://lichess1.org/export/fen.gif?${params.toString()}`;
+// Renderiza o tabuleiro via web-boardimage (serviço open-source do lichess).
+// Retorna PNG — que o proxy de imagens do Discord carrega de forma confiável,
+// diferente do antigo lichess1.org/export/fen.gif (que o proxy do Discord não
+// conseguia buscar, deixando o embed sem imagem).
+function boardImageUrl(fen: string, opts: { lastMove?: string; check?: string } = {}): string {
+    const params = new URLSearchParams({ fen, coordinates: 'true', size: '480' });
+    if (opts.lastMove) params.set('lastMove', opts.lastMove);
+    if (opts.check) params.set('check', opts.check);
+    return `https://backscattering.de/web-boardimage/board.png?${params.toString()}`;
+}
+
+// Casa do rei de uma cor — usada pra destacar o rei em xeque na imagem.
+function kingSquare(chess: Chess, color: 'w' | 'b'): string | undefined {
+    for (const row of chess.board()) {
+        for (const sq of row) {
+            if (sq && sq.type === 'k' && sq.color === color) return sq.square;
+        }
+    }
+    return undefined;
 }
 
 // Histórico no formato "1. e4 e5  2. Nf3 Nc6 …" (limitado pro campo do embed).
@@ -94,11 +109,12 @@ export function buildGamePayload(game: ChessGame, opts: { thinking?: boolean; no
     const chess = new Chess(game.fen);
     const over = chess.isGameOver();
     const turn = chess.turn();
+    const checkSquare = chess.isCheck() ? kingSquare(chess, turn) : undefined;
 
     const embed = new EmbedBuilder()
         .setColor(over ? 0xe74c3c : turn === 'w' ? 0xf0f0f0 : 0x2b2d31)
         .setTitle('♟️ Xadrez')
-        .setImage(boardImageUrl(game.fen, game.lastMoveUci))
+        .setImage(boardImageUrl(game.fen, { lastMove: game.lastMoveUci, check: checkSquare }))
         .addFields(
             { name: '⚪ Brancas', value: playerLabel(game, 'w'), inline: true },
             { name: '⚫ Pretas', value: playerLabel(game, 'b'), inline: true },
