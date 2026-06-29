@@ -28,6 +28,7 @@ export interface ChessGame {
     history: string[];      // lances em SAN
     lastMoveUci?: string;   // ex: e2e4 — para destacar no tabuleiro
     lastEval?: string;      // última avaliação da engine (só vsBot)
+    drawOfferedBy?: string; // userId de quem propôs empate (proposta pendente)
     createdAt: number;
 }
 
@@ -165,15 +166,28 @@ export async function buildGamePayload(game: ChessGame, opts: { thinking?: boole
         const evalPart = evalText ? ` • Avaliação: ${evalText}` : '';
         embed.setFooter({ text: `Modo: vs Stockfish • Dificuldade: ${DIFFICULTY[game.difficulty].label}${evalPart}` });
     }
+    // Proposta de empate pendente (PvP): mostra quem propôs.
+    if (!over && game.drawOfferedBy) {
+        embed.addFields({ name: '🤝 Proposta de empate', value: `<@${game.drawOfferedBy}> propôs empate. O oponente decide abaixo (ou ignore e jogue normalmente).`, inline: false });
+    }
     if (opts.note) embed.addFields({ name: '​', value: opts.note, inline: false });
 
     const components = over ? [] : [
         new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId(`chess_move:${game.id}`).setLabel('Fazer Lance').setEmoji('♟️').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`chess_draw:${game.id}`).setLabel('Empate').setEmoji('🤝').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(`chess_fen:${game.id}`).setLabel('FEN').setEmoji('📋').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(`chess_resign:${game.id}`).setLabel('Desistir').setEmoji('🏳️').setStyle(ButtonStyle.Danger),
         ),
     ];
+
+    // Linha extra de resposta à proposta de empate (só PvP, oferta pendente).
+    if (!over && game.drawOfferedBy) {
+        components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId(`chess_drawyes:${game.id}:${game.drawOfferedBy}`).setLabel('Aceitar empate').setEmoji('✅').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`chess_drawno:${game.id}:${game.drawOfferedBy}`).setLabel('Recusar empate').setEmoji('❌').setStyle(ButtonStyle.Danger),
+        ));
+    }
 
     // attachments: [] descarta anexos antigos da mensagem; files: [novo] põe o
     // tabuleiro atual. Sem isso, cada re-render empilharia um board.png a mais.

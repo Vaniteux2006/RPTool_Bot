@@ -23,6 +23,21 @@ function whoseTurn(game: ChessGame): string {
     return new Chess(game.fen).turn() === 'w' ? game.white : game.black;
 }
 
+// Avaliação em peões (ótica das brancas) a partir do texto da engine, ou null
+// quando é mate/desconhecido — usado pra decidir se o bot aceita empate.
+function evalToPawns(evalStr: string | null): number | null {
+    if (!evalStr) return null;
+    const m = evalStr.match(/^([+-]?\d+(?:\.\d+)?)$/);
+    return m ? parseFloat(m[1]) : null;
+}
+
+// Encerra a partida com uma mensagem custom (empate por acordo), sem botões.
+async function endWithMessage(game: ChessGame, description: string, color = 0x95a5a6) {
+    const payload = await buildGamePayload(game);
+    payload.embeds[0].setDescription(description).setColor(color);
+    return { embeds: payload.embeds, components: [], files: payload.files, attachments: [] };
+}
+
 // Aplica o lance da engine e atualiza o estado da partida.
 async function playEngineMove(game: ChessGame) {
     const reply = await engine.bestMove(game.fen, game.difficulty);
@@ -123,6 +138,53 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
             return void await interaction.update({ embeds: payload.embeds, components: [], files: payload.files, attachments: [] });
         }
 
+        // ════ PROPOR EMPATE ═══════════════════════════════════════════════════
+        if (action === 'chess_draw') {
+            if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (pode ter expirado).');
+            if (interaction.user.id !== game.white && interaction.user.id !== game.black) {
+                return void ephemeral(interaction, '🔒 Você não está nesta partida.');
+            }
+
+            // vs Stockfish: a engine avalia e aceita só se a posição estiver equilibrada.
+            if (game.vsBot) {
+                await interaction.deferUpdate(); // avaliar pode passar de 3s; reconhece já
+                const reply = await engine.bestMove(game.fen, game.difficulty);
+                const pawns = evalToPawns(reply.eval);
+                if (pawns !== null && Math.abs(pawns) <= 0.5) {
+                    games.delete(game.id);
+                    return void await interaction.editReply(await endWithMessage(game, '🤝 **Empate por acordo.** O Stockfish topou.')).catch(() => {});
+                }
+                return void await interaction.followUp({ content: '🤖 O Stockfish recusou o empate — ainda acha que dá jogo.', flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
+
+            // PvP: registra a proposta e mostra os botões de resposta pro oponente.
+            if (game.drawOfferedBy) return void ephemeral(interaction, '⏳ Já existe uma proposta de empate pendente.');
+            game.drawOfferedBy = interaction.user.id;
+            return void await interaction.update(await buildGamePayload(game));
+        }
+
+        // ════ ACEITAR EMPATE (PvP) ════════════════════════════════════════════
+        if (action === 'chess_drawyes') {
+            if (!game) return void await interaction.update({ components: [] }).catch(() => {});
+            const offererId = parts[2];
+            const isPlayer = interaction.user.id === game.white || interaction.user.id === game.black;
+            if (!isPlayer) return void ephemeral(interaction, '🔒 Você não está nesta partida.');
+            if (interaction.user.id === offererId) return void ephemeral(interaction, '🤝 Você que propôs — espere o oponente responder.');
+            games.delete(game.id);
+            return void await interaction.update(await endWithMessage(game, `🤝 **Empate por acordo** entre <@${game.white}> e <@${game.black}>.`));
+        }
+
+        // ════ RECUSAR EMPATE (PvP) ════════════════════════════════════════════
+        if (action === 'chess_drawno') {
+            if (!game) return void await interaction.update({ components: [] }).catch(() => {});
+            const offererId = parts[2];
+            const isPlayer = interaction.user.id === game.white || interaction.user.id === game.black;
+            if (!isPlayer) return void ephemeral(interaction, '🔒 Você não está nesta partida.');
+            if (interaction.user.id === offererId) return void ephemeral(interaction, '🤝 Você que propôs — espere o oponente responder.');
+            game.drawOfferedBy = undefined;
+            return void await interaction.update(await buildGamePayload(game, { note: `❌ <@${interaction.user.id}> recusou o empate. O jogo continua.` }));
+        }
+
         // ════ Abrir modal de lance ════════════════════════════════════════════
         if (action === 'chess_move') {
             if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (pode ter expirado).');
@@ -162,6 +224,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
             game.fen = chess.fen();
             game.history.push(move.san);
             game.lastMoveUci = move.from + move.to + (move.promotion ?? '');
+            game.drawOfferedBy = undefined; // jogar recusa qualquer empate pendente
 
             // Acabou no lance do jogador?
             if (chess.isGameOver()) {

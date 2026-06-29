@@ -545,7 +545,7 @@ export const CATEGORIES: HelpCategory[] = [
                 id: 'chess', name: 'chess', emoji: '♟️',
                 summary: 'Xadrez: membro vs membro ou contra o Stockfish.',
                 usage: ['rp!chess @oponente', 'rp!chess bot'],
-                details: 'Os lances são digitados no botão **Fazer Lance** e aceitam várias notações: `e4`, `Nf3`, `De4` (português), `e2e4` (bruto), `Qxd4`, `Qe4+`, `O-O`. No desafio PvP, quem chama joga de **pretas**; contra o bot você escolhe a dificuldade e joga de brancas.',
+                details: 'Os lances são digitados no botão **Fazer Lance** e aceitam várias notações: `e4`, `Nf3`, `De4` (português), `e2e4` (bruto), `Qxd4`, `Qe4+`, `O-O`. Também dá pra **propor empate** 🤝 (o oponente aceita/recusa; contra o bot, ele topa só se a posição estiver equilibrada) e **desistir** 🏳️. No desafio PvP, quem chama joga de **pretas**; contra o bot você escolhe a dificuldade e joga de brancas.',
                 subs: [
                     { usage: 'rp!chess @oponente', desc: 'Desafia um membro (você joga de pretas)' },
                     { usage: 'rp!chess bot', desc: 'Joga contra o Stockfish (escolhe Fácil/Médio/Difícil)' },
