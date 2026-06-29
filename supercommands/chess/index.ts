@@ -11,7 +11,7 @@
 // são roteados pelo interaction_checkout → interactions.ts. Estado em memória
 // (partidas efêmeras, sem DB), no padrão do antigo global.chessSessions.
 import {
-    Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+    Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder,
 } from 'discord.js';
 import { Chess } from 'chess.js';
 import { Difficulty, DIFFICULTY } from './engine';
@@ -68,15 +68,28 @@ function playerLabel(game: ChessGame, color: 'w' | 'b'): string {
     return `<@${id}>`;
 }
 
-// Renderiza o tabuleiro via web-boardimage (serviço open-source do lichess).
-// Retorna PNG — que o proxy de imagens do Discord carrega de forma confiável,
-// diferente do antigo lichess1.org/export/fen.gif (que o proxy do Discord não
-// conseguia buscar, deixando o embed sem imagem).
+// URL do tabuleiro no web-boardimage (serviço open-source do lichess → PNG).
 function boardImageUrl(fen: string, opts: { lastMove?: string; check?: string } = {}): string {
     const params = new URLSearchParams({ fen, coordinates: 'true', size: '480' });
     if (opts.lastMove) params.set('lastMove', opts.lastMove);
     if (opts.check) params.set('check', opts.check);
     return `https://backscattering.de/web-boardimage/board.png?${params.toString()}`;
+}
+
+// Baixa o PNG do tabuleiro e devolve como ANEXO. Anexar o arquivo (em vez de só
+// apontar uma URL) é o que faz a imagem aparecer: o proxy de imagens do Discord
+// não consegue buscar serviços externos de xadrez, mas anexos são hospedados
+// direto pelo Discord, sem proxy no meio. O bot consegue baixar (rede normal).
+async function boardAttachment(fen: string, opts: { lastMove?: string; check?: string } = {}): Promise<AttachmentBuilder | null> {
+    try {
+        const res = await fetch(boardImageUrl(fen, opts));
+        if (!res.ok) return null;
+        const buf = Buffer.from(await res.arrayBuffer());
+        return new AttachmentBuilder(buf, { name: 'board.png' });
+    } catch (e) {
+        console.warn('[Xadrez] Falha ao baixar o tabuleiro:', e);
+        return null;
+    }
 }
 
 // Casa do rei de uma cor — usada pra destacar o rei em xeque na imagem.
@@ -105,16 +118,18 @@ function formatHistory(history: string[]): string {
 }
 
 // ─── Montagem do payload da partida (embed + botões) ──────────────────────────
-export function buildGamePayload(game: ChessGame, opts: { thinking?: boolean; note?: string; evalText?: string } = {}) {
+export async function buildGamePayload(game: ChessGame, opts: { thinking?: boolean; note?: string; evalText?: string } = {}) {
     const chess = new Chess(game.fen);
     const over = chess.isGameOver();
     const turn = chess.turn();
     const checkSquare = chess.isCheck() ? kingSquare(chess, turn) : undefined;
 
+    const file = await boardAttachment(game.fen, { lastMove: game.lastMoveUci, check: checkSquare });
+
     const embed = new EmbedBuilder()
         .setColor(over ? 0xe74c3c : turn === 'w' ? 0xf0f0f0 : 0x2b2d31)
         .setTitle('♟️ Xadrez')
-        .setImage(boardImageUrl(game.fen, { lastMove: game.lastMoveUci, check: checkSquare }))
+        .setImage(file ? 'attachment://board.png' : boardImageUrl(game.fen, { lastMove: game.lastMoveUci, check: checkSquare }))
         .addFields(
             { name: '⚪ Brancas', value: playerLabel(game, 'w'), inline: true },
             { name: '⚫ Pretas', value: playerLabel(game, 'b'), inline: true },
@@ -160,7 +175,9 @@ export function buildGamePayload(game: ChessGame, opts: { thinking?: boolean; no
         ),
     ];
 
-    return { embeds: [embed], components };
+    // attachments: [] descarta anexos antigos da mensagem; files: [novo] põe o
+    // tabuleiro atual. Sem isso, cada re-render empilharia um board.png a mais.
+    return { embeds: [embed], components, files: file ? [file] : [], attachments: [] };
 }
 
 // ─── Tela de escolha de dificuldade (vs Stockfish) ────────────────────────────

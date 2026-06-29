@@ -66,7 +66,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
                 createdAt: Date.now(),
             };
             games.set(game.id, game);
-            return void await interaction.update({ content: null, ...buildGamePayload(game) });
+            return void await interaction.update({ content: null, ...(await buildGamePayload(game)) });
         }
 
         // ════ Convite: RECUSAR ════════════════════════════════════════════════
@@ -97,7 +97,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
                 createdAt: Date.now(),
             };
             games.set(game.id, game);
-            return void await interaction.update(buildGamePayload(game));
+            return void await interaction.update(await buildGamePayload(game));
         }
 
         // A partir daqui, todas as ações precisam de uma partida ativa.
@@ -118,9 +118,9 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
             const winner = interaction.user.id === game.white ? game.black : game.white;
             const winnerLabel = winner === BOT ? '🤖 Stockfish' : `<@${winner}>`;
             games.delete(game.id);
-            const payload = buildGamePayload(game);
+            const payload = await buildGamePayload(game);
             payload.embeds[0].setDescription(`🏳️ <@${interaction.user.id}> desistiu. Vitória de ${winnerLabel}.`).setColor(0xe74c3c);
-            return void await interaction.update({ embeds: payload.embeds, components: [] });
+            return void await interaction.update({ embeds: payload.embeds, components: [], files: payload.files, attachments: [] });
         }
 
         // ════ Abrir modal de lance ════════════════════════════════════════════
@@ -166,20 +166,20 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
             // Acabou no lance do jogador?
             if (chess.isGameOver()) {
                 games.delete(game.id);
-                return void await interaction.update(buildGamePayload(game));
+                return void await interaction.update(await buildGamePayload(game));
             }
 
             // vs Stockfish: mostra "pensando", calcula e depois edita com a resposta.
             if (game.vsBot && whoseTurn(game) === BOT) {
-                await interaction.update(buildGamePayload(game, { thinking: true }));
+                await interaction.update(await buildGamePayload(game, { thinking: true }));
                 await playEngineMove(game);
                 const over = new Chess(game.fen).isGameOver();
                 if (over) games.delete(game.id);
-                return void await interaction.message.edit(buildGamePayload(game)).catch(() => {});
+                return void await interaction.message.edit(await buildGamePayload(game)).catch(() => {});
             }
 
             // PvP: passa a vez pro outro jogador.
-            return void await interaction.update(buildGamePayload(game));
+            return void await interaction.update(await buildGamePayload(game));
         }
     } catch (e) {
         console.error('[Xadrez] Erro na interação:', e);
