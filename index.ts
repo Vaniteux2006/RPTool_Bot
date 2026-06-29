@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import {
     Client, GatewayIntentBits, Collection, ActivityType,
-    Events, REST, Routes, Partials,
+    Events, REST, Routes, Partials, Options,
 } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
@@ -68,6 +68,34 @@ const client = new Client({
         Partials.Reaction,
         Partials.User,
     ],
+    // ─── Limites de cache ─────────────────────────────────────────────────────
+    // Sem isto, o discord.js cacheia mensagens/membros/usuários sem teto e nunca
+    // os varre → a RAM cresce indefinidamente. Limitamos apenas managers seguros
+    // (limitar Guild/Channel/Role managers quebraria o djs). Os logs de exclusão
+    // já tratam Partials, então o cap de mensagens não remove funcionalidade.
+    makeCache: Options.cacheWithLimits({
+        ...Options.DefaultMakeCacheSettings,
+        MessageManager:  100,  // por canal (padrão: 200)
+        PresenceManager: 0,    // não usamos presença (intent removido)
+    }),
+    // ─── Sweepers ─────────────────────────────────────────────────────────────
+    // Varrem o cache periodicamente. Membros/usuários removidos são re-buscados
+    // sob demanda (members.fetch) quando algum comando precisa — sem quebra.
+    sweepers: {
+        ...Options.DefaultSweeperSettings,
+        messages: {
+            interval: 300,    // varre a cada 5 min
+            lifetime: 1800,   // descarta mensagens com +30 min no cache
+        },
+        users: {
+            interval: 3600,   // varre a cada 1h
+            filter: () => (user) => user.id !== user.client.user?.id,
+        },
+        guildMembers: {
+            interval: 3600,   // varre a cada 1h
+            filter: () => (member) => member.id !== member.client.user?.id,
+        },
+    },
 }) as CustomClient;
 
 client.commands = new Collection();

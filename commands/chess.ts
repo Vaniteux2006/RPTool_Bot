@@ -18,12 +18,16 @@ interface ChessResult {
 
 class ChessBot {
     private process: ChildProcess | null = null;
+    private idleTimer: ReturnType<typeof setTimeout> | null = null;
+    private static readonly IDLE_MS = 5 * 60 * 1000; // encerra a engine após 5 min ociosa
 
-    constructor() {
-        this.initEngine();
-    }
+    // Inicia a engine sob demanda (lazy). Antes era spawnada no boot e ficava
+    // viva pra sempre (~40–80 MB) mesmo sem ninguém jogando. Agora só nasce no
+    // primeiro lance e morre sozinha quando fica ociosa.
+    private ensureEngine() {
+        this.resetIdleTimer();
+        if (this.process && !this.process.killed) return;
 
-    private initEngine() {
         const isWin = process.platform === 'win32';
         const binName = isWin ? 'stockfish.exe' : 'stockfish';
         const binPath = path.join(process.cwd(), binName);
@@ -36,16 +40,33 @@ class ChessBot {
         try {
             this.process = spawn(binPath);
             this.process.on('error', (err) => console.error("❌ [XADREZ] Erro na engine:", err));
+            this.process.on('exit', () => { this.process = null; });
 
             this.send("uci");
             this.send("isready");
             this.send("setoption name Skill Level value 5");
-            
-            console.log(`♟️ [XADREZ] Engine nativa iniciada (${binName})`);
+
+            console.log(`♟️ [XADREZ] Engine nativa iniciada sob demanda (${binName})`);
 
         } catch (e) {
             console.error("❌ [XADREZ] Falha ao iniciar:", e);
+            this.process = null;
         }
+    }
+
+    private resetIdleTimer() {
+        if (this.idleTimer) clearTimeout(this.idleTimer);
+        this.idleTimer = setTimeout(() => {
+            if (this.process && !this.process.killed) {
+                this.send("quit");
+                this.process.kill();
+                console.log('♟️ [XADREZ] Engine encerrada por ociosidade.');
+            }
+            this.process = null;
+            this.idleTimer = null;
+        }, ChessBot.IDLE_MS);
+        // Não manter o processo Node vivo só por causa deste timer.
+        this.idleTimer.unref();
     }
 
     private send(command: string) {
@@ -55,6 +76,7 @@ class ChessBot {
     }
 
     private async getBestMove(fen: string, depth: number = 10): Promise<{ move: string | null, eval: string | null }> {
+        this.ensureEngine();
         if (!this.process || !this.process.stdout) return { move: null, eval: null };
 
         return new Promise((resolve) => {

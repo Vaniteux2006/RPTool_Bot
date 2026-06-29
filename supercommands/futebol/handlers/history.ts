@@ -1,5 +1,4 @@
 import { Message, AttachmentBuilder, EmbedBuilder } from 'discord.js';
-import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 import { TournamentModel, TeamModel } from '../../../tools/models/FutebolSchema';
 import { extractArgs } from '../../../tools/utils/textUtils';
 
@@ -61,6 +60,9 @@ export async function handleHistory(message: Message, args: string[]) {
     const COLORS = ['#00a8ff','#e84118','#fbc531','#4cd137','#9c88ff','#fd9644','#26de81','#fc5c65','#45aaf2','#a55eea'];
     const bgColors = labels.map((_, i) => COLORS[i % COLORS.length]);
 
+    // Import dinâmico: o backend nativo `canvas` (Cairo) só é carregado quando
+    // este gráfico é realmente gerado — evita ~30–80 MB residentes no boot.
+    const { ChartJSNodeCanvas } = await import('chartjs-node-canvas');
     const chartCanvas = new ChartJSNodeCanvas({ width: 900, height: 550, backgroundColour: '#2b2d31' });
 
     const configuration: any = {
