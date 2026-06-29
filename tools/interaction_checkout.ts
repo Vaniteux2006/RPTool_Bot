@@ -3,6 +3,7 @@ import { handleFutebolInteraction } from '../supercommands/futebol/interactions'
 import { handleFichaInteraction }   from '../supercommands/ficha/interactions';
 import { handleStatusInteraction }  from '../supercommands/status/interactions';
 import { handleTokenInteraction }   from '../supercommands/token/interactions';
+import { handleChessInteraction }   from '../supercommands/chess/interactions';
 
 export default async function runInteractionChecks(interaction: Interaction, client: Client): Promise<boolean> {
 
@@ -31,6 +32,15 @@ export default async function runInteractionChecks(interaction: Interaction, cli
         (interaction.isModalSubmit()      && interaction.customId.startsWith('token_'))
     ) {
         await handleTokenInteraction(interaction);
+        return true;
+    }
+
+    // ── Xadrez: convites, dificuldade, lances (botões + modal) ──
+    if (
+        (interaction.isButton()      && interaction.customId.startsWith('chess_')) ||
+        (interaction.isModalSubmit() && interaction.customId.startsWith('chess_'))
+    ) {
+        await handleChessInteraction(interaction);
         return true;
     }
 
