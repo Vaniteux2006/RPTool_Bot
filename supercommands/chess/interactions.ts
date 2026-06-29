@@ -9,7 +9,7 @@ import {
 } from 'discord.js';
 import { Chess } from 'chess.js';
 import {
-    games, challenges, genId, isChallengeExpired, buildGamePayload,
+    getGame, saveGame, deleteGame, challenges, genId, isChallengeExpired, buildGamePayload,
     ChessGame, BOT,
 } from './index';
 import { applyUserMove } from './parse';
@@ -80,7 +80,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
                 history: [],
                 createdAt: Date.now(),
             };
-            games.set(game.id, game);
+            await saveGame(game);
             return void await interaction.update({ content: null, ...(await buildGamePayload(game)) });
         }
 
@@ -111,16 +111,16 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
                 history: [],
                 createdAt: Date.now(),
             };
-            games.set(game.id, game);
+            await saveGame(game);
             return void await interaction.update(await buildGamePayload(game));
         }
 
         // A partir daqui, todas as ações precisam de uma partida ativa.
-        const game = games.get(parts[1]);
+        const game = await getGame(parts[1]);
 
         // ════ FEN ═════════════════════════════════════════════════════════════
         if (action === 'chess_fen') {
-            if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (pode ter expirado).');
+            if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (expira após 1h sem jogar).');
             return void ephemeral(interaction, `\`${game.fen}\``);
         }
 
@@ -132,7 +132,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
             }
             const winner = interaction.user.id === game.white ? game.black : game.white;
             const winnerLabel = winner === BOT ? '🤖 Stockfish' : `<@${winner}>`;
-            games.delete(game.id);
+            await deleteGame(game.id);
             const payload = await buildGamePayload(game);
             payload.embeds[0].setDescription(`🏳️ <@${interaction.user.id}> desistiu. Vitória de ${winnerLabel}.`).setColor(0xe74c3c);
             return void await interaction.update({ embeds: payload.embeds, components: [], files: payload.files, attachments: [] });
@@ -140,7 +140,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
 
         // ════ PROPOR EMPATE ═══════════════════════════════════════════════════
         if (action === 'chess_draw') {
-            if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (pode ter expirado).');
+            if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (expira após 1h sem jogar).');
             if (interaction.user.id !== game.white && interaction.user.id !== game.black) {
                 return void ephemeral(interaction, '🔒 Você não está nesta partida.');
             }
@@ -151,7 +151,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
                 const reply = await engine.bestMove(game.fen, game.difficulty);
                 const pawns = evalToPawns(reply.eval);
                 if (pawns !== null && Math.abs(pawns) <= 0.5) {
-                    games.delete(game.id);
+                    await deleteGame(game.id);
                     return void await interaction.editReply(await endWithMessage(game, '🤝 **Empate por acordo.** O Stockfish topou.')).catch(() => {});
                 }
                 return void await interaction.followUp({ content: '🤖 O Stockfish recusou o empate — ainda acha que dá jogo.', flags: MessageFlags.Ephemeral }).catch(() => {});
@@ -160,6 +160,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
             // PvP: registra a proposta e mostra os botões de resposta pro oponente.
             if (game.drawOfferedBy) return void ephemeral(interaction, '⏳ Já existe uma proposta de empate pendente.');
             game.drawOfferedBy = interaction.user.id;
+            await saveGame(game);
             return void await interaction.update(await buildGamePayload(game));
         }
 
@@ -170,7 +171,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
             const isPlayer = interaction.user.id === game.white || interaction.user.id === game.black;
             if (!isPlayer) return void ephemeral(interaction, '🔒 Você não está nesta partida.');
             if (interaction.user.id === offererId) return void ephemeral(interaction, '🤝 Você que propôs — espere o oponente responder.');
-            games.delete(game.id);
+            await deleteGame(game.id);
             return void await interaction.update(await endWithMessage(game, `🤝 **Empate por acordo** entre <@${game.white}> e <@${game.black}>.`));
         }
 
@@ -182,12 +183,13 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
             if (!isPlayer) return void ephemeral(interaction, '🔒 Você não está nesta partida.');
             if (interaction.user.id === offererId) return void ephemeral(interaction, '🤝 Você que propôs — espere o oponente responder.');
             game.drawOfferedBy = undefined;
+            await saveGame(game);
             return void await interaction.update(await buildGamePayload(game, { note: `❌ <@${interaction.user.id}> recusou o empate. O jogo continua.` }));
         }
 
         // ════ Abrir modal de lance ════════════════════════════════════════════
         if (action === 'chess_move') {
-            if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (pode ter expirado).');
+            if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (expira após 1h sem jogar).');
             const turnId = whoseTurn(game);
             if (interaction.user.id !== game.white && interaction.user.id !== game.black) {
                 return void ephemeral(interaction, '🔒 Você não está nesta partida.');
@@ -208,7 +210,7 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
 
         // ════ Modal submetido: aplica o lance ═════════════════════════════════
         if (action === 'chess_movemod') {
-            if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (pode ter expirado).');
+            if (!game) return void ephemeral(interaction, '⚠️ Partida não encontrada (expira após 1h sem jogar).');
             const turnId = whoseTurn(game);
             if (interaction.user.id !== turnId) {
                 return void ephemeral(interaction, '⏳ Não é a sua vez.');
@@ -228,20 +230,23 @@ export async function handleChessInteraction(interaction: any): Promise<void> {
 
             // Acabou no lance do jogador?
             if (chess.isGameOver()) {
-                games.delete(game.id);
+                await deleteGame(game.id);
                 return void await interaction.update(await buildGamePayload(game));
             }
 
             // vs Stockfish: mostra "pensando", calcula e depois edita com a resposta.
             if (game.vsBot && whoseTurn(game) === BOT) {
+                await saveGame(game); // garante o lance do jogador salvo antes do "pensando"
                 await interaction.update(await buildGamePayload(game, { thinking: true }));
                 await playEngineMove(game);
                 const over = new Chess(game.fen).isGameOver();
-                if (over) games.delete(game.id);
+                if (over) await deleteGame(game.id);
+                else await saveGame(game);
                 return void await interaction.message.edit(await buildGamePayload(game)).catch(() => {});
             }
 
             // PvP: passa a vez pro outro jogador.
+            await saveGame(game);
             return void await interaction.update(await buildGamePayload(game));
         }
     } catch (e) {

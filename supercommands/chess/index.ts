@@ -15,6 +15,7 @@ import {
 } from 'discord.js';
 import { Chess } from 'chess.js';
 import { Difficulty, DIFFICULTY } from './engine';
+import { ChessGameModel } from '../../tools/models/ChessSchema';
 
 // ─── Estado em memória ────────────────────────────────────────────────────────
 export interface ChessGame {
@@ -40,7 +41,9 @@ export interface ChessChallenge {
     createdAt: number;
 }
 
-export const games = new Map<string, ChessGame>();
+// Desafios (convites) ficam em memória: são efêmeros (10 min) e de baixo risco —
+// se um restart os perder, é só desafiar de novo. As PARTIDAS, porém, vivem no
+// Mongo (ver getGame/saveGame) pra sobreviver a restart e expirar por TTL de 1h.
 export const challenges = new Map<string, ChessChallenge>();
 
 export const BOT = 'bot';
@@ -50,13 +53,62 @@ export function genId(): string {
     return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-// Limpeza preguiçosa: varre partidas/convites velhos de hora em hora.
+// Varre convites velhos de tempos em tempos (partidas são limpas pelo TTL do Mongo).
 const sweeper = setInterval(() => {
     const now = Date.now();
     for (const [id, c] of challenges) if (now - c.createdAt > CHALLENGE_TTL) challenges.delete(id);
-    for (const [id, g] of games) if (now - g.createdAt > 6 * 60 * 60 * 1000) games.delete(id);
-}, 60 * 60 * 1000);
+}, 5 * 60 * 1000);
 sweeper.unref();
+
+// ─── Persistência das partidas (MongoDB) ──────────────────────────────────────
+const docToGame = (d: any): ChessGame => ({
+    id: d.gameId,
+    channelId: d.channelId,
+    white: d.white,
+    black: d.black,
+    vsBot: d.vsBot,
+    difficulty: d.difficulty,
+    fen: d.fen,
+    history: d.history ?? [],
+    lastMoveUci: d.lastMoveUci ?? undefined,
+    lastEval: d.lastEval ?? undefined,
+    drawOfferedBy: d.drawOfferedBy ?? undefined,
+    createdAt: d.createdAt,
+});
+
+export async function getGame(id: string): Promise<ChessGame | null> {
+    const doc = await ChessGameModel.findOne({ gameId: id }).lean().catch(() => null);
+    return doc ? docToGame(doc) : null;
+}
+
+// Upsert + reinício do relógio TTL (updatedAt = agora) a cada jogada.
+export async function saveGame(game: ChessGame): Promise<void> {
+    await ChessGameModel.updateOne(
+        { gameId: game.id },
+        {
+            $set: {
+                gameId: game.id,
+                channelId: game.channelId,
+                white: game.white,
+                black: game.black,
+                vsBot: game.vsBot,
+                difficulty: game.difficulty,
+                fen: game.fen,
+                history: game.history,
+                lastMoveUci: game.lastMoveUci ?? null,
+                lastEval: game.lastEval ?? null,
+                drawOfferedBy: game.drawOfferedBy ?? null,
+                createdAt: game.createdAt,
+                updatedAt: new Date(),
+            },
+        },
+        { upsert: true },
+    ).catch((e) => console.error('[Xadrez] Falha ao salvar partida:', e));
+}
+
+export async function deleteGame(id: string): Promise<void> {
+    await ChessGameModel.deleteOne({ gameId: id }).catch(() => {});
+}
 
 // ─── Helpers de exibição ──────────────────────────────────────────────────────
 export function isChallengeExpired(c: ChessChallenge): boolean {
