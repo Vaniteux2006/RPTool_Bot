@@ -28,6 +28,7 @@ import handleSolo from './social_handlers/solo';
 import handleBirthday from './social_handlers/birthday';
 import handleInfo from './social_handlers/info';
 import handleWikiMain from "./wiki/index";
+import helpCommand from "../help/index";
 
 
 const confusedUsers = new Map<string, number>();
@@ -108,6 +109,9 @@ Use \`rp!help oc\` para detalhes.
                 case 'solo': return handleSolo(message, args, userId);
                 case 'birthday': return handleBirthday(message, args, userId);
                 case 'info': return handleInfo(message, args, userId);
+                case 'help': case 'ajuda': case 'comandos':
+                    // Abre a Central de Ajuda já no contexto de OC (ex: `rp!oc help wiki` → `rp!help oc wiki`)
+                    return helpCommand.execute(message, ['oc', ...args.slice(1)]);
                 default:
                     return message.reply("🚫 HTTP 418: I'm a teapot. 🍵 (Comando inválido, apenas sou uma chaleira de chá)");
             }

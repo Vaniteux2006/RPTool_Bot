@@ -307,8 +307,9 @@ export const CATEGORIES: HelpCategory[] = [
                 summary: 'Organiza seus OCs em grupos.',
                 usage: ['rp!oc group'],
                 subs: [
-                    { usage: 'rp!oc group create ["Grupo"] ["OC"]', desc: 'Cria o grupo e já adiciona um OC' },
-                    { usage: 'rp!oc group add ["Grupo"] ["OC"]', desc: 'Põe um OC no grupo' },
+                    { usage: 'rp!oc group create ["OC"] ["Grupo"]', desc: 'Cria o grupo e já adiciona um OC' },
+                    { usage: 'rp!oc group add ["OC"] ["Grupo"]', desc: 'Põe um OC no grupo' },
+                    { usage: 'rp!oc group list ["Grupo"]', desc: 'Mostra os OCs de um grupo específico' },
                     { usage: 'rp!oc group remove ["OC"]', desc: 'Tira o OC do grupo' },
                     { usage: 'rp!oc group delete ["Grupo"]', desc: 'Exclui o grupo' },
                     { usage: 'rp!oc group list', desc: 'Lista seus grupos criados' },
