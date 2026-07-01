@@ -19,6 +19,7 @@ import './utils/aiUtils';  // IA de OC (oc:ai)      — auto-registra no Message
 import birthdayCmd from '../commands/birthday';
 import ServerStats, { UserChannelModel } from './models/ServerStats';
 import { STOPWORDS } from './utils/stopwords';
+import { recomputeAllAdvanced } from './utils/economyEngine';
 
 let routinesInitialized = false;
 
@@ -28,6 +29,12 @@ async function initRoutines(client: Client): Promise<void> {
 
     setInterval(
         () => birthdayCmd.updateBirthdayPanels(client).catch(e => console.error('[Rotina] Aniversários:', e)),
+        1000 * 60 * 60,
+    );
+
+    // Recalcula inflação/PIB dos servidores em modo econômico avançado.
+    setInterval(
+        () => recomputeAllAdvanced().catch(e => console.error('[Rotina] Economia:', e)),
         1000 * 60 * 60,
     );
 

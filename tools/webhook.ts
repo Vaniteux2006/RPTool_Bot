@@ -147,16 +147,43 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
 
         const filesToSend = Array.from(message.attachments.values()).map(attachment => attachment.url);
 
+        // Webhook n\u00E3o faz reply nativo \u2014 replicamos o contexto como um embed clic\u00E1vel
+        // (estilo PluralKit/Tupperbox) s\u00F3 na primeira mensagem do lote.
+        let replyEmbed: object | undefined;
+        if (message.reference?.messageId) {
+            try {
+                const ref = await message.channel.messages.fetch(message.reference.messageId);
+                const refAuthor = (ref.member?.displayName || ref.author.username);
+                let snippet = (ref.content || "").replace(/\n/g, " ").trim();
+                if (snippet.length > 100) snippet = snippet.slice(0, 100) + "\u2026";
+                if (!snippet) {
+                    snippet = ref.attachments.size > 0 ? "*(anexo)*" : (ref.embeds.length > 0 ? "*(embed)*" : "*(mensagem)*");
+                }
+                const jump = `https://discord.com/channels/${message.guild.id}/${ref.channelId}/${ref.id}`;
+                replyEmbed = {
+                    color: 0x4f545c,
+                    author: {
+                        name: `\u21A9\uFE0F ${refAuthor}`,
+                        icon_url: ref.author.displayAvatarURL()
+                    },
+                    description: `**[Respondendo a:](${jump})** ${sanitizeOutput(snippet)}`
+                };
+            } catch {
+                // Mensagem referenciada foi apagada ou n\u00E3o est\u00E1 acess\u00EDvel \u2014 segue sem o embed.
+            }
+        }
+
         for (let i = 0; i < validMessages.length; i++) {
             const item = validMessages[i];
             const match = item.oc;
-            
+
             await webhook.send({
-                content: sanitizeOutput(item.cleanContent) || "\u200B", 
+                content: sanitizeOutput(item.cleanContent) || "\u200B",
                 username: match.name,
                 avatarURL: match.avatar,
-                files: i === 0 ? filesToSend : [], 
-                threadId: threadId 
+                files: i === 0 ? filesToSend : [],
+                embeds: i === 0 && replyEmbed ? [replyEmbed] : [],
+                threadId: threadId
             });
 
             match.messageCount += 1;

@@ -596,6 +596,52 @@ export const CATEGORIES: HelpCategory[] = [
             },
         ],
     },
+    // ═══════════════════════════════════════════════════════════════════════
+    {
+        id: 'economia',
+        label: 'Economia & RP',
+        emoji: '💰',
+        desc: 'Carteira e inventário POR PERSONAGEM (OC) — dinheiro, itens e loja',
+        entries: [
+            {
+                id: 'wallet', name: 'wallet', emoji: '🪙', essential: true,
+                summary: 'Carteira de cada OC — dinheiro isolado por personagem e servidor.',
+                usage: ['rp!wallet ["Nome"]', 'rp!wallet pay "MeuOC" <valor> "AlvoOC"'],
+                details: 'Inspirado no UnbelievaBoat, mas o saldo pertence ao **tupper**, não à conta Discord. Cada OC tem uma carteira por servidor. Sem nome, mostra a carteira do seu único OC (se houver só um).',
+                aliases: ['bank', 'saldo', 'money', 'carteira', 'w'],
+                subs: [
+                    { usage: 'rp!wallet ["Nome"]', desc: 'Mostra o saldo (e itens) do OC' },
+                    { usage: 'rp!wallet pay "MeuOC" <valor> "AlvoOC"', desc: 'Transfere dinheiro entre OCs' },
+                    { usage: 'rp!wallet top', desc: 'Ranking dos OCs mais ricos do servidor' },
+                    { usage: 'rp!wallet economia', desc: 'Painel macroeconômico (M, PIB, inflação, câmbio)' },
+                    { usage: 'rp!wallet economia avancada on/off', desc: '⚙️ Staff: liga a simulação de inflação/PIB/dólar' },
+                    { usage: 'rp!wallet economia reajuste on/off', desc: '⚙️ Staff: preços da loja acompanham a inflação' },
+                    { usage: 'rp!wallet economia dolar <valor>', desc: '⚙️ Staff: define o câmbio fictício→dólar' },
+                    { usage: 'rp!wallet add/remove/set "Nome" <valor>', desc: '⚙️ Staff: ajusta saldo' },
+                    { usage: 'rp!wallet setcurrency "Nome" <símbolo>', desc: '⚙️ Staff: define a moeda do servidor' },
+                ],
+                keywords: ['dinheiro', 'saldo', 'banco', 'carteira', 'moeda', 'economia', 'pagar', 'unbelieva', 'unbelievaboat', 'grana', 'inflacao', 'inflação', 'pib', 'dolar', 'dólar', 'cambio'],
+            },
+            {
+                id: 'inventory', name: 'inventory', emoji: '🎒',
+                summary: 'Mochila de cada OC e loja do servidor — itens por personagem.',
+                usage: ['rp!inventory ["Nome"]', 'rp!inventory buy "SeuOC" "item" [qtd]'],
+                details: 'Cada OC tem sua própria mochila. A staff monta a loja com `additem`; os jogadores compram, vendem, usam e trocam itens entre personagens.',
+                aliases: ['inv', 'bag', 'mochila', 'itens', 'i'],
+                subs: [
+                    { usage: 'rp!inventory ["Nome"]', desc: 'Lista a mochila do OC' },
+                    { usage: 'rp!inventory shop', desc: 'Mostra a loja do servidor' },
+                    { usage: 'rp!inventory buy "SeuOC" "item" [qtd]', desc: 'Compra um item da loja' },
+                    { usage: 'rp!inventory sell "SeuOC" "item" [qtd]', desc: 'Vende um item de volta (50%)' },
+                    { usage: 'rp!inventory use "Nome" "item"', desc: 'Consome 1 unidade do item' },
+                    { usage: 'rp!inventory give "MeuOC" "item" [qtd] "AlvoOC"', desc: 'Dá um item pra outro OC' },
+                    { usage: 'rp!inventory additem "Nome" <preço> [emoji] ["desc"]', desc: '⚙️ Staff: cria item na loja' },
+                    { usage: 'rp!inventory edititem/removeitem/giveitem/takeitem', desc: '⚙️ Staff: gerencia catálogo e mochilas' },
+                ],
+                keywords: ['inventario', 'inventário', 'mochila', 'item', 'itens', 'loja', 'shop', 'comprar', 'vender', 'bag', 'unbelieva'],
+            },
+        ],
+    },
 ];
 
 // ─── Índices auxiliares ───────────────────────────────────────────────────────
