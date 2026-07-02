@@ -1,4 +1,7 @@
-import { Message, TextChannel, Webhook } from "discord.js";
+import {
+    Message, PartialMessage, TextChannel, Webhook,
+    MessageReaction, PartialMessageReaction, User, PartialUser,
+} from "discord.js";
 import { OCModel, IOC } from "./models/OCSchema";
 import { EventCheckout } from "./event_checkout";
 
@@ -177,7 +180,7 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
             const item = validMessages[i];
             const match = item.oc;
 
-            await webhook.send({
+            const sent = await webhook.send({
                 content: sanitizeOutput(item.cleanContent) || "\u200B",
                 username: match.name,
                 avatarURL: match.avatar,
@@ -185,6 +188,9 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
                 embeds: i === 0 && replyEmbed ? [replyEmbed] : [],
                 threadId: threadId
             });
+
+            // Guarda quem enviou este proxy, pra permitir apagar reagindo \u274C.
+            if (sent?.id) rememberOCMessage(sent.id, message.author.id);
 
             match.messageCount += 1;
             match.save().catch(()=>{});
@@ -202,8 +208,87 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
     }
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  Apagar proxy de OC reagindo ❌ (estilo Tupperbox) — só o AUTOR, só webhook nossa
+// ═════════════════════════════════════════════════════════════════════════════
+
+// messageId → id de quem digitou o proxy. Cap de tamanho pra não vazar memória.
+const recentOCMessages = new Map<string, string>();
+const OC_MSG_CACHE_CAP = 5000;
+
+function rememberOCMessage(messageId: string, userId: string): void {
+    recentOCMessages.set(messageId, userId);
+    if (recentOCMessages.size > OC_MSG_CACHE_CAP) {
+        const oldest = recentOCMessages.keys().next().value; // Map preserva ordem de inserção
+        if (oldest) recentOCMessages.delete(oldest);
+    }
+}
+
+// Cache "esta webhook é minha?" (webhookId → boolean) pra não refazer o fetch.
+const ownWebhookCache = new Map<string, boolean>();
+
+async function isOwnWebhook(msg: Message | PartialMessage): Promise<boolean> {
+    const id = msg.webhookId;
+    if (!id) return false;
+    if (ownWebhookCache.has(id)) return ownWebhookCache.get(id)!;
+    try {
+        const wh = await msg.client.fetchWebhook(id);
+        const mine = wh.owner?.id === msg.client.user?.id;
+        ownWebhookCache.set(id, mine);
+        return mine;
+    } catch {
+        ownWebhookCache.set(id, false);
+        return false;
+    }
+}
+
+// Emojis aceitos como "apagar".
+const DELETE_EMOJIS = new Set(['❌', '❎', '✖️', '✖', '🗑️', '🗑']);
+
+async function handleOCReactionDelete(
+    reaction: MessageReaction | PartialMessageReaction,
+    user: User | PartialUser,
+): Promise<void> {
+    if (user.bot) return;
+    if (!DELETE_EMOJIS.has(reaction.emoji.name ?? '')) return;
+
+    // Resolve partials (reações em mensagens fora do cache chegam parciais).
+    if (reaction.partial) { try { await reaction.fetch(); } catch { return; } }
+    let msg: Message | PartialMessage = reaction.message;
+    if (msg.partial) { try { msg = await msg.fetch(); } catch { return; } }
+
+    if (!msg.webhookId || !msg.guild) return; // só mensagens de webhook, em servidor
+
+    // 1) Caminho exato: proxy que ESTE bot enviou recentemente (autor conhecido).
+    const typedBy = recentOCMessages.get(msg.id);
+    let allowed = false;
+
+    if (typedBy) {
+        allowed = typedBy === user.id;
+    } else {
+        // 2) Fallback durável (sobrevive a restart): a webhook é nossa E quem reagiu
+        //    é dono de um OC com o nome exibido na mensagem.
+        if (!(await isOwnWebhook(msg))) return;
+        const displayName = msg.author?.username;
+        if (!displayName) return;
+        const oc = await OCModel.findOne({
+            name: displayName,
+            $or: [{ adminId: user.id }, { duoIds: user.id }],
+        }).collation({ locale: 'pt', strength: 2 });
+        allowed = !!oc;
+    }
+
+    if (!allowed) return;
+
+    await msg.delete().catch(() => {});
+    recentOCMessages.delete(msg.id);
+}
+
 // ─── Auto-inscrição no EventCheckout ─────────────────────────────────────────
 // Proxy de OC (tupper): toda mensagem cujo conteúdo começa com o prefixo de um
 // personagem do autor é reenviada via webhook (nome + avatar do OC) e a original
 // é apagada. handleOCMessage já filtra bots/DMs e devolve boolean.
 EventCheckout.onMessageCreate('oc:proxy', (msg: Message) => handleOCMessage(msg));
+
+// Deleção do proxy por reação ❌ (só o autor / co-dono, só webhook do RPTool).
+EventCheckout.onMessageReactionAdd('oc:reactionDelete', (r, u) => handleOCReactionDelete(r, u));
