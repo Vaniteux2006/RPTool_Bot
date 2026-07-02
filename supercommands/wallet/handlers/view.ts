@@ -2,6 +2,7 @@ import { Message, EmbedBuilder } from 'discord.js';
 import {
     resolveTargetOc, getOrCreateWallet, getGuildEconomy, formatMoney,
 } from '../../../tools/utils/economy';
+import { coinToUsd } from '../../../tools/utils/economyEngine';
 
 // rp!wallet ["Nome"] [@dono]  → mostra o saldo (e itens) de um OC.
 export default async function handleView(message: Message, nameTokens: string[], userId: string) {
@@ -35,7 +36,7 @@ export default async function handleView(message: Message, nameTokens: string[],
 
     // Modo avançado (Fase 2): mostra equivalência fictícia → dólar.
     if (econ.advanced) {
-        const usd = wallet.balance * econ.baseUsdRate / (econ.priceIndex || 1);
+        const usd = coinToUsd(wallet.balance, econ);
         embed.addFields({
             name: '💵 Equivalente (USD)',
             value: `$ ${usd.toLocaleString('en-US', { maximumFractionDigits: 2 })}`,
