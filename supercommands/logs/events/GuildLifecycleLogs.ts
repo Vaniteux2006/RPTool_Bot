@@ -10,7 +10,7 @@
 //    basta definir OWNER_LOG_CHANNEL_ID no .env. Sem a variável, fica só o console.
 
 import { Guild, EmbedBuilder, TextChannel, Client } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { formatDate, daysAgo } from '../utils/LogMinister';
 
 // Envia um embed para o canal de "owner log" global, se OWNER_LOG_CHANNEL_ID estiver no .env.

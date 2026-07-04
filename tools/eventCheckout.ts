@@ -1,4 +1,4 @@
-// RPTool/tools/event_checkout.ts
+// RPTool/tools/eventCheckout.ts
 // ─── Dispatcher Central de Eventos ───────────────────────────────────────────
 //
 // ARQUITETURA:
@@ -87,6 +87,13 @@ export const EventCheckout = {
     // Normalmente não é necessário chamá-lo — initEventCheckout() faz isso
     // automaticamente para todos os eventos do Discord.
     dispatch: (event: string, ...args: any[]) => dispatchInternal(event, ...args),
+
+    // ── ClientReady ───────────────────────────────────────────────────────────
+    // Dispara UMA vez quando o bot conecta. É o hook de inicialização dos
+    // módulos: rotinas, engines e agendadores se registram aqui em vez de
+    // serem chamados manualmente no index.ts.
+    onClientReady: (name: string, fn: (client: Client) => Promise<void>) =>
+        subscribe(Events.ClientReady, name, fn),
 
     // ── InteractionCreate ─────────────────────────────────────────────────────
     onInteractionCreate: (name: string, fn: (i: Interaction) => Promise<boolean | void>) =>
@@ -308,6 +315,8 @@ export function initEventCheckout(client: Client): void {
         client.on(event, (...args: any[]) => dispatchInternal(event, ...args));
 
     // Sempre ativos
+    // ClientReady usa once — dispara uma única vez por sessão
+    client.once(Events.ClientReady, (...args: any[]) => dispatchInternal(Events.ClientReady, ...args));
     bind(Events.InteractionCreate);
     bind(Events.MessageCreate);
     bind(Events.MessageReactionAdd);

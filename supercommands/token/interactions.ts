@@ -1,6 +1,6 @@
 // RPTool/supercommands/token/interactions.ts
 // ─── Roteador de interações do painel de chaves de IA ─────────────────────────
-// Roteado pelo interaction_checkout via prefixo `token_`. Stateless: cada customId
+// Roteado pelo interactionCheckout via prefixo `token_`. Stateless: cada customId
 // carrega o contexto necessário (uid e, quando preciso, keyId). Sem collectors.
 //
 // customId: `token_<ação>[:<keyId>]:<uid>`  — o uid é SEMPRE o último segmento.

@@ -9,7 +9,7 @@
 // adicione no index.ts: import './tools/reactionListener';
 import { MessageReaction, User, PartialMessageReaction, PartialUser } from 'discord.js';
 import { ReactionRoleModel } from './models/ReactionRoleSchema';
-import { EventCheckout } from './event_checkout';
+import { EventCheckout } from './eventCheckout';
 
 async function handleReactionAdd(reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser) {
     if (user.bot) return;

@@ -8,7 +8,7 @@ import {
     StageInstance, Collection, Snowflake, ThreadMember,
     AuditLogEvent, EmbedBuilder, ChannelType,
 } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, truncate, avatarOf } from '../utils/LogMinister';
 
 // Ícone por tipo de canal

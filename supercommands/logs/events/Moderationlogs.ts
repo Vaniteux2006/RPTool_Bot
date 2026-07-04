@@ -11,7 +11,7 @@ import {
     GuildBan, GuildAuditLogsEntry, Guild,
     AuditLogEvent, EmbedBuilder, User,
 } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, truncate, avatarOf } from '../utils/LogMinister';
 
 // ─── Ban (imagem 9) ───────────────────────────────────────────────────────────

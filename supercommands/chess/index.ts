@@ -8,7 +8,7 @@
 //
 // O lance é digitado num modal (botão "Fazer Lance") e aceita várias notações
 // (e4, Nf3, De4, e2e4, Qxd4, Qe4+ …) — ver parse.ts. Os cliques (customId `chess_…`)
-// são roteados pelo interaction_checkout → interactions.ts. Estado em memória
+// são roteados pelo interactionCheckout → interactions.ts. Estado em memória
 // (partidas efêmeras, sem DB), no padrão do antigo global.chessSessions.
 import {
     Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder,

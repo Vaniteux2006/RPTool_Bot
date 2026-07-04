@@ -3,7 +3,7 @@ import { Message, TextChannel } from "discord.js";
 import { OCModel } from "../models/OCSchema";
 import { getGuildAIConfig } from './tokenHelper';
 import { sanitizeOutput } from './textUtils';
-import { EventCheckout } from '../event_checkout';
+import { EventCheckout } from '../eventCheckout';
 
 export const autoTimers = new Map<string, NodeJS.Timeout>();
 

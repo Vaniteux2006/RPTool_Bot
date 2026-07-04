@@ -11,7 +11,7 @@ import {
 } from 'discord.js';
 import { WelcomeModel } from '../tools/models/Outros';
 import { getAverageColor } from 'fast-average-color-node';
-import { EventCheckout } from '../tools/event_checkout';
+import { EventCheckout } from '../tools/eventCheckout';
 
 const welcome = {
     name: 'welcome',

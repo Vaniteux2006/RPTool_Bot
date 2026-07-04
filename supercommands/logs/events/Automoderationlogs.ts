@@ -7,7 +7,7 @@ import {
     AutoModerationRuleTriggerType, AutoModerationActionType,
     EmbedBuilder,
 } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, truncate } from '../utils/LogMinister';
 
 const triggerLabel: Record<AutoModerationRuleTriggerType, string> = {

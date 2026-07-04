@@ -9,7 +9,7 @@
 //    Estratégia: buscar audit log, se não encontrar informar apenas que mudou.
 
 import { AuditLogEvent, EmbedBuilder } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, truncate } from '../utils/LogMinister';
 
 EventCheckout.onChannelPinsUpdate('logs:channelPinsUpdate', async (channel: any, _time: Date | null) => {

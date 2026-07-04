@@ -8,7 +8,7 @@
 // { id: string; name?: string } em vez de (as any) para manter type safety.
 
 import { Guild, Integration, EmbedBuilder, AuditLogEvent } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock } from '../utils/LogMinister';
 
 // Interface mínima para o target de audit logs de webhook

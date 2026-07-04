@@ -1,6 +1,6 @@
 // RPTool/commands/42.ts
 import { Message } from 'discord.js';
-import { EventCheckout } from '../tools/event_checkout';
+import { EventCheckout } from '../tools/eventCheckout';
 
 const cmd42 = {
     name: '42',

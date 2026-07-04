@@ -4,7 +4,7 @@
 // Referência visual: imagem 8 (voice join)
 
 import { VoiceState, EmbedBuilder } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, avatarOf } from '../utils/LogMinister';
 
 EventCheckout.onVoiceStateUpdate('logs:voiceState', async (oldState: VoiceState, newState: VoiceState) => {

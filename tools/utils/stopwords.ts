@@ -1,6 +1,6 @@
 // RPTool/tools/utils/stopwords.ts
 // ─── Stopwords PT-BR (palavras funcionais) ────────────────────────────────────
-// Fonte ÚNICA para a coleta de estatísticas de palavras (command_checkout + backfill).
+// Fonte ÚNICA para a coleta de estatísticas de palavras (commandCheckout + backfill).
 // Filtra artigos, preposições, contrações, pronomes, conjunções, advérbios
 // funcionais e formas comuns de ser/ter/estar/ir/fazer — para que o ranking de
 // palavras mostre conteúdo de verdade, e não "que", "para", "uma"...

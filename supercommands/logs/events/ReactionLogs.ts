@@ -18,7 +18,7 @@ import {
     Collection,
     EmbedBuilder,
 } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, truncate } from '../utils/LogMinister';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

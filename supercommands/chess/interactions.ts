@@ -1,6 +1,6 @@
 // RPTool/supercommands/chess/interactions.ts
 // ─── Roteador de interações do Xadrez ─────────────────────────────────────────
-// Roteado pelo interaction_checkout via prefixo `chess_`. Stateless por customId:
+// Roteado pelo interactionCheckout via prefixo `chess_`. Stateless por customId:
 //   chess_accept:<challengeId>   chess_decline:<challengeId>
 //   chess_diff:<level>:<uid>     chess_move:<gameId>
 //   chess_movemod:<gameId>       chess_fen:<gameId>     chess_resign:<gameId>

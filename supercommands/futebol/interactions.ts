@@ -9,7 +9,7 @@ import {
 import { MatchReportModel } from '../../tools/models/FutebolReportSchema';
 import { TeamModel } from '../../tools/models/FutebolSchema';
 
-// ─── Ponto de entrada — registre no interaction_checkout.ts:
+// ─── Ponto de entrada — registre no interactionCheckout.ts:
 //   if (interaction.customId.startsWith('fb_')) await handleFutebolInteraction(interaction);
 // IDs tratados por collectors locais (paginação de listas, cancelamento IRL,
 // substituições do intervalo) — o handler global NÃO deve tocá-los.

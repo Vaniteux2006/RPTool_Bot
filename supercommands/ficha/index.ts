@@ -17,7 +17,7 @@ import handleCheck           from './handlers/check';
 import handleShow            from './handlers/show';
 import handleSubmit          from './handlers/submit';
 import { handleAutoDetect }  from './handlers/autodetect';
-import { EventCheckout }     from '../../tools/event_checkout';
+import { EventCheckout }     from '../../tools/eventCheckout';
 import { TemplateModel }     from '../../tools/models/FichaSchema';
 
 // Registra o listener de auto-detecção de fichas no canal de envio

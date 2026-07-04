@@ -1,30 +1,17 @@
 import 'dotenv/config';
 import {
-    Client, GatewayIntentBits, Collection, ActivityType,
+    Client, GatewayIntentBits, Collection,
     Events, REST, Routes, Partials, Options, Message,
 } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 
-import ReturnVersion from './tools/ReturnVersion';
-import runSystemChecks from './tools/command_checkout';
-import runInteractionChecks from './tools/interaction_checkout';
-import { BotStatusModel } from './tools/models/Outros';
-import { startClockEngine } from './supercommands/tempo/clockEngine';
-import { initEventCheckout } from './tools/event_checkout';
-
-// ─── Permissões do Stockfish ──────────────────────────────────────────────────
-const stockfishPath = '/home/node/stockfish';
-try {
-    if (fs.existsSync(stockfishPath)) {
-        fs.chmodSync(stockfishPath, 0o755);
-        console.log('♟️ [XADREZ] Permissão de execução concedida ao Stockfish com sucesso!');
-    } else {
-        console.log('⚠️ [XADREZ] Arquivo do Stockfish não encontrado no caminho:', stockfishPath);
-    }
-} catch (error) {
-    console.error('❌ [XADREZ] Erro ao tentar dar permissão ao Stockfish:', error);
-}
+import runSystemChecks from './tools/commandCheckout';
+import runInteractionChecks from './tools/interactionCheckout';
+import { initEventCheckout } from './tools/eventCheckout';
+// ⚠️ O index NÃO importa módulos (comandos/supercommands/features).
+// Inicializações de módulo (Stockfish, clock engine, status rotativo...)
+// se auto-registram via EventCheckout.onClientReady nos próprios módulos.
 
 interface CustomClient extends Client {
     commands: Collection<string, any>;
@@ -142,7 +129,7 @@ function loadCommands(dir: string) {
             loadCommands(fullPath);
         } else if (item.name.endsWith('.ts') || item.name.endsWith('.js')) {
             if (item.name.endsWith('.d.ts')) continue;
-            if (item.name.includes('command_checkout')) continue;
+            if (item.name.includes('commandCheckout')) continue;
             if (item.name.includes('quote_engine')) continue;
 
             try {
@@ -174,31 +161,18 @@ initEventCheckout(client);
 console.log('🎯 [EventCheckout] Dispatcher conectado ao Client.');
 
 // ─── Evento: Bot Pronto ───────────────────────────────────────────────────────
+// Responsabilidade exclusiva do kernel: logar e registrar os slash commands.
+// Rotinas de módulos (clock engine, status rotativo...) rodam sozinhas via
+// EventCheckout.onClientReady — o dispatcher já foi conectado acima.
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`🤖 Bot online como ${readyClient.user.tag}!`);
 
-    const updateStatus = async () => {
-        try {
-            const statuses = await BotStatusModel.find({});
-            if (statuses.length > 0) {
-                const entry = statuses[Math.floor(Math.random() * statuses.length)];
-                const text = entry.content.replace('{version}', ReturnVersion());
-                const typeKey = entry.type as keyof typeof ActivityType;
-                client.user?.setActivity(text, { type: ActivityType[typeKey] });
-            }
-        } catch (e) {
-            console.error('Erro ao puxar status do banco:', e);
-        }
-    };
-
-    updateStatus();
-    setInterval(updateStatus, 15000);
-
     const CLIENT_ID = process.env.CLIENT_ID || readyClient.user.id;
     const TOKEN = process.env.xdTOKEN;
-    await startClockEngine(client);
 
-    if (TOKEN) {
+    // Deploy só com array não-vazio: um PUT vazio APAGARIA todos os slash
+    // commands registrados na aplicação.
+    if (TOKEN && commandsArray.length > 0) {
         const rest = new REST().setToken(TOKEN);
         try {
             console.log(`🔄 [DEPLOY] Registrando ${commandsArray.length} comandos...`);

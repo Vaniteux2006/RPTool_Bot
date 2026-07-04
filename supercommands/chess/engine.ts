@@ -9,6 +9,19 @@ import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
+// ─── Permissão de execução (Linux/discloud) ───────────────────────────────────
+// O binário sobe pro host sem o bit de execução; sem isto o spawn falha.
+// Roda quando o módulo de xadrez carrega — o index.ts do bot não precisa saber.
+const uploadedStockfishPath = '/home/node/stockfish';
+try {
+    if (fs.existsSync(uploadedStockfishPath)) {
+        fs.chmodSync(uploadedStockfishPath, 0o755);
+        console.log('♟️ [XADREZ] Permissão de execução concedida ao Stockfish com sucesso!');
+    }
+} catch (error) {
+    console.error('❌ [XADREZ] Erro ao tentar dar permissão ao Stockfish:', error);
+}
+
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
 // Skill Level (0–20) + profundidade de busca por nível.

@@ -1,6 +1,15 @@
 // RPTool/supercommands/tempo/index.ts
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message, Client } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
 import { startClockEngine } from './clockEngine';
+import { EventCheckout } from '../../tools/eventCheckout';
+
+// ─── Auto-inicialização ───────────────────────────────────────────────────────
+// O motor de relógios liga sozinho quando o bot conecta — o index.ts do bot
+// não precisa (e não deve) conhecer este módulo. startClockEngine já tem
+// guard interno contra start duplo.
+EventCheckout.onClientReady('tempo.clockEngine', async (client) => {
+    await startClockEngine(client);
+});
 import {
     handleCreate,
     handleSet,
@@ -20,11 +29,6 @@ export default {
     data: new SlashCommandBuilder()
         .setName('tempo')
         .setDescription('Motor de Tempo RP'),
-
-    // ─── Chamado UMA VEZ ao iniciar o bot (no command_checkout) ───────────────
-    async checkAndRestoreClocks(client: Client) {
-        await startClockEngine(client);
-    },
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
         return interaction.reply({ content: 'Use `rp!tempo` para ver os comandos disponíveis.', ephemeral: true });

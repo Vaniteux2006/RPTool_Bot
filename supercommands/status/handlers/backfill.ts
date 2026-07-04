@@ -15,7 +15,7 @@
 // execuções). Pode haver sobreposição mínima com a coleta em tempo real no período
 // recente — desprezível frente a anos de histórico.
 //
-// Contabilização (espelha command_checkout):
+// Contabilização (espelha commandCheckout):
 //   humano → total + users + channels + words · webhook → total + ocs + channels
 import {
     Message, TextChannel, ChannelType, PermissionsBitField, GuildBasedChannel, EmbedBuilder,

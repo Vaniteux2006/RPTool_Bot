@@ -7,7 +7,7 @@ import {
     Message,
 } from 'discord.js';
 import { AutoroleModel } from '../tools/models/AutoroleConfig';
-import { EventCheckout } from '../tools/event_checkout';
+import { EventCheckout } from '../tools/eventCheckout';
 
 const autorole = {
     name: 'autorole',

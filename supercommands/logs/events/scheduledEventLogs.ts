@@ -6,7 +6,7 @@ import {
     GuildScheduledEvent, PartialGuildScheduledEvent,
     GuildScheduledEventStatus, GuildMember, User, EmbedBuilder,
 } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, formatDate, truncate } from '../utils/LogMinister';
 
 const statusLabel: Record<GuildScheduledEventStatus, string> = {

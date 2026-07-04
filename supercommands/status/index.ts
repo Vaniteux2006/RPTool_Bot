@@ -6,7 +6,7 @@
 //   interactions.ts          → botões de ranking paginado (◀ ▶) + modal "Ranking do Dia"
 //   handlers/backfill.ts     → rp!status docpast: varre o histórico e popula o passado
 //
-// Coleta: tools/command_checkout.ts grava os buckets (guildId, date, hour) com
+// Coleta: tools/commandCheckout.ts grava os buckets (guildId, date, hour) com
 //   users / channels / ocs / words. Aqui só lemos e renderizamos.
 //
 // Navegação:

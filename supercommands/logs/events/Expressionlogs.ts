@@ -3,7 +3,7 @@
 // Intent: GUILD_EXPRESSIONS (1 << 3)
 
 import { GuildEmoji, Sticker, EmbedBuilder, AuditLogEvent } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock } from '../utils/LogMinister';
 
 async function getExecutor(guild: any, type: AuditLogEvent): Promise<string | null> {

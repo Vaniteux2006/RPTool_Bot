@@ -7,7 +7,7 @@ import {
     Message, PartialMessage, Collection, Snowflake,
     AuditLogEvent, EmbedBuilder, GuildMember,
 } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, truncate } from '../utils/LogMinister';
 import { buildAttachments } from '../../../tools/HtmlTranscript';
 

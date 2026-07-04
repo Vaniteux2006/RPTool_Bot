@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-export default function ReturnVersion(): string {
+export default function returnVersion(): string {
     try {
         const versionPath = path.join(__dirname, 'Data/version.json');
         
@@ -11,7 +11,7 @@ export default function ReturnVersion(): string {
             return data.current_display || "?.?.?";
         }
     } catch (e) {
-        console.error("⚠️ [ReturnVersion] Não foi possível ler a versão.");
+        console.error("⚠️ [returnVersion] Não foi possível ler a versão.");
     }
-    return "1.5.1";
+    return "v1.6";
 }

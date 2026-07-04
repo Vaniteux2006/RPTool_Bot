@@ -8,7 +8,7 @@
 // no ponto onde já confirmamos que não é null — sem (as any).
 
 import { Invite, Guild, EmbedBuilder, AuditLogEvent } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, formatDate } from '../utils/LogMinister';
 
 EventCheckout.onInviteCreate('logs:inviteCreate', async (invite: Invite) => {

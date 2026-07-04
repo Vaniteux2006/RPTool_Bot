@@ -15,7 +15,7 @@
 //    (open source). Esses handlers só processam votos de servidores.
 
 import { PollAnswer, EmbedBuilder, TextChannel } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, truncate } from '../utils/LogMinister';
 
 // ─── Helper: busca o texto da opção pelo answerId ─────────────────────────────

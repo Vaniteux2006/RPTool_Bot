@@ -3,7 +3,7 @@ import {
     MessageReaction, PartialMessageReaction, User, PartialUser,
 } from "discord.js";
 import { OCModel, IOC } from "./models/OCSchema";
-import { EventCheckout } from "./event_checkout";
+import { EventCheckout } from "./eventCheckout";
 
 function sanitizeOutput(text: string): string {
     if (!text) return text;
@@ -194,7 +194,7 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
 
             match.messageCount += 1;
             match.save().catch(()=>{});
-            // Estatísticas do OC são contabilizadas em command_checkout.trackWebhookStats
+            // Estatísticas do OC são contabilizadas em commandCheckout.trackWebhookStats
             // (pela mensagem de webhook reenviada), por nome — não duplicar aqui.
         }
 

@@ -5,7 +5,7 @@
 // a servidores e testar se a chave funciona de verdade.
 //
 // Arquitetura (padrão ficha/futebol/status): o painel é montado aqui; os cliques
-// (botões/selects/modais com customId `token_…`) são roteados pelo interaction_checkout
+// (botões/selects/modais com customId `token_…`) são roteados pelo interactionCheckout
 // para interactions.ts. SEM collectors — stateless e robusto, funciona em DM.
 import {
     Message, Client, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Guild,

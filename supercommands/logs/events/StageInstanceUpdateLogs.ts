@@ -5,7 +5,7 @@
 // Evento: tópico alterado, privacidade alterada.
 
 import { StageInstance, StageInstancePrivacyLevel, EmbedBuilder } from 'discord.js';
-import { EventCheckout } from '../../../tools/event_checkout';
+import { EventCheckout } from '../../../tools/eventCheckout';
 import { LogMinister, LogColor, idBlock, truncate } from '../utils/LogMinister';
 
 const privacyLabel: Record<StageInstancePrivacyLevel, string> = {

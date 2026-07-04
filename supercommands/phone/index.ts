@@ -1,7 +1,7 @@
 // RPTool/supercommands/phone/index.ts
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
 import { phoneSystem } from './system';
-import { EventCheckout } from '../../tools/event_checkout';
+import { EventCheckout } from '../../tools/eventCheckout';
 
 // Importando os handlers
 import handleRegister from './handlers/register';

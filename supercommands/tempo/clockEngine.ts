@@ -123,7 +123,7 @@ export async function tickClocks(client: Client): Promise<void> {
     }
 }
 
-// ─── Inicialização (chamada uma única vez no command_checkout) ─────────────────
+// ─── Inicialização (chamada uma única vez no commandCheckout) ─────────────────
 export async function startClockEngine(client: Client): Promise<void> {
     if (engineRunning) return;
     engineRunning = true;

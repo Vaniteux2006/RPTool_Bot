@@ -1,6 +1,6 @@
 // RPTool/supercommands/status/interactions.ts
 // ─── Rankings interativos do status ───────────────────────────────────────────
-// Roteado pelo interaction_checkout via prefixo de customId `stats_`.
+// Roteado pelo interactionCheckout via prefixo de customId `stats_`.
 // Formato dos customId: `stats_<tipo>:<page>:<uid>`  (uid = dono do painel, sempre o último segmento)
 //   • stats_users / stats_chats / stats_ocs : ranking paginado (14 dias)
 //   • stats_day:<uid>                        : abre o modal de data
