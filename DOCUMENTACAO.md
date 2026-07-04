@@ -40,7 +40,9 @@ node loader.js → ts-node/register → index.ts
  │    ├─ startClockEngine(client)          → motor de relógios RP (supercommands/tempo)
  │    └─ REST.put → registra os slash commands globalmente
  ├─ InteractionCreate: runInteractionChecks (ficha_/fb_/stats_/token_) → senão roteia slash
- └─ messageCreate: anti-spam (8 cmds/10s → cooldown 30s/guild) → roteia rp!
+ ├─ messageCreate: anti-spam (8 cmds/10s → cooldown 30s/guild) → roteia rp!
+ └─ messageUpdate: se a edição VIRA um comando válido (que o antigo não era) → roteia rp!
+      (roteamento extraído em routePrefixCommand/resolveCommand, compartilhado com o create)
 ```
 
 ---
@@ -63,7 +65,7 @@ node loader.js → ts-node/register → index.ts
 | `commands/autorole.ts` | `autorole` | cargo automático na entrada |
 | `tools/reactionListener.ts` | `reactionRole` | reaction roles (add/remove) |
 | `tools/command_checkout.ts` | `__system.checkout` | estatísticas (humanos + OCs por webhook) + rotinas |
-| `tools/webhook.ts` | `oc:proxy` / `oc:reactionDelete` | proxy de OC (prefixo → webhook com nome/avatar) + apagar o próprio proxy reagindo ❌ |
+| `tools/webhook.ts` | `oc:proxy` / `oc:proxy:edit` / `oc:reactionDelete` | proxy de OC (prefixo → webhook com nome/avatar), reprocessa na **edição** da mensagem, e apaga o próprio proxy reagindo ❌ |
 | `tools/utils/aiUtils.ts` | `oc:ai` | IA de OC (gatilho manual + autoMode) |
 | `supercommands/ficha/index.ts` | `ficha:autodetect` | detecta fichas postadas no canal |
 | `supercommands/phone/index.ts` | `phone:relay` | repassa mensagens da chamada |
@@ -178,7 +180,7 @@ Padrão comum: `index.ts` com roteador `switch` + `sendHelp()`, handlers em arqu
 | `interaction_checkout.ts` | Roteia botões/selects/modais por prefixo de `customId` (ficha/fb/stats/token). |
 | `database.ts` | Conexões Mongo (uma duplicada). |
 | `api.ts` | Classe `RPToolAPI` (singleton `api`): `chat()`, `generateRaw()`. Gemini (SDK, safety OFF) + OpenAI (fetch). |
-| `webhook.ts` | Proxy de OC (`handleOCMessage`, inscrito como `oc:proxy`): parse multi-OC por prefixo/sufixo, envia via webhook, conta no `ocs`, apaga a original. Também `oc:reactionDelete`: reagir ❌/🗑️ apaga o próprio proxy — só o **autor** (mapa em memória das mensagens recentes) ou o **dono do OC** (fallback por nome, sobrevive a restart), e só em webhooks do **próprio bot** (verificado via `fetchWebhook`). Nunca apaga mensagem normal nem de outro bot. |
+| `webhook.ts` | Proxy de OC (`handleOCMessage`, inscrito como `oc:proxy`): parse multi-OC por prefixo/sufixo, envia via webhook, conta no `ocs`, apaga a original. `oc:proxy:edit`: reprocessa quando a mensagem é **editada** para um prefixo de OC (seguro — se já tivesse casado, a original teria sido apagada no create). Também `oc:reactionDelete`: reagir ❌/🗑️ apaga o próprio proxy — só o **autor** (mapa em memória das mensagens recentes) ou o **dono do OC** (fallback por nome, sobrevive a restart), e só em webhooks do **próprio bot** (verificado via `fetchWebhook`). Nunca apaga mensagem normal nem de outro bot. |
 | `utils/aiUtils.ts` | IA de OC (`handleAIMessage`/`triggerAIGeneration`, inscrito como `oc:ai`): contexto, persona, memórias com auto-aprendizado, autoMode (menção + periódico com cooldown). `chamarIA` (Gemini/OpenAI). |
 | `utils/tokenHelper.ts` | `getGuildAIConfig(guildId)`: resolve a chave de IA do servidor (assignments), com fallback para `GEMINI_API_KEY` do `.env`. |
 | `utils/economy.ts` | Helpers compartilhados da economia (§10): `tokenize` (aspas), `slugify`, `parseAmount`, resolução de OC/dono (`resolveOwnedOc`/`resolveTargetOc`/`findOcByName`), `getOrCreateWallet`, `resolveItem`, mutação atômica da mochila (`add/removeItemFromWallet`), `getGuildEconomy`, `formatMoney`, `effectivePrice`, `isStaff`. |

@@ -290,5 +290,15 @@ async function handleOCReactionDelete(
 // é apagada. handleOCMessage já filtra bots/DMs e devolve boolean.
 EventCheckout.onMessageCreate('oc:proxy', (msg: Message) => handleOCMessage(msg));
 
+// Editar uma mensagem PARA um prefixo de OC também dispara o proxy.
+// Seguro contra duplicação: se a original já tivesse casado um prefixo, ela teria
+// sido apagada no create — então uma mensagem que ainda existe pra ser editada
+// nunca foi proxiada antes.
+EventCheckout.onMessageUpdate('oc:proxy:edit', async (_old, cur) => {
+    let msg: Message | PartialMessage = cur;
+    if (msg.partial) { try { msg = await msg.fetch(); } catch { return; } }
+    await handleOCMessage(msg as Message);
+});
+
 // Deleção do proxy por reação ❌ (só o autor / co-dono, só webhook do RPTool).
 EventCheckout.onMessageReactionAdd('oc:reactionDelete', (r, u) => handleOCReactionDelete(r, u));

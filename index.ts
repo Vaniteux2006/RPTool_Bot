@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import {
     Client, GatewayIntentBits, Collection, ActivityType,
-    Events, REST, Routes, Partials, Options,
+    Events, REST, Routes, Partials, Options, Message,
 } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
@@ -238,12 +238,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // Este handler cuida exclusivamente do roteamento de comandos rp!...
 // O EventCheckout já despacha MessageCreate para outros subscribers
 // (logs, OC auto-responder, etc.) de forma independente.
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
+// Resolve o comando (nome ou alias) a partir do conteúdo bruto de uma mensagem.
+function resolveCommand(content: string): { command: any; commandName: string; args: string[] } | null {
+    if (!content || !content.startsWith(prefix)) return null;
+    const args = content.slice(prefix.length).trim().split(/\s+/);
+    const commandName = args.shift()?.toLowerCase();
+    if (!commandName) return null;
+    const command = client.commands.get(commandName)
+        ?? [...client.commands.values()].find(c => c.aliases?.includes(commandName));
+    return command ? { command, commandName, args } : null;
+}
 
-    const isSystemHandled = await runSystemChecks(message, client);
-    if (isSystemHandled) return;
-
+// Roteia um comando rp! (anti-spam + execução). Compartilhado entre create e edit.
+async function routePrefixCommand(message: Message): Promise<void> {
     if (!message.content.startsWith(prefix)) return;
 
     const guildId = message.guild ? message.guild.id : message.author.id;
@@ -269,14 +276,9 @@ client.on('messageCreate', async (message) => {
     recent.push(now);
     commandStrikes.set(guildId, recent);
 
-    const args = message.content.slice(prefix.length).trim().split(/\s+/);
-    const commandName = args.shift()?.toLowerCase();
-    if (!commandName) return;
-
-    const command = client.commands.get(commandName)
-        ?? [...client.commands.values()].find(c => c.aliases?.includes(commandName));
-
-    if (!command) return;
+    const resolved = resolveCommand(message.content);
+    if (!resolved) return;
+    const { command, commandName, args } = resolved;
 
     console.log(`📝 [PREFIX] rp!${commandName} | User: ${message.author.tag} | Server: ${message.guild?.name ?? 'DM'} (${message.guild?.id ?? 'DM'})`);
 
@@ -285,6 +287,37 @@ client.on('messageCreate', async (message) => {
     } catch (error) {
         console.error(`❌ [PREFIX] Erro em rp!${commandName}:`, error);
         await message.reply('❌ Erro interno ao executar o comando.').catch(() => {});
+    }
+}
+
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+
+    const isSystemHandled = await runSystemChecks(message, client);
+    if (isSystemHandled) return;
+
+    await routePrefixCommand(message);
+});
+
+// ─── Evento: Mensagens Editadas ───────────────────────────────────────────────
+// Se o usuário EDITA uma mensagem transformando-a num comando válido (ex: corrige
+// `rp!aio` → `rp!ai`), o bot reage à mudança. Guarda contra re-execução: só roteia
+// se o conteúdo ANTIGO não era um comando válido. Se o antigo for desconhecido
+// (mensagem fora do cache), não faz nada — evita rodar duas vezes.
+// (O proxy de OC na edição é tratado por `oc:proxy:edit` em tools/webhook.ts.)
+client.on(Events.MessageUpdate, async (oldMsg, newMsg) => {
+    try {
+        if (newMsg.partial) { try { newMsg = await newMsg.fetch(); } catch { return; } }
+        if (!newMsg.content || newMsg.author?.bot) return;
+
+        if (!resolveCommand(newMsg.content)) return;   // conteúdo novo não é comando
+        const oldContent = oldMsg?.content ?? null;
+        if (oldContent === null) return;               // antigo desconhecido → não arrisca
+        if (resolveCommand(oldContent)) return;        // antigo já era comando → já rodou
+
+        await routePrefixCommand(newMsg as Message);
+    } catch (error) {
+        console.error('❌ [PREFIX-EDIT] Erro:', error);
     }
 });
 
