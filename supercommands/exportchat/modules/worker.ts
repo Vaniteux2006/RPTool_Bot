@@ -97,6 +97,9 @@ export async function runWorker(
                 await sleep(FETCH_DELAY_MS);
             }
 
+            // Escreve o HTML acumulado do dia de uma vez (buffer do renderer)
+            await renderer.flush(segFilePath);
+
             // FIX: só conta como segmento concluído se teve mensagens
             if (msgsThisDay > 0) {
                 result.segmentsWritten++;
@@ -113,6 +116,7 @@ export async function runWorker(
             const errMsg = `Worker ${workerId} falhou no dia ${segment.key}: ${err?.message ?? err}`;
             console.error('[exportchat]', errMsg);
             result.errors.push(errMsg);
+            renderer.discard(); // não carrega HTML de um dia falho para o próximo
             if (fs.existsSync(segFilePath)) fs.unlinkSync(segFilePath);
         }
     }

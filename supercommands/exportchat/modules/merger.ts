@@ -28,13 +28,15 @@ export async function mergeSegments(
     let currentBody  = '';
     let currentBytes = 0;
 
-    const flushPart = (totalParts: number) => {
+    // I/O 100% assíncrono (fs.promises): reads/writes de até 7,5 MB síncronos
+    // travavam o event loop do bot inteiro quando havia exports concorrentes.
+    const flushPart = async (totalParts: number) => {
         // totalParts não é conhecido no início — usamos 0 como placeholder
         // e renomeamos depois (ou aceitamos "Parte N" sem total)
         const header   = htmlHeader(channelName, subtitle, partIndex, totalParts);
         const fullHtml = header + currentBody + HTML_FOOTER;
         const outPath  = path.join(sessionPath, `output_${String(partIndex).padStart(4, '0')}.html`);
-        fs.writeFileSync(outPath, fullHtml, 'utf8');
+        await fs.promises.writeFile(outPath, fullHtml, 'utf8');
         outputFiles.push(outPath);
         partIndex++;
         currentBody  = '';
@@ -45,22 +47,20 @@ export async function mergeSegments(
     // (aproximado — lemos uma vez pra estimar, depois lemos de novo pra escrever)
     let totalBytes = 0;
     for (const segFile of segFiles) {
-        if (!fs.existsSync(segFile)) continue;
-        totalBytes += fs.statSync(segFile).size;
+        const st = await fs.promises.stat(segFile).catch(() => null);
+        if (st) totalBytes += st.size;
     }
     const estimatedParts = Math.max(1, Math.ceil(totalBytes / MAX_BYTES));
 
     // Leitura e split em partes
     for (const segFile of segFiles) {
-        if (!fs.existsSync(segFile)) continue;
-
-        // Lê o segmento em chunks para não carregar tudo em memória de uma vez
-        const segContent = fs.readFileSync(segFile, 'utf8');
+        const segContent = await fs.promises.readFile(segFile, 'utf8').catch(() => null);
+        if (segContent === null) continue;
         const segBytes   = Buffer.byteLength(segContent, 'utf8');
 
         // Se adicionar este segmento estourar o limite, fecha a parte atual primeiro
         if (currentBytes + segBytes > MAX_BYTES && currentBody.length > 0) {
-            flushPart(estimatedParts);
+            await flushPart(estimatedParts);
         }
 
         // Segmentos maiores que MAX_BYTES sozinhos são divididos por linha de grupo
@@ -69,7 +69,7 @@ export async function mergeSegments(
             for (const group of groups) {
                 const groupBytes = Buffer.byteLength(group, 'utf8');
                 if (currentBytes + groupBytes > MAX_BYTES && currentBody.length > 0) {
-                    flushPart(estimatedParts);
+                    await flushPart(estimatedParts);
                 }
                 currentBody  += group;
                 currentBytes += groupBytes;
@@ -82,14 +82,14 @@ export async function mergeSegments(
 
     // Flush da última parte
     if (currentBody.length > 0) {
-        flushPart(estimatedParts);
+        await flushPart(estimatedParts);
     }
 
     // Se não gerou nada (todos os segmentos estavam vazios)
     if (outputFiles.length === 0) {
         const header  = htmlHeader(channelName, subtitle, 1, 1);
         const outPath = path.join(sessionPath, 'output_0001.html');
-        fs.writeFileSync(outPath, header + '<p style="color:#949ba4;padding:20px">Nenhuma mensagem encontrada.</p>' + HTML_FOOTER, 'utf8');
+        await fs.promises.writeFile(outPath, header + '<p style="color:#949ba4;padding:20px">Nenhuma mensagem encontrada.</p>' + HTML_FOOTER, 'utf8');
         outputFiles.push(outPath);
     }
 
@@ -97,13 +97,13 @@ export async function mergeSegments(
     const realTotal = outputFiles.length;
     if (realTotal !== estimatedParts) {
         for (let i = 0; i < outputFiles.length; i++) {
-            const content    = fs.readFileSync(outputFiles[i], 'utf8');
+            const content    = await fs.promises.readFile(outputFiles[i], 'utf8');
             // Substitui o total no título: "Parte N/X" onde X era estimatedParts
             const fixed      = content.replace(
                 new RegExp(`— Parte (\\d+)/${estimatedParts}`),
                 `— Parte $1/${realTotal}`,
             );
-            fs.writeFileSync(outputFiles[i], fixed, 'utf8');
+            await fs.promises.writeFile(outputFiles[i], fixed, 'utf8');
         }
     }
 

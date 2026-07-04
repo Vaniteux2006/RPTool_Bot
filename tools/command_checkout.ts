@@ -17,9 +17,9 @@ import './utils/aiUtils';  // IA de OC (oc:ai)      — auto-registra no Message
 
 // ─── Rotinas de inicialização ─────────────────────────────────────────────────
 import birthdayCmd from '../commands/birthday';
-import ServerStats, { UserChannelModel } from './models/ServerStats';
 import { STOPWORDS } from './utils/stopwords';
 import { recomputeAllAdvanced } from './utils/economyEngine';
+import { bumpServerStat, bumpUserChannel } from './utils/statsBuffer';
 
 let routinesInitialized = false;
 
@@ -42,6 +42,9 @@ async function initRoutines(client: Client): Promise<void> {
 }
 
 // ─── Tracking de stats de mensagem ───────────────────────────────────────────
+// Não escreve no Mongo diretamente: acumula no statsBuffer (flush a cada 15s
+// via bulkWrite). Reduz de 2 ops/mensagem para ~2 ops/servidor por ciclo —
+// essencial para escalar além de ~60 msgs/s agregadas.
 async function trackMessageStats(message: Message): Promise<void> {
     if (!message.guild) return;
 
@@ -57,22 +60,17 @@ async function trackMessageStats(message: Message): Promise<void> {
         }
     }
 
-    const userId  = message.webhookId ?? message.author.id;
-    const dateStr = new Date().toISOString().split('T')[0];
-    const hour    = new Date().getUTCHours();
+    const userId = message.webhookId ?? message.author.id;
 
-    ServerStats.findOneAndUpdate(
-        { guildId: message.guild.id, date: dateStr, hour },
-        { $inc: { total: 1, [`users.${userId}`]: 1, [`channels.${message.channel.id}`]: 1, ...wordCounts } },
-        { upsert: true },
-    ).catch(e => console.error('[DB] ServerStats:', e));
+    bumpServerStat(message.guild.id, {
+        total: 1,
+        [`users.${userId}`]:                1,
+        [`channels.${message.channel.id}`]: 1,
+        ...wordCounts,
+    });
 
     // Cruzamento user × canal (agregado, prospectivo) — alimenta "canal favorito"
-    UserChannelModel.updateOne(
-        { guildId: message.guild.id, userId },
-        { $inc: { [`channels.${message.channel.id}`]: 1 } },
-        { upsert: true },
-    ).catch(e => console.error('[DB] UserChannelStats:', e));
+    bumpUserChannel(message.guild.id, userId, message.channel.id);
 }
 
 // ─── Tracking de mensagens de webhook (OCs: RPTool / Tupperbox / PluralKit) ────
@@ -87,15 +85,13 @@ function sanitizeOCKey(name: string): string {
 async function trackWebhookStats(message: Message): Promise<void> {
     if (!message.guild) return;
 
-    const ocKey   = sanitizeOCKey(message.author.username);
-    const dateStr = new Date().toISOString().split('T')[0];
-    const hour    = new Date().getUTCHours();
+    const ocKey = sanitizeOCKey(message.author.username);
 
-    ServerStats.findOneAndUpdate(
-        { guildId: message.guild.id, date: dateStr, hour },
-        { $inc: { total: 1, [`ocs.${ocKey}`]: 1, [`channels.${message.channel.id}`]: 1 } },
-        { upsert: true },
-    ).catch(e => console.error('[DB] ServerStats (OC):', e));
+    bumpServerStat(message.guild.id, {
+        total: 1,
+        [`ocs.${ocKey}`]:                   1,
+        [`channels.${message.channel.id}`]: 1,
+    });
 }
 
 // ─── Handler central registrado no EventCheckout ──────────────────────────────

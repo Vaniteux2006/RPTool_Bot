@@ -10,10 +10,20 @@ import fs   from 'fs';
 import { Message, Guild } from 'discord.js';
 import { esc, renderContent } from '../../../tools/HtmlTranscript';
 
+// Acima deste tamanho, o buffer do dia é despejado no disco (append assíncrono)
+const FLUSH_THRESHOLD_BYTES = 2 * 1024 * 1024;
+
 export class SegmentRenderer {
     private lastAuthorKey = '';
     private lastDateLabel = '';
     private slugCount     = new Map<string, number>();
+
+    // ── Buffer de HTML do dia ─────────────────────────────────────────────────
+    // Antes: fs.appendFileSync POR MENSAGEM — milhares de writes síncronos que
+    // travavam o event loop com exports concorrentes (medido: até 5,8s de lag).
+    // Agora: acumula em memória e escreve por dia (ou a cada 2 MB) com fs.promises.
+    private buf      = '';
+    private bufBytes = 0;
 
     constructor(
         private readonly colorCache:   Map<string, string>,
@@ -21,6 +31,20 @@ export class SegmentRenderer {
         private readonly guild:        Guild,
         private readonly pendingFetch: Set<string>,
     ) {}
+
+    // Despeja o buffer acumulado no arquivo de segmento (chamado pelo worker
+    // ao fim de cada dia, e automaticamente a cada FLUSH_THRESHOLD_BYTES).
+    async flush(segFilePath: string): Promise<void> {
+        if (this.buf.length === 0) return;
+        const chunk = this.buf;
+        this.buf = ''; this.bufBytes = 0;
+        await fs.promises.appendFile(segFilePath, chunk, 'utf8');
+    }
+
+    // Descarta o buffer sem escrever (dia com erro/cancelado)
+    discard(): void {
+        this.buf = ''; this.bufBytes = 0;
+    }
 
     // ── Resolve nome e cor do autor ───────────────────────────────────────────
     // Webhooks (Tupperbox, outros bots de RP): usa dados do author diretamente.
@@ -213,7 +237,9 @@ export class SegmentRenderer {
 
         piece += `</div></div>`;
 
-        fs.appendFileSync(segFilePath, piece, 'utf8');
+        this.buf      += piece;
+        this.bufBytes += Buffer.byteLength(piece, 'utf8');
+        if (this.bufBytes >= FLUSH_THRESHOLD_BYTES) await this.flush(segFilePath);
     }
 }
 

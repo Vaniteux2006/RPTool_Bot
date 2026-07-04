@@ -53,6 +53,13 @@ async function safeEdit(msg: Message, content: string): Promise<void> {
 // ─── Estado de cancelamento por usuário ──────────────────────────────────────
 const activeExports = new Map<string, boolean>();
 
+// ─── Semáforo global de exports ───────────────────────────────────────────────
+// Export é a operação mais pesada do bot (fetch em massa + disco + render).
+// Teste de carga mostrou event loop travando por segundos com dezenas de
+// exports concorrentes — o limite protege TODOS os servidores.
+const MAX_CONCURRENT_EXPORTS = 3;
+let activeExportCount = 0;
+
 // ─── Comando ──────────────────────────────────────────────────────────────────
 export default {
     name:        'exportchat',
@@ -99,6 +106,24 @@ export default {
             rangeEnd   = new Date();
         }
 
+        // ── Semáforo global ───────────────────────────────────────────────────
+        if (activeExportCount >= MAX_CONCURRENT_EXPORTS) {
+            return safeReply(message,
+                `🚦 O bot já está processando **${activeExportCount}** export(s) no momento ` +
+                `(limite global: ${MAX_CONCURRENT_EXPORTS}).\n` +
+                `Tente novamente em alguns minutos.`,
+            );
+        }
+        activeExportCount++;
+        try {
+            return await this._run(message, targetChannel, rangeStart, rangeEnd);
+        } finally {
+            activeExportCount--;
+        }
+    },
+
+    // ─── Pipeline do export (chamado com a vaga do semáforo já garantida) ─────
+    async _run(message: Message, targetChannel: TextChannel, rangeStart: Date, rangeEnd: Date) {
         // ── 3. Construir fila de dias ─────────────────────────────────────────
         // Para histórico completo, pega a data da msg mais antiga do canal
         let effectiveStart = rangeStart;
