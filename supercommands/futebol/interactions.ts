@@ -11,10 +11,16 @@ import { TeamModel } from '../../tools/models/FutebolSchema';
 
 // ─── Ponto de entrada — registre no interaction_checkout.ts:
 //   if (interaction.customId.startsWith('fb_')) await handleFutebolInteraction(interaction);
+// IDs tratados por collectors locais (paginação de listas, cancelamento IRL,
+// substituições do intervalo) — o handler global NÃO deve tocá-los.
+const COLLECTOR_MANAGED_PREFIXES = ['fb_list_', 'fb_irl_', 'fb_halftime_'];
+
 export async function handleFutebolInteraction(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
 ) {
     const id = interaction.customId;
+
+    if (COLLECTOR_MANAGED_PREFIXES.some(p => id.startsWith(p))) return;
 
     // ── Dropdown de seleção de partida de rodada ──────────────────────────────
     if (interaction.isStringSelectMenu() && id.startsWith('fb_round_select')) {

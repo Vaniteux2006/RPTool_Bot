@@ -89,6 +89,7 @@ export default async function handleMatch(message: Message, args: string[]) {
         homeTactic, awayTactic,
         undefined,
         irlOptions,
+        isNeutral, // -n: campo neutro, sem bônus de mandante
     );
 
     // ─── Embed de resultado (estilo Google) ───────────────────────────────────

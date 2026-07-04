@@ -44,9 +44,14 @@ export default async function runInteractionChecks(interaction: Interaction, cli
         return true;
     }
 
-    // ── Futebol ──
-    if (interaction.isButton() && interaction.customId.startsWith('fb_')) {
-        await handleFutebolInteraction(interaction as any);
+    // ── Futebol: botões E select menus (fb_round_select, fb_apply_tactic, etc) ──
+    // IDs gerenciados por collectors locais (fb_list_*, fb_irl_*, fb_halftime_*)
+    // são ignorados dentro do handler para não responder em duplicidade.
+    if (
+        (interaction.isButton()           && interaction.customId.startsWith('fb_')) ||
+        (interaction.isStringSelectMenu() && interaction.customId.startsWith('fb_'))
+    ) {
+        await handleFutebolInteraction(interaction);
     }
 
     return false;

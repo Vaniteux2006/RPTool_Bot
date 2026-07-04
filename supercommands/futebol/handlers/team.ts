@@ -296,6 +296,32 @@ export async function handleSetEmoji(message: Message, args: string[], userId: s
     return message.reply(`${emoji} Emoji do **${team.name}** atualizado para **${emoji}**!`);
 }
 
+// ─── rp!futebol global "Nome" [on|off] ────────────────────────────────────────
+// Time global pode ser inscrito em torneios de QUALQUER servidor pelo dono.
+export async function handleSetGlobal(message: Message, args: string[], userId: string) {
+    const cleanArgs = extractArgs(message.content, 'global');
+    if (!cleanArgs[0]) {
+        return message.reply(
+            '⚠️ **Uso:** `rp!futebol global "Nome do Time" [on|off]`\n' +
+            'Um time **global** pode ser inscrito por você em torneios de qualquer servidor.',
+        );
+    }
+
+    const teamName = cleanArgs[0];
+    const mode     = cleanArgs[1]?.toLowerCase();
+    const enable   = mode !== 'off'; // padrão: liga
+
+    const team = await TeamModel.findOne({ adminId: userId, name: new RegExp(`^${escapeRegex(teamName)}$`, 'i'), guildOriginId: message.guild!.id });
+    if (!team) return message.reply(`❌ Você não é o dono de **${teamName}** neste servidor.\n-# O comando deve ser usado no servidor de origem do time.`);
+
+    team.isGlobal = enable;
+    await team.save();
+
+    return message.reply(enable
+        ? `🌍 **${team.name}** agora é **global**! Use \`rp!futebol join "Torneio" "${team.name}"\` em qualquer servidor.`
+        : `🏠 **${team.name}** voltou a ser **local** — só pode disputar torneios deste servidor.`);
+}
+
 // ─── rp!futebol list userlist [@usuario] / serverlist ─────────────────────────
 export async function handleList(message: Message, args: string[]) {
     const sub = args[1]?.toLowerCase();

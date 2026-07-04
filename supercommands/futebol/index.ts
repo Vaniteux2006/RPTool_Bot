@@ -9,6 +9,7 @@ import {
     handleAISquad,
     handleSuggestTactics,
     handleSetEmoji,
+    handleSetGlobal,
     handleList,
 }                                           from './handlers/team';
 import { handleTactics }                    from './handlers/tactics';
@@ -21,9 +22,10 @@ import {
     handleTourneyCreate,
     handleJoinTourney,
     handleTourneyStart,
+    handleTourneyView,
     handleStandings,
 }                                           from './handlers/league';
-import { handlePunish, handleBan, handlePostpone } from './handlers/admin';
+import { handlePunish, handleBan, handlePostpone, handleResume } from './handlers/admin';
 import { handleHistory }                    from './handlers/history';
 import { handlePlayerRouter }               from './handlers/player';
 
@@ -88,6 +90,9 @@ export default {
                 case 'emoji':
                     return await handleSetEmoji(message, args, message.author.id);
 
+                case 'global':
+                    return await handleSetGlobal(message, args, message.author.id);
+
                 // ── Listagens (sugestão 1) ────────────────────────────────────
                 case 'list':
                     return await handleList(message, args);
@@ -138,7 +143,10 @@ async function handleTourneyRouter(message: Message, args: string[]) {
     switch (args[1]?.toLowerCase()) {
         case 'create': return await handleTourneyCreate(message, args);
         case 'start':  return await handleTourneyStart(message, args);
-        default: return message.reply('⚠️ **Subcomandos:** `tourney create`, `tourney start`');
+        case 'view':
+        case 'info':
+        case 'status': return await handleTourneyView(message, args);
+        default: return message.reply('⚠️ **Subcomandos:** `tourney create`, `tourney start`, `tourney view`');
     }
 }
 
@@ -156,7 +164,8 @@ async function handleAdminRouter(message: Message, args: string[]) {
         case 'punish':   return await handlePunish(message, args);
         case 'ban':      return await handleBan(message, args);
         case 'postpone': return await handlePostpone(message, args);
-        default: return message.reply('⚠️ **Subcomandos:** `admin punish`, `admin ban`, `admin postpone`');
+        case 'resume':   return await handleResume(message, args);
+        default: return message.reply('⚠️ **Subcomandos:** `admin punish`, `admin ban`, `admin postpone`, `admin resume`');
     }
 }
 
@@ -177,6 +186,7 @@ function sendHelp(message: Message) {
         `\`rp!futebol tatic "Time" FORMAÇÃO ESTILO\` — define a tática\n` +
         `\`rp!futebol suggest "Time"\` — IA sugere a melhor tática 🧠\n` +
         `\`rp!futebol emoji "Time" 🎯\` — define o emoji do clube\n` +
+        `\`rp!futebol global "Time" [on|off]\` — libera o time p/ torneios de outros servidores 🌍\n` +
         `\`rp!futebol delete "Time"\` — dissolve o clube\n\n` +
 
         `**🎴 Jogadores Customizados**\n` +
@@ -191,19 +201,22 @@ function sendHelp(message: Message) {
         `\`rp!futebol list serverlist\` — times do servidor (com pesquisa)\n` +
         `\`rp!futebol list userlist\` — seus times em qualquer servidor\n\n` +
 
-        `**🏆 Torneios**\n` +
-        `\`rp!futebol tourney create "Nome" [FORMATO]\` — cria torneio (ADM)\n` +
+        `**🏆 Torneios** *(fases automáticas: grupos → mata-mata, suíço, ida/volta, pênaltis)*\n` +
+        `\`rp!futebol tourney create "Nome" [FORMATO] [flags]\` — cria torneio (ADM)\n` +
+        `  flags: \`-ida\` \`-turno\` \`-grupos N\` \`-avanca N\` \`-min N\` \`-max N\`\n` +
         `\`rp!futebol tourney start "Nome"\` — inicia e gera tabela (ADM)\n` +
-        `\`rp!futebol join "Torneio" "Time"\` — inscreve seu time\n` +
+        `\`rp!futebol tourney view "Nome"\` — raio-X: fase, rodada e chaveamento completo\n` +
+        `\`rp!futebol join "Torneio" "Time"\` — inscreve seu time (aceita times globais 🌍)\n` +
         `\`rp!futebol standings "Torneio"\` — tabela de classificação\n` +
         `\`rp!futebol round sim "Torneio"\` — simula rodada atual (ADM)\n` +
-        `\`rp!futebol round next "Torneio"\` — avança rodada (ADM)\n` +
-        `\`rp!futebol round view "Torneio" [nº]\` — ver confrontos\n\n` +
+        `\`rp!futebol round next "Torneio"\` — avança rodada/fase (ADM)\n` +
+        `\`rp!futebol round view "Torneio" [nº]\` — ver confrontos/chaveamento\n\n` +
 
         `**⚖️ Admin / STJD**\n` +
         `\`rp!futebol admin punish "Torneio" "Time" -p N\` — punição de pontos\n` +
-        `\`rp!futebol admin ban "Torneio" "Time"\` — expulsa do torneio\n` +
-        `\`rp!futebol admin postpone "Torneio" "Time A" "Time B"\` — adia partida\n\n` +
+        `\`rp!futebol admin ban "Torneio" "Time"\` — expulsa do torneio (W.O. nos jogos)\n` +
+        `\`rp!futebol admin postpone "Torneio" "Time A" "Time B"\` — adia partida\n` +
+        `\`rp!futebol admin resume "Torneio" "Time A" "Time B"\` — remarca partida adiada\n\n` +
 
         `**📦 Memória e Histórico**\n` +
         `\`rp!futebol export <ID>\` — exporta súmula como JSON\n` +

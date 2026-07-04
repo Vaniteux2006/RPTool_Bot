@@ -105,6 +105,13 @@ export interface ITournament extends Document {
     standings:    IStanding[];
     groups:       ITournamentGroup[];
     bracket:      IBracketMatch[];
+    // ─── Motor de progressão multi-fase ───────────────────────────────────────
+    currentPhase:    number;    // índice em formatConfig.phases
+    phaseStartRound: number;    // rodada global em que a fase atual começou
+    formatConfig?:   any;       // snapshot do formato (formats.json + overrides) na criação
+    carryOverTeams:  string[];  // times que pulam uma fase (ex: top 8 do sistema suíço)
+    championId?:     string;
+    championName?:   string;
     createdAt:    Date;
 }
 
@@ -114,10 +121,13 @@ export interface ITourneyMatch extends Document {
     groupName?:       string;
     bracketRound?:    string;
     bracketPosition?: number;
+    leg?:             number;   // 1 ou 2 (mata-mata ida/volta)
     homeTeamId:       string;
     awayTeamId:       string;
     homeScore:        number;
     awayScore:        number;
+    penHome?:         number;   // placar da disputa de pênaltis (se houve)
+    penAway?:         number;
     status:           'PENDING' | 'FINISHED' | 'POSTPONED';
     reportId?:        string;
 }
@@ -213,6 +223,12 @@ const TournamentSchema = new Schema<ITournament>({
     standings:    { type: [StandingSchema], default: [] },
     groups:       { type: [GroupSchema], default: [] },
     bracket:      { type: [BracketMatchSchema], default: [] },
+    currentPhase:    { type: Number, default: 0 },
+    phaseStartRound: { type: Number, default: 1 },
+    formatConfig:    { type: Schema.Types.Mixed, default: null },
+    carryOverTeams:  { type: [String], default: [] },
+    championId:      { type: String },
+    championName:    { type: String },
     createdAt:    { type: Date, default: Date.now },
 });
 
@@ -222,15 +238,19 @@ const TourneyMatchSchema = new Schema<ITourneyMatch>({
     groupName:       { type: String },
     bracketRound:    { type: String },
     bracketPosition: { type: Number },
+    leg:             { type: Number },
     homeTeamId:      { type: String, required: true },
     awayTeamId:      { type: String, required: true },
     homeScore:       { type: Number, default: 0 },
     awayScore:       { type: Number, default: 0 },
+    penHome:         { type: Number },
+    penAway:         { type: Number },
     status:          { type: String, enum: ['PENDING', 'FINISHED', 'POSTPONED'], default: 'PENDING' },
     reportId:        { type: String },
 });
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
-export const TeamModel         = fbUserConnection.models['FutebolTeam']    ?? fbUserConnection.model<ITeam>('FutebolTeam', TeamSchema);
-export const TournamentModel   = fbUserConnection.models['FutebolTournament'] ?? fbUserConnection.model<ITournament>('FutebolTournament', TournamentSchema);
-export const TourneyMatchModel = fbUserConnection.models['FutebolTourneyMatch'] ?? fbUserConnection.model<ITourneyMatch>('FutebolTourneyMatch', TourneyMatchSchema);
+// Cast explícito: models[...] retorna Model<any> e "contamina" a união de tipos
+export const TeamModel         = (fbUserConnection.models['FutebolTeam']          ?? fbUserConnection.model<ITeam>('FutebolTeam', TeamSchema))                     as mongoose.Model<ITeam>;
+export const TournamentModel   = (fbUserConnection.models['FutebolTournament']    ?? fbUserConnection.model<ITournament>('FutebolTournament', TournamentSchema))   as mongoose.Model<ITournament>;
+export const TourneyMatchModel = (fbUserConnection.models['FutebolTourneyMatch']  ?? fbUserConnection.model<ITourneyMatch>('FutebolTourneyMatch', TourneyMatchSchema)) as mongoose.Model<ITourneyMatch>;

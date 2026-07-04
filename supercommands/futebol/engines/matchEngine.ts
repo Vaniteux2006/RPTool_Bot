@@ -58,7 +58,10 @@ export function parseFormation(formation: string): Record<string, number> {
 // Se não tem jogadores suficientes em alguma posição, preenche com genéricos fracos (OVR 40)
 export function buildLineup(team: ITeam, formation: string): { starters: IPlayer[]; bench: IPlayer[] } {
     const slots  = parseFormation(formation);
-    const pool   = [...team.players];
+    // Normaliza subdocumentos Mongoose para objetos planos: spreads posteriores
+    // ({...p}) perdem as propriedades de subdocs (ficam em _doc), o que quebrava
+    // substituições e notas de jogadores de times vindos do banco.
+    const pool: IPlayer[] = team.players.map((p: any) => ({ ...(p?._doc ?? p) }));
 
     const starters: IPlayer[]                   = [];
     const posOrder: Array<IPlayer['position']>  = ['GK', 'DEF', 'MID', 'ATK'];
@@ -142,6 +145,7 @@ export async function simulateTacticalMatch(
     awayTactic:  TacticStyle = 'BALANCEADO',
     tournamentId?: string,
     irlOptions?: IrlOptions,
+    neutralField = false,   // campo neutro: sem bônus de mandante
 ): Promise<MatchResult> {
 
     // Fallback: times vazios recebem plantel genérico
@@ -159,10 +163,12 @@ export async function simulateTacticalMatch(
     let homeOnField = [...homeStarters];
     let awayOnField = [...awayStarters];
 
+    const HOME_BONUS = neutralField ? 1.0 : 1.05;
+
     let homeHomeStats = calculateTeamStats({ ...homeTeam, players: homeOnField } as ITeam);
     let awayFieldStats = calculateTeamStats({ ...awayTeam, players: awayOnField  } as ITeam);
 
-    homeHomeStats.meio *= 1.05; // bônus de mandante
+    homeHomeStats.meio *= HOME_BONUS; // bônus de mandante (1.0 em campo neutro)
 
     const homeEdge = getTacticalEdge(homeTactic, awayTactic);
     const awayEdge = getTacticalEdge(awayTactic,  homeTactic);
@@ -345,7 +351,7 @@ export async function simulateTacticalMatch(
 
             // Recalcula stats do time após substituição
             homeHomeStats = calculateTeamStats({ ...homeTeam, players: homeOnField } as ITeam);
-            homeHomeStats.meio *= 1.05;
+            homeHomeStats.meio *= HOME_BONUS;
             awayFieldStats = calculateTeamStats({ ...awayTeam, players: awayOnField  } as ITeam);
         }
 
@@ -370,7 +376,7 @@ export async function simulateTacticalMatch(
 
                 // Recalcula stats após possíveis trocas
                 homeHomeStats = calculateTeamStats({ ...homeTeam, players: homeOnField } as ITeam);
-                homeHomeStats.meio *= 1.05;
+                homeHomeStats.meio *= HOME_BONUS;
                 awayFieldStats = calculateTeamStats({ ...awayTeam, players: awayOnField } as ITeam);
 
                 eventsLog.push(`▶️ **46'** — Começa o 2º tempo!`);
@@ -410,12 +416,12 @@ export async function simulateTacticalMatch(
         players.forEach(p => {
             const c = contributions[p.name] ?? { goals: 0, assists: 0, keyPasses: 0, tacklesWon: 0, errors: 0, isSub: false };
             const rating = calculatePlayerRating({ ...c, baseOvr: p.overall, isWinner });
-            playerRatings.push({ team: teamName, playerName: p.name, rating, isSub: !p.isStarter });
+            playerRatings.push({ team: teamName, playerName: p.name, rating, isSub: c.isSub });
 
-            // BUG FIX: Reservas Emergenciais (slot vazio na formação) e jogadores
-            // do banco NÃO devem ganhar destaque — destaque é só para titulares reais.
+            // Reservas Emergenciais (slot vazio na formação) e substitutos
+            // NÃO ganham destaque — destaque é só para titulares reais.
             const isEmergency = p.name.startsWith('Reserva Emergencial');
-            const isOriginalStarter = p.isStarter && !isEmergency;
+            const isOriginalStarter = !c.isSub && !isEmergency;
 
             if (isOriginalStarter) {
                 if (teamName === homeTeam.name && rating > topHome.rating) topHome = { name: p.name, rating };
@@ -424,8 +430,12 @@ export async function simulateTacticalMatch(
         });
     };
 
-    rateTeam([...homeStarters, ...homeStarters.filter(p => !p.isStarter)], homeTeam.name, homeWon);
-    rateTeam([...awayStarters, ...awayStarters.filter(p => !p.isStarter)], awayTeam.name, awayWon);
+    // Participantes = titulares + quem entrou no decorrer do jogo (dedup por nome)
+    const participants = (starters: IPlayer[], onField: IPlayer[]) =>
+        [...new Map([...starters, ...onField].map(p => [p.name, p])).values()];
+
+    rateTeam(participants(homeStarters, homeOnField), homeTeam.name, homeWon);
+    rateTeam(participants(awayStarters, awayOnField), awayTeam.name, awayWon);
 
     // ─── Salva relatório TTL 48h ──────────────────────────────────────────────
     const report = await MatchReportModel.create({

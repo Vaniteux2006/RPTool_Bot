@@ -18,24 +18,28 @@ export async function handleHistory(message: Message, args: string[]) {
         return message.reply(`❌ Nenhuma edição finalizada de **${tourneyName}** encontrada.`);
     }
 
-    // Mapeia campeões — agora usa teamName CACHEADO na standings (fix bug #4)
     const championsCount: Record<string, { count: number; emoji: string }> = {};
 
-    // Para cada edição finalizada, o campeão é quem tem mais pontos na tabela final
     for (const tournament of finishedTournaments) {
-        if (tournament.standings.length === 0) continue;
+        // 1º: campeão registrado pelo motor de progressão (correto p/ mata-mata);
+        // 2º (edições antigas): quem tem mais pontos na tabela final.
+        let winner = tournament.championId
+            ? tournament.standings.find(s => s.teamId === tournament.championId)
+            : undefined;
 
-        const winner = [...tournament.standings].sort((a, b) => {
-            const ptsDiff = b.points - a.points;
-            if (ptsDiff !== 0) return ptsDiff;
-            return (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst);
-        })[0];
+        if (!winner && tournament.standings.length > 0) {
+            winner = [...tournament.standings].sort((a, b) => {
+                const ptsDiff = b.points - a.points;
+                if (ptsDiff !== 0) return ptsDiff;
+                return (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst);
+            })[0];
+        }
 
         if (!winner) continue;
 
         // Tenta primeiro o nome cacheado (teamName), depois busca no banco
         // Isso garante que times deletados ainda aparecem no histórico
-        let name  = winner.teamName;
+        let name  = tournament.championName ?? winner.teamName;
         let emoji = winner.teamEmoji ?? '⚽';
 
         if (!name || name === 'Time Desconhecido') {

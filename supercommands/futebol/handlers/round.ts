@@ -10,14 +10,19 @@ import {
     IStanding, ITourneyMatch,
 } from '../../../tools/models/FutebolSchema';
 import { simulateTacticalMatch, TacticStyle } from '../engines/matchEngine';
+import { updateStandings, advanceAfterRound, isNeutralMatch } from '../engines/progression';
 import { extractArgs } from '../../../tools/utils/textUtils';
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function chunk<T>(arr: T[], n: number): T[][] { const r: T[][] = []; for (let i = 0; i < arr.length; i += n) r.push(arr.slice(i, i + n)); return r; }
 
+function isGuildAdmin(message: Message): boolean {
+    return !!message.member?.permissions.has('ManageGuild');
+}
+
 // ─── rp!futebol round sim "Torneio" ──────────────────────────────────────────
 export async function handleRoundSim(message: Message, args: string[]) {
-    if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageGuild')) {
+    if (!isGuildAdmin(message)) {
         return message.reply('❌ Apenas administradores podem simular rodadas.');
     }
 
@@ -28,9 +33,10 @@ export async function handleRoundSim(message: Message, args: string[]) {
     if (!tournament)                    return message.reply('❌ Torneio não encontrado.');
     if (tournament.status !== 'ACTIVE') return message.reply('❌ Torneio não está em andamento.');
 
-    const pendingMatches = await TourneyMatchModel.find({ tournamentId: tournament.id, round: tournament.currentRound, status: 'PENDING' });
+    // $lte: também recupera jogos remarcados de rodadas anteriores (admin resume)
+    const pendingMatches = await TourneyMatchModel.find({ tournamentId: tournament.id, round: { $lte: tournament.currentRound }, status: 'PENDING' });
     if (pendingMatches.length === 0) {
-        return message.reply(`✅ Todos os jogos da Rodada **${tournament.currentRound}** já foram finalizados.\nUse \`rp!futebol round next "${tournament.name}"\` para avançar.`);
+        return message.reply(`✅ Todos os jogos até a Rodada **${tournament.currentRound}** já foram finalizados.\nUse \`rp!futebol round next "${tournament.name}"\` para avançar.`);
     }
 
     const waitMsg = await message.reply(`⏳ Simulando **${pendingMatches.length}** partida(s) da Rodada **${tournament.currentRound}** em paralelo...`);
@@ -40,15 +46,33 @@ export async function handleRoundSim(message: Message, args: string[]) {
     const standingsMap  = new Map<string, IStanding>(tournament.standings.map(s => [s.teamId, s]));
 
     await Promise.all(pendingMatches.map(async (match: ITourneyMatch) => {
-        const homeTeam = await TeamModel.findById(match.homeTeamId);
-        const awayTeam = await TeamModel.findById(match.awayTeamId);
-        if (!homeTeam || !awayTeam) return;
+        const homeTeam = await TeamModel.findById(match.homeTeamId).catch(() => null);
+        const awayTeam = await TeamModel.findById(match.awayTeamId).catch(() => null);
+
+        // Time deletado → W.O. para o presente (0×0 se ambos sumiram)
+        if (!homeTeam || !awayTeam) {
+            match.homeScore = homeTeam ? 3 : 0;
+            match.awayScore = awayTeam ? 3 : 0;
+            match.status    = 'FINISHED';
+            await match.save();
+            if (homeTeam || awayTeam) {
+                updateStandings(
+                    standingsMap, match.homeTeamId, match.awayTeamId, match.homeScore, match.awayScore,
+                    homeTeam?.name ?? 'Time Extinto', awayTeam?.name ?? 'Time Extinto',
+                    homeTeam?.emoji ?? '⚰️', awayTeam?.emoji ?? '⚰️',
+                );
+            }
+            summaryLines.push(`⚰️ **${homeTeam?.name ?? 'Time Extinto'}** ${match.homeScore} × ${match.awayScore} **${awayTeam?.name ?? 'Time Extinto'}** *(W.O. — time dissolvido)*`);
+            return;
+        }
 
         const result = await simulateTacticalMatch(
             message.guild!.id, homeTeam, awayTeam,
             (homeTeam.defaultTactic ?? 'BALANCEADO') as TacticStyle,
             (awayTeam.defaultTactic  ?? 'BALANCEADO') as TacticStyle,
             tournament.id,
+            undefined,
+            isNeutralMatch(tournament, match), // final com neutralFinal → sem bônus de mandante
         );
 
         match.homeScore = result.homeScore; match.awayScore = result.awayScore;
@@ -58,7 +82,8 @@ export async function handleRoundSim(message: Message, args: string[]) {
         updateStandings(standingsMap, match.homeTeamId, match.awayTeamId, result.homeScore, result.awayScore, homeTeam.name, awayTeam.name, homeTeam.emoji, awayTeam.emoji);
 
         const hE = homeTeam.emoji ?? '⚽'; const aE = awayTeam.emoji ?? '⚽';
-        summaryLines.push(`${hE} **${homeTeam.name}** ${result.homeScore} × ${result.awayScore} **${awayTeam.name}** ${aE}`);
+        const legTag = match.leg === 2 ? ' *(volta)*' : match.leg === 1 && match.bracketRound ? ' *(ida)*' : '';
+        summaryLines.push(`${hE} **${homeTeam.name}** ${result.homeScore} × ${result.awayScore} **${awayTeam.name}** ${aE}${legTag}`);
         selectOptions.push(new StringSelectMenuOptionBuilder().setLabel(`${homeTeam.name} vs ${awayTeam.name}`).setDescription(`${result.homeScore} - ${result.awayScore}`).setValue(result.reportId).setEmoji('⚽'));
     }));
 
@@ -74,7 +99,7 @@ export async function handleRoundSim(message: Message, args: string[]) {
 
     await waitMsg.delete().catch(() => null);
 
-    if (selectOptions.length <= 1) return message.reply({ embeds: [summaryEmbed] });
+    if (selectOptions.length === 0) return message.reply({ embeds: [summaryEmbed] });
 
     const menus = chunk(selectOptions, 25).slice(0, 5).map((batch, i) =>
         new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -86,8 +111,10 @@ export async function handleRoundSim(message: Message, args: string[]) {
 }
 
 // ─── rp!futebol round next ────────────────────────────────────────────────────
+// Delega ao motor de progressão: avança rodada, resolve mata-mata (agregado +
+// pênaltis), faz transição de fase e encerra o torneio com campeão.
 export async function handleRoundNext(message: Message, args: string[]) {
-    if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageGuild')) {
+    if (!isGuildAdmin(message)) {
         return message.reply('❌ Apenas administradores podem avançar rodadas.');
     }
 
@@ -97,17 +124,11 @@ export async function handleRoundNext(message: Message, args: string[]) {
     const tournament = await TournamentModel.findOne({ guildId: message.guild!.id, name: new RegExp(`^${escapeRegex(cleanArgs[0])}$`, 'i') });
     if (!tournament || tournament.status !== 'ACTIVE') return message.reply('❌ Torneio não encontrado ou não está ativo.');
 
-    const pending = await TourneyMatchModel.countDocuments({ tournamentId: tournament.id, round: tournament.currentRound, status: 'PENDING' });
-    if (pending > 0) return message.reply(`⚠️ Ainda há **${pending}** jogo(s) pendente(s) na Rodada **${tournament.currentRound}**.`);
+    const pending = await TourneyMatchModel.countDocuments({ tournamentId: tournament.id, round: { $lte: tournament.currentRound }, status: 'PENDING' });
+    if (pending > 0) return message.reply(`⚠️ Ainda há **${pending}** jogo(s) pendente(s) até a Rodada **${tournament.currentRound}**. Use \`rp!futebol round sim "${tournament.name}"\`.`);
 
-    if (tournament.currentRound >= tournament.totalRounds) {
-        tournament.status = 'FINISHED'; await tournament.save();
-        return message.reply(`🏆 **${tournament.name}** chegou ao fim! Use \`rp!futebol standings "${tournament.name}"\` para o resultado final.`);
-    }
-
-    tournament.currentRound++;
-    await tournament.save();
-    return message.reply(`➡️ Avançando para a **Rodada ${tournament.currentRound}** de **${tournament.name}**.`);
+    const resultMsg = await advanceAfterRound(tournament);
+    return message.reply(resultMsg);
 }
 
 // ─── rp!futebol round view "Torneio" [nº] ────────────────────────────────────
@@ -230,9 +251,11 @@ async function sendKnockoutView(message: Message, tournament: any, matches: ITou
                 const h = teamMap.get(m.homeTeamId); const a = teamMap.get(m.awayTeamId);
                 const hN = h?.name ?? '??'; const aN = a?.name ?? '??';
                 const hE = h?.emoji ?? '⚽'; const aE = a?.emoji ?? '⚽';
-                if (m.status === 'FINISHED') return `${hE} **${hN} ${m.homeScore}×${m.awayScore} ${aN}** ${aE}`;
+                const legTag = m.leg === 2 ? ' *(volta)*' : m.leg === 1 ? ' *(ida)*' : '';
+                const penTag = m.penHome != null ? ` *(${m.penHome}-${m.penAway} pên.)*` : '';
+                if (m.status === 'FINISHED') return `${hE} **${hN} ${m.homeScore}×${m.awayScore} ${aN}** ${aE}${penTag}${legTag}`;
                 if (m.status === 'POSTPONED') return `🛑 ${hE} ${hN} vs ${aN} ${aE} *(adiado)*`;
-                return `⏳ ${hE} ${hN} vs ${aN} ${aE}`;
+                return `⏳ ${hE} ${hN} vs ${aN} ${aE}${legTag}`;
             };
 
             if (m2) {
@@ -253,29 +276,4 @@ async function sendKnockoutView(message: Message, tournament: any, matches: ITou
     return message.reply({ embeds: [embed] });
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function updateStandings(
-    map: Map<string, IStanding>,
-    homeId: string, awayId: string,
-    hG: number, aG: number,
-    homeName: string, awayName: string,
-    homeEmoji: string, awayEmoji: string,
-): void {
-    let home = map.get(homeId);
-    let away = map.get(awayId);
-
-    if (!home) { home = { teamId: homeId, teamName: homeName, teamEmoji: homeEmoji, points: 0, games: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 }; map.set(homeId, home); }
-    if (!away) { away = { teamId: awayId, teamName: awayName, teamEmoji: awayEmoji, points: 0, games: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 }; map.set(awayId, away); }
-
-    // Garante que os nomes estão sempre atualizados
-    home.teamName = homeName; home.teamEmoji = homeEmoji;
-    away.teamName = awayName; away.teamEmoji = awayEmoji;
-
-    home.games++; away.games++;
-    home.goalsFor += hG; home.goalsAgainst += aG;
-    away.goalsFor += aG; away.goalsAgainst += hG;
-
-    if (hG > aG)      { home.wins++; home.points += 3; away.losses++; }
-    else if (hG < aG) { away.wins++; away.points += 3; home.losses++; }
-    else              { home.draws++; home.points++;    away.draws++;  away.points++; }
-}
+// (updateStandings agora vive em engines/progression.ts — compartilhado com o admin)

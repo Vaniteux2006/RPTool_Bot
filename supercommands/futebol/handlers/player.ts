@@ -160,9 +160,11 @@ export async function handlePlayerCreate(message: Message, args: string[], userI
         return message.reply('❌ Nome do jogador deve ter pelo menos 2 caracteres.');
     }
 
-    const flags    = parseStatFlags(args);
-    const archRaw  = args[args.indexOf('-arch') + 1] ?? (position === 'GK' ? 'Muralha' : 'Balanceado');
-    const archetype = VALID_ARCHETYPES.includes(archRaw as any) ? archRaw : (position === 'GK' ? 'Muralha' : 'Balanceado');
+    const flags   = parseStatFlags(args);
+    // BUG FIX: sem a flag, indexOf('-arch') retornava -1 e args[0] ("player")
+    // era tratado como arquétipo — rejeitando TODA criação sem -arch.
+    const archIdx = args.indexOf('-arch');
+    const archRaw = archIdx !== -1 ? args[archIdx + 1] : undefined;
 
     if (archRaw && !VALID_ARCHETYPES.includes(archRaw as any)) {
         return message.reply(
@@ -170,6 +172,8 @@ export async function handlePlayerCreate(message: Message, args: string[], userI
             `Use \`rp!futebol player archetypes\` para ver a lista completa.`,
         );
     }
+
+    const archetype = archRaw ?? (position === 'GK' ? 'Muralha' : 'Balanceado');
 
     // Determina se tem stats customizados
     const isGK = position === 'GK';
