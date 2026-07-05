@@ -54,6 +54,17 @@ export async function resolveClock(guildId: string, tokens: string[]): Promise<{
     return best ? { clock: best.clock, rest: tokens.slice(best.used) } : null;
 }
 
+// ─── Apaga (best-effort) a mensagem fixa de um relógio no Discord ─────────────
+// Sem isso, substituir/deletar um relógio deixa a mensagem antiga congelada
+// no canal para sempre.
+async function deleteClockMessage(message: Message, clock: IClock): Promise<void> {
+    try {
+        const ch  = await message.client.channels.fetch(clock.channelId).catch(() => null) as TextChannel | null;
+        const msg = ch ? await ch.messages.fetch(clock.messageId).catch(() => null) : null;
+        if (msg) await msg.delete().catch(() => {});
+    } catch { /* best-effort: canal/mensagem podem não existir mais */ }
+}
+
 // ─── rp!tempo #canal [Nome] ────────────────────────────────────────────────────
 // Cria relógio simples com hora real
 export async function handleCreate(message: Message, args: string[]) {
@@ -71,17 +82,45 @@ export async function handleCreate(message: Message, args: string[]) {
     let name = args.slice(1).join(' ').trim();
     // Usuários copiam o "[Nome]" da ajuda ao pé da letra — remove colchetes externos
     if (name.startsWith('[') && name.endsWith(']')) name = name.slice(1, -1).trim();
-    if (!name) name = `AUTO_${cid}`;
 
     if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageChannels')) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para criar relógios.');
     }
 
-    // Remove anterior com mesmo nome ou o AUTO_ do mesmo canal — SEMPRE escopado
-    // ao servidor, senão apagaria relógio homônimo de outro servidor
-    const previous = await findClockByName(message.guild!.id, name);
-    if (previous) await ClockModel.deleteOne({ _id: previous._id });
-    await ClockModel.deleteOne({ guildId: message.guild!.id, name: `AUTO_${cid}` });
+    const guildId = message.guild!.id;
+
+    // Sem nome: não cria AUTO por cima de um canal que já tem relógio
+    if (!name) {
+        const existing = await ClockModel.findOne({ guildId, channelId: cid });
+        if (existing) {
+            return message.reply(
+                `⚠️ O canal ${ch} já tem o relógio **${existing.name}**.\n` +
+                `Use \`rp!tempo info ${existing.name}\`, \`rp!tempo set ${existing.name} ...\` ou \`rp!tempo delete ${existing.name}\`.`,
+            );
+        }
+        name = `AUTO_${cid}`;
+    } else {
+        // Nome já existe → MOVE o relógio para o canal preservando toda a
+        // configuração (data RP, velocidade, clima). Antes, recriar do zero
+        // destruía silenciosamente o relógio configurado.
+        const previous = await findClockByName(guildId, name);
+        if (previous) {
+            const clockMsg = await ch.send('⏳ Movendo relógio...');
+            await deleteClockMessage(message, previous);
+            previous.channelId = cid;
+            previous.messageId = clockMsg.id;
+            await previous.save();
+            await clockMsg.edit(formatClockMessage(previous, computeRPGTime(previous), null));
+            return message.reply(`📌 Relógio **${previous.name}** movido para ${ch} (data/hora RP e configurações preservadas).`);
+        }
+    }
+
+    // Remove o AUTO_ antigo do canal (e sua mensagem), escopado ao servidor
+    const oldAuto = await ClockModel.findOne({ guildId, name: `AUTO_${cid}` });
+    if (oldAuto) {
+        await deleteClockMessage(message, oldAuto);
+        await ClockModel.deleteOne({ _id: oldAuto._id });
+    }
 
     const clockMsg  = await ch.send('⏳ Iniciando relógio...');
     const now       = Date.now();
@@ -100,7 +139,7 @@ export async function handleCreate(message: Message, args: string[]) {
 
     await clockMsg.edit(formatClockMessage(clock, new Date(now), null));
 
-    return message.reply(`✅ Relógio **${name}** criado em ${ch}.\nUse \`rp!tempo set ${name}\` para configurar data/hora RP.`);
+    return message.reply(`✅ Relógio **${name}** criado em ${ch}.\nUse \`rp!tempo set ${name} <DD/MM/AAAA> <HH:MM>\` para configurar data/hora RP.\nEx: \`rp!tempo set ${name} 01/01/2005 15:30\``);
 }
 
 // ─── rp!tempo set <Nome> [#canal] <DD/MM/AAAA> <HH:MM> [+ Xm -> Yh] [/ Xm -> Yh] ────
@@ -136,10 +175,15 @@ export async function handleSet(message: Message, args: string[]) {
         }
     }
 
-    if (!name || !dateStr || !timeStr) {
+    // Valida formato ANTES de parsear — senão "set meu pai de calcinha" tenta
+    // ler "pai" como data e responde um confuso "Data ou hora inválida"
+    const dateOk = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(dateStr);
+    const timeOk = /^\d{1,2}:\d{2}$/.test(timeStr);
+    if (!name || !dateOk || !timeOk) {
         return message.reply(
             '⚠️ **Uso:** `rp!tempo set <Nome> [#canal] <DD/MM/AAAA> <HH:MM> [+ Xm -> Yh]`\n' +
-            'Ex: `rp!tempo set Seattle 01/01/2005 15:30 + 1m -> 10m`',
+            'Ex: `rp!tempo set Seattle 01/01/2005 15:30 + 1m -> 10m`\n' +
+            '-# A data e a hora são obrigatórias.',
         );
     }
 
@@ -162,9 +206,13 @@ export async function handleSet(message: Message, args: string[]) {
     const velocity = plusIdx  !== -1 ? parseVelocityExpr(mods.slice(plusIdx  + 1, plusIdx  + 4)) : 1;
     const dilation = slashIdx !== -1 ? parseVelocityExpr(mods.slice(slashIdx + 1, slashIdx + 4)) : 1;
 
-    // Preserva geo se já existia (busca escopada ao servidor)
+    // Preserva geo se já existia (busca escopada ao servidor) e apaga a
+    // mensagem antiga para não deixar um relógio congelado no canal
     const old = await findClockByName(message.guild!.id, name);
-    if (old) await ClockModel.deleteOne({ _id: old._id });
+    if (old) {
+        await deleteClockMessage(message, old);
+        await ClockModel.deleteOne({ _id: old._id });
+    }
 
     const clockMsg = await targetCh.send('⏳ Configurando relógio...');
     const now      = Date.now();
@@ -259,6 +307,7 @@ export async function handleDelete(message: Message, args: string[]) {
     const clock = await findClockByName(message.guild!.id, name);
     if (!clock) return message.reply(`❌ Relógio **${name}** não encontrado.`);
 
+    await deleteClockMessage(message, clock);
     await ClockModel.deleteOne({ _id: clock._id });
     return message.reply(`🗑️ Relógio **${clock.name}** deletado.`);
 }
