@@ -35,17 +35,25 @@ export default async function handleView(message: Message, nameTokens: string[],
         return message.reply(`🎒 A mochila de **${oc.name}** está vazia.`);
     }
 
-    // Resolve nome/emoji dos itens a partir do catálogo (pode ter item removido).
-    const keys = wallet.items.map(i => i.key);
-    const catalog = await ItemModel.find({ guildId, key: { $in: keys } });
+    // Itens pessoais (custom) carregam nome/emoji próprios; os de loja resolvem
+    // pelo catálogo (que pode ter sido removido — cai no key como fallback).
+    const catalogKeys = wallet.items.filter(i => !i.custom).map(i => i.key);
+    const catalog = catalogKeys.length ? await ItemModel.find({ guildId, key: { $in: catalogKeys } }) : [];
     const metaByKey = new Map(catalog.map(c => [c.key, { name: c.name, emoji: c.emoji }]));
 
+    let hasCustom = false;
     const lines = wallet.items
         .slice()
         .sort((a, b) => b.qty - a.qty)
         .map(i => {
-            const meta = metaByKey.get(i.key);
-            const label = meta ? `${meta.emoji} ${meta.name}` : `📦 ${i.key}`;
+            let label: string;
+            if (i.custom) {
+                hasCustom = true;
+                label = `${i.emoji || '🎒'} ${i.name || i.key} ✎`; // ✎ marca item pessoal
+            } else {
+                const meta = metaByKey.get(i.key);
+                label = meta ? `${meta.emoji} ${meta.name}` : `📦 ${i.key}`;
+            }
             return `**${i.qty}×** ${label}`;
         });
 
@@ -55,7 +63,7 @@ export default async function handleView(message: Message, nameTokens: string[],
         .setTitle('🎒 Mochila')
         .setThumbnail(oc.avatar)
         .setDescription(lines.join('\n'))
-        .setFooter({ text: `${wallet.items.length} tipos de item • ${message.guild!.name}` });
+        .setFooter({ text: `${wallet.items.length} tipos de item${hasCustom ? ' • ✎ = pessoal' : ''} • ${message.guild!.name}` });
 
     return message.reply({ embeds: [embed] });
 }

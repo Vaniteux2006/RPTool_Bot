@@ -252,7 +252,13 @@ Carteira, mochila e loja **por personagem (OC)**, isoladas por servidor. Inspira
 
 ### 10.3 Comandos
 **`rp!wallet`** — `["Nome"]` (saldo), `pay "De" <valor> "Para"`, `top`, `economia [avancada|reajuste|dolar|reset]`, e admin `add/remove/set/setcurrency/reset`.
-**`rp!inventory`** — `["Nome"]` (mochila), `shop`, `buy/sell "OC" "item" [qtd]`, `use "OC" "item"`, `give "De" "item" [qtd] "Para"`, e admin `additem/edititem/removeitem/giveitem/takeitem`.
+**`rp!inventory`** — `["Nome"]` (mochila), `shop`, `buy/sell "OC" "item" [qtd]`, `use "OC" "item"`, `give "De" "item" [qtd] "Para"`, `add`/`drop` (itens pessoais), e admin `additem/edititem/removeitem/giveitem/takeitem`.
+
+**Dois tipos de item:**
+- **De loja (catálogo `ItemModel`)** — staff cria (`additem`), têm `basePrice`, entram em `buy`/`sell`, contam na riqueza real Q, respeitam `tradable`/`usable`.
+- **Pessoais (freeform)** — jogador cria na própria mochila com `add "OC" "Nome" [qtd] [emoji]`; vivem só no `WalletModel.items` (campos `name`/`emoji`/`custom:true`), **sem** entrada no catálogo. Sem preço (não compram/vendem, Q=0), mas dá pra `give`/`use`/`drop`. Caps: qty ≤ 10 000, ≤ 100 tipos por mochila, nome ≤ 60 chars; nome que colide com item de loja é barrado (evita item de loja grátis).
+
+`give`/`use`/`drop` operam por **posse** (`findHeldItem` — resolve por key ou nome na mochila), servindo os dois tipos; `buy`/`sell` continuam só de loja. `view` mostra pessoais com ✎.
 
 Segurança de concorrência: débitos usam update condicional atômico (`balance: {$gte: valor}` + `$inc`); estoque e itens da mochila idem (`$elemMatch`/`$inc`/`$pull`). Nunca há saldo/estoque negativo por corrida.
 

@@ -3,7 +3,7 @@
 import { Message, PermissionsBitField } from 'discord.js';
 import { OCModel, IOC } from '../models/OCSchema';
 import {
-    WalletModel, IWallet,
+    WalletModel, IWallet, IWalletItem,
     ItemModel, IItem,
     GuildEconomyModel, IGuildEconomy,
 } from '../models/EconomySchema';
@@ -205,21 +205,38 @@ export async function resolveItem(guildId: string, query: string): Promise<IItem
     return ItemModel.findOne({ guildId, name: query }).collation({ locale: 'pt', strength: 2 });
 }
 
+// Metadados de um item PESSOAL (freeform). Itens de catálogo não precisam disto.
+export interface CustomItemMeta { name: string; emoji?: string; custom: true; }
+
 // ─── Mutação da mochila (embedded array) ──────────────────────────────────────
-// Adiciona qty do item (soma se já existir, senão insere).
+// Adiciona qty do item (soma se já existir, senão insere). `meta` é usado só na
+// inserção de itens PESSOAIS — pra carregar nome/emoji próprios (o catálogo
+// resolve nome/emoji pelo key, então itens de loja passam meta=undefined).
 export async function addItemToWallet(
     guildId: string, ocId: mongoose.Types.ObjectId, key: string, qty: number,
+    meta?: CustomItemMeta,
 ): Promise<void> {
     const inc = await WalletModel.updateOne(
         { guildId, ocId, 'items.key': key },
         { $inc: { 'items.$.qty': qty }, $set: { lastActivityAt: new Date() } },
     );
     if (inc.matchedCount === 0) {
+        const doc: Record<string, unknown> = { key, qty };
+        if (meta) { doc.name = meta.name; doc.emoji = meta.emoji || '🎒'; doc.custom = true; }
         await WalletModel.updateOne(
             { guildId, ocId },
-            { $push: { items: { key, qty } }, $set: { lastActivityAt: new Date() } },
+            { $push: { items: doc }, $set: { lastActivityAt: new Date() } },
         );
     }
+}
+
+// Acha um item que o OC POSSUI na mochila (catálogo ou pessoal), por key ou nome.
+export function findHeldItem(wallet: IWallet, query: string): IWalletItem | null {
+    if (!query) return null;
+    const key = slugify(query);
+    const q = query.trim().toLowerCase();
+    return wallet.items.find(i =>
+        i.key === key || (i.name && i.name.trim().toLowerCase() === q)) || null;
 }
 
 // Remove qty do item de forma ATÔMICA (só se houver quantidade suficiente).

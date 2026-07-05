@@ -7,6 +7,8 @@ import handleUse from './handlers/use';
 import handleShop from './handlers/shop';
 import handleBuy from './handlers/buy';
 import handleSell from './handlers/sell';
+import handleAdd from './handlers/add';
+import handleDrop from './handlers/drop';
 import handleAdmin from './handlers/admin';
 import helpCommand from '../help/index';
 
@@ -44,6 +46,12 @@ export default {
 
                 case 'sell': case 'vender':
                     return handleSell(message, rest, userId);
+
+                case 'add': case 'craft': case 'novo': case 'anotar': case 'criar':
+                    return handleAdd(message, rest, userId);
+
+                case 'drop': case 'descartar': case 'jogarfora': case 'remove': case 'remover':
+                    return handleDrop(message, rest, userId);
 
                 case 'additem': case 'edititem': case 'removeitem':
                 case 'giveitem': case 'takeitem':

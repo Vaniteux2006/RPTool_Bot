@@ -1,7 +1,7 @@
 import { Message, EmbedBuilder } from 'discord.js';
 import { WalletModel, ItemModel } from '../../../tools/models/EconomySchema';
 import {
-    resolveOwnedOc, resolveItem, getOrCreateWallet, removeItemFromWallet,
+    resolveOwnedOc, resolveItem, getOrCreateWallet, findHeldItem, removeItemFromWallet,
     getGuildEconomy, formatMoney, effectivePrice, stripMentionTokens,
 } from '../../../tools/utils/economy';
 import { recordLedger } from '../../../tools/utils/economyEngine';
@@ -35,6 +35,12 @@ export default async function handleSell(message: Message, rest: string[], userI
 
     const item = await resolveItem(guildId, itemName);
     if (!item) {
+        // Pode ser um item PESSOAL que o OC tem — esses não têm valor de mercado.
+        const wallet = await getOrCreateWallet(guildId, oc);
+        const held = findHeldItem(wallet, itemName);
+        if (held?.custom) {
+            return message.reply(`🧸 **${held.name || itemName}** é um item pessoal — não tem valor de mercado, não dá pra vender. (Pra descartar: \`rp!inventory drop "${oc.name}" "${held.name || itemName}"\`.)`);
+        }
         return message.reply(`📭 O item **${itemName}** não existe na loja (não dá pra precificar a venda).`);
     }
 

@@ -43,8 +43,12 @@ class Wallet <<DB_ECONOMY>> {
 }
 
 class WalletItem <<embedded>> {
-  +key : string  <<slug do Item>>
+  +key : string  <<slug>>
   +qty : number
+  .. só em itens PESSOAIS (freeform) ..
+  +name : string
+  +emoji : string
+  +custom : boolean
 }
 
 class Item <<DB_ECONOMY>> {
@@ -104,7 +108,7 @@ class Ledger <<DB_ECONOMY · TTL 30d>> {
 
 Wallet "1" *-- "0..*" WalletItem : items >
 Wallet ..> OC : ocId (ref)
-WalletItem ..> Item : key resolve p/ (guildId)
+WalletItem ..> Item : key resolve p/ (guildId)\n(só itens de loja; pessoais são self-described)
 GuildEconomy "1" *-- "0..*" EconomySnapshot : history >
 Ledger "0..*" --> "1" GuildEconomy : guildId
 Ledger ..> LedgerType

@@ -1,9 +1,10 @@
 import { Message, EmbedBuilder } from 'discord.js';
+import { ItemModel } from '../../../tools/models/EconomySchema';
 import {
-    resolveOwnedOc, resolveItem, removeItemFromWallet, stripMentionTokens,
+    resolveOwnedOc, getOrCreateWallet, findHeldItem, removeItemFromWallet, stripMentionTokens,
 } from '../../../tools/utils/economy';
 
-// rp!inventory use ["Nome"] "item"  → consome 1 unidade do item.
+// rp!inventory use ["Nome"] "item"  → consome 1 unidade (de catálogo OU pessoal).
 export default async function handleUse(message: Message, rest: string[], userId: string) {
     rest = stripMentionTokens(rest);
     // Com 2 tokens: "Nome" "item". Com 1: usa o OC único do autor.
@@ -23,25 +24,40 @@ export default async function handleUse(message: Message, rest: string[], userId
             : '⚠️ Diga qual OC: `rp!inventory use "Nome" "item"` (ou tenha só um OC).');
     }
 
-    const item = await resolveItem(guildId, itemName);
-    if (!item) {
-        return message.reply(`📭 O item **${itemName}** não existe no catálogo deste servidor.`);
-    }
-    if (!item.usable) {
-        return message.reply(`🚫 **${item.name}** não é um item usável.`);
+    // Precisa TER o item na mochila (catálogo ou pessoal).
+    const wallet = await getOrCreateWallet(guildId, oc);
+    const held = findHeldItem(wallet, itemName);
+    if (!held) {
+        return message.reply(`🎒 **${oc.name}** não tem **${itemName}** na mochila.`);
     }
 
-    const ok = await removeItemFromWallet(guildId, oc._id, item.key, 1);
+    let displayName = held.name || held.key;
+    let displayEmoji = held.emoji || '📦';
+    let replyOnUse = '';
+
+    if (!held.custom) {
+        const cat = await ItemModel.findOne({ guildId, key: held.key });
+        if (cat) {
+            displayName = cat.name;
+            displayEmoji = cat.emoji;
+            replyOnUse = cat.replyOnUse;
+            if (!cat.usable) {
+                return message.reply(`🚫 **${cat.name}** não é um item usável.`);
+            }
+        }
+    }
+
+    const ok = await removeItemFromWallet(guildId, oc._id, held.key, 1);
     if (!ok) {
-        return message.reply(`🎒 **${oc.name}** não tem **${item.name}** na mochila.`);
+        return message.reply(`🎒 **${oc.name}** não tem **${displayName}** na mochila.`);
     }
 
     const embed = new EmbedBuilder()
         .setColor(0x9B59B6)
-        .setDescription(`✨ **${oc.name}** usou **${item.emoji} ${item.name}**.`);
+        .setDescription(`✨ **${oc.name}** usou **${displayEmoji} ${displayName}**.`);
 
-    if (item.replyOnUse) {
-        embed.addFields({ name: '​', value: item.replyOnUse.slice(0, 1000) });
+    if (replyOnUse) {
+        embed.addFields({ name: '​', value: replyOnUse.slice(0, 1000) });
     }
 
     return message.reply({ embeds: [embed] });

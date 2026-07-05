@@ -19,8 +19,12 @@ export { economyConnection };
 // isolado por servidor, não da conta Discord)
 // ═══════════════════════════════════════════════════════════════════════════════
 export interface IWalletItem {
-    key: string;   // slug do item no catálogo do servidor
+    key: string;    // slug do item (no catálogo, OU do item pessoal)
     qty: number;
+    // ─ Itens PESSOAIS (freeform, fora da loja) carregam o próprio nome/emoji ─
+    name?: string;  // preenchido só em itens custom (catálogo resolve pelo key)
+    emoji?: string;
+    custom?: boolean;
 }
 
 export interface IWallet extends Document {
@@ -39,8 +43,11 @@ const WalletSchema = new Schema<IWallet>({
     ownerId: { type: String, required: true },
     balance: { type: Number, default: 0, min: 0 },
     items: [{
-        key: { type: String, required: true },
-        qty: { type: Number, required: true, min: 0 },
+        key:    { type: String, required: true },
+        qty:    { type: Number, required: true, min: 0 },
+        name:   { type: String },   // só em itens pessoais (custom)
+        emoji:  { type: String },
+        custom: { type: Boolean },
     }],
     lastActivityAt: { type: Date, default: Date.now },
     createdAt:      { type: Date, default: Date.now },

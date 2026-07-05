@@ -1,10 +1,12 @@
 import { Message, EmbedBuilder } from 'discord.js';
+import { ItemModel } from '../../../tools/models/EconomySchema';
 import {
     resolveOwnedOc, resolveOcInGuild, stripMentionTokens, AMBIGUOUS_MSG,
-    resolveItem, getOrCreateWallet, addItemToWallet, removeItemFromWallet,
+    getOrCreateWallet, findHeldItem, addItemToWallet, removeItemFromWallet,
 } from '../../../tools/utils/economy';
 
 // rp!inventory give "MeuOC" "item" [qtd] "AlvoOC" [@dono]
+// Transfere um item que o OC POSSUI — de catálogo OU pessoal (freeform).
 export default async function handleGive(message: Message, rest: string[], userId: string) {
     rest = stripMentionTokens(rest);
     const fromName = rest[0];
@@ -34,12 +36,26 @@ export default async function handleGive(message: Message, rest: string[], userI
         return message.reply(`🚫 Você não controla nenhum OC chamado **${fromName}**.`);
     }
 
-    const item = await resolveItem(guildId, itemName);
-    if (!item) {
-        return message.reply(`📭 O item **${itemName}** não existe no catálogo deste servidor.`);
+    // O item precisa estar NA MOCHILA do OC de origem (posse), não no catálogo.
+    const fromWallet = await getOrCreateWallet(guildId, fromOc);
+    const held = findHeldItem(fromWallet, itemName);
+    if (!held) {
+        return message.reply(`🎒 **${fromOc.name}** não tem **${itemName}** na mochila.`);
     }
-    if (!item.tradable) {
-        return message.reply(`🔒 **${item.name}** não pode ser transferido.`);
+
+    // Nome/emoji de exibição + regra de "tradable" dependem da origem do item.
+    let displayName = held.name || held.key;
+    let displayEmoji = held.emoji || '📦';
+    if (!held.custom) {
+        // Item de catálogo: respeita a flag `tradable` e usa nome/emoji do catálogo.
+        const cat = await ItemModel.findOne({ guildId, key: held.key });
+        if (cat) {
+            displayName = cat.name;
+            displayEmoji = cat.emoji;
+            if (!cat.tradable) {
+                return message.reply(`🔒 **${cat.name}** não pode ser transferido.`);
+            }
+        }
     }
 
     const toRes = await resolveOcInGuild(message, toName, userId);
@@ -53,18 +69,22 @@ export default async function handleGive(message: Message, rest: string[], userI
     }
 
     // Remoção atômica da origem; se não tiver o bastante, aborta antes de creditar.
-    const removed = await removeItemFromWallet(guildId, fromOc._id, item.key, qty);
+    const removed = await removeItemFromWallet(guildId, fromOc._id, held.key, qty);
     if (!removed) {
-        return message.reply(`🎒 **${fromOc.name}** não tem ${qty}× **${item.name}** pra dar.`);
+        return message.reply(`🎒 **${fromOc.name}** não tem ${qty}× **${displayName}** pra dar.`);
     }
 
+    // Itens pessoais carregam nome/emoji pro destino (o catálogo resolve sozinho).
+    const meta = held.custom
+        ? { name: displayName, emoji: displayEmoji, custom: true as const }
+        : undefined;
     await getOrCreateWallet(guildId, toOc);
-    await addItemToWallet(guildId, toOc._id, item.key, qty);
+    await addItemToWallet(guildId, toOc._id, held.key, qty, meta);
 
     const embed = new EmbedBuilder()
         .setColor(0x2ECC71)
         .setTitle('🎁 Item transferido')
-        .setDescription(`**${fromOc.name}** deu **${qty}× ${item.emoji} ${item.name}** para **${toOc.name}**.`);
+        .setDescription(`**${fromOc.name}** deu **${qty}× ${displayEmoji} ${displayName}** para **${toOc.name}**.`);
 
     return message.reply({ embeds: [embed] });
 }
