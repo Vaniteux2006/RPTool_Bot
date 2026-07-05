@@ -1,15 +1,26 @@
 import { Message, EmbedBuilder } from 'discord.js';
 import { ItemModel } from '../../../tools/models/EconomySchema';
 import {
-    resolveTargetOc, getOrCreateWallet, getGuildEconomy,
+    resolveOcInGuild, explicitMention, getSoleOc, AMBIGUOUS_MSG,
+    getOrCreateWallet, getGuildEconomy,
 } from '../../../tools/utils/economy';
+import { IOC } from '../../../tools/models/OCSchema';
 
 // rp!inventory ["Nome"] [@dono]  → lista a mochila de um OC.
 export default async function handleView(message: Message, nameTokens: string[], userId: string) {
     const first = nameTokens[0] || '';
     const name = first.startsWith('<@') ? '' : first;
 
-    const oc = await resolveTargetOc(message, name, userId);
+    let oc: IOC | null = null;
+    if (name) {
+        const res = await resolveOcInGuild(message, name, userId);
+        if (res.status === 'ambiguous') return message.reply(AMBIGUOUS_MSG);
+        oc = res.status === 'found' ? res.oc : null;
+    } else {
+        const mentioned = explicitMention(message);
+        oc = await getSoleOc(mentioned ? mentioned.id : userId);
+    }
+
     if (!oc) {
         return message.reply(
             "📭 Não achei esse OC. Use `rp!inventory \"Nome\"` (ou tenha só um OC pra omitir o nome).",

@@ -94,23 +94,90 @@ export async function getSoleOc(userId: string): Promise<IOC | null> {
     return OCModel.findOne(query);
 }
 
-// Resolve o OC-alvo de um comando de VISUALIZAÇÃO (aceita @menção pra ver o de outro).
-// Sem nome e com um único OC próprio → usa esse. Retorna null se não achar.
-export async function resolveTargetOc(message: Message, name: string, userId: string): Promise<IOC | null> {
-    const mentioned = message.mentions.users.first();
-    const ownerId = mentioned ? mentioned.id : userId;
-
-    if (name) {
-        const oc = await findOcByName(name, ownerId);
-        if (oc) return oc;
-        // fallback: busca global por nome (qualquer dono) quando não veio menção
-        if (!mentioned) return OCModel.findOne({ name }).collation({ locale: 'pt', strength: 2 });
-        return null;
-    }
-    // sem nome: só faz sentido pro próprio autor e se tiver exatamente um OC
-    if (!mentioned) return getSoleOc(userId);
-    return null;
+// Menção EXPLÍCITA no texto do comando. Ignora o ping automático de reply
+// (message.mentions inclui o autor da mensagem respondida, o que fazia um
+// simples reply mudar o "dono alvo" do comando).
+export function explicitMention(message: Message) {
+    const m = message.mentions.users.first();
+    if (!m) return undefined;
+    const inText = message.content.includes(`<@${m.id}>`) || message.content.includes(`<@!${m.id}>`);
+    return inText ? m : undefined;
 }
+
+// Remove tokens de menção (<@id>) dos argumentos posicionais, pra menção em
+// qualquer posição não deslocar nome/valor/quantidade.
+export function stripMentionTokens(tokens: string[]): string[] {
+    return tokens.filter(t => !/^<@!?\d+>$/.test(t));
+}
+
+// ─── Resolução DETERMINÍSTICA de OC no servidor ───────────────────────────────
+// OCs não têm escopo de guild e nomes colidem (várias "Rem" no bot inteiro).
+// Regras, nesta ordem:
+//   1. @menção explícita → OC daquele dono com esse nome.
+//   2. OC do próprio autor com esse nome.
+//   3. OCs com esse nome cujo dono está NESTE servidor:
+//      exatamente 1 → usa; 2+ → ambíguo (peça @menção); 0 → não achou.
+// NUNCA cai em busca global arbitrária (era a causa do bug do add/view
+// creditarem/consultarem OCs diferentes de mesmo nome).
+export type GuildOcResolution =
+    | { status: 'found'; oc: IOC }
+    | { status: 'ambiguous'; count: number }
+    | { status: 'notfound' };
+
+export async function resolveOcInGuild(message: Message, name: string, userId: string): Promise<GuildOcResolution> {
+    if (!name || !message.guild) return { status: 'notfound' };
+
+    const mentioned = explicitMention(message);
+    if (mentioned) {
+        const oc = await findOcByName(name, mentioned.id);
+        return oc ? { status: 'found', oc } : { status: 'notfound' };
+    }
+
+    const own = await findOcByName(name, userId);
+    if (own) return { status: 'found', oc: own };
+
+    const candidates = await OCModel.find({ name })
+        .collation({ locale: 'pt', strength: 2 })
+        .limit(50);
+    if (!candidates.length) return { status: 'notfound' };
+
+    // Filtra por donos presentes neste servidor.
+    const ownerIds = [...new Set(candidates.flatMap(o => [o.adminId, ...(o.duoIds || [])]))];
+    let present: Set<string>;
+    try {
+        const fetched = await message.guild.members.fetch({ user: ownerIds });
+        present = new Set(fetched.keys());
+    } catch {
+        present = new Set(ownerIds.filter(id => message.guild!.members.cache.has(id)));
+    }
+
+    const inGuild = candidates.filter(o =>
+        present.has(o.adminId) || (o.duoIds || []).some(d => present.has(d)));
+
+    if (inGuild.length === 1) return { status: 'found', oc: inGuild[0] };
+    if (inGuild.length > 1) return { status: 'ambiguous', count: inGuild.length };
+    return { status: 'notfound' };
+}
+
+// Variante pra STAFF: se a resolução normal falhar, procura entre OCs que já
+// TÊM carteira neste servidor (permite resetar/ajustar carteira órfã de um
+// dono que saiu do servidor).
+export async function resolveOcForAdmin(message: Message, name: string, userId: string): Promise<GuildOcResolution> {
+    const primary = await resolveOcInGuild(message, name, userId);
+    if (primary.status !== 'notfound') return primary;
+
+    const wallets = await WalletModel.find({ guildId: message.guild!.id }, { ocId: 1 }).limit(500);
+    if (!wallets.length) return { status: 'notfound' };
+
+    const holders = await OCModel.find({ _id: { $in: wallets.map(w => w.ocId) }, name })
+        .collation({ locale: 'pt', strength: 2 });
+
+    if (holders.length === 1) return { status: 'found', oc: holders[0] };
+    if (holders.length > 1) return { status: 'ambiguous', count: holders.length };
+    return { status: 'notfound' };
+}
+
+export const AMBIGUOUS_MSG = '⚠️ Há **vários OCs com esse nome** neste servidor. Mencione o dono pra desambiguar, ex: `... "Nome" @dono`.';
 
 // Resolve o OC que o autor CONTROLA (pra ações: pagar, usar, dar item...).
 // Exige ownership. Sem nome e com OC único → usa esse.

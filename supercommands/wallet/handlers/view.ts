@@ -1,8 +1,10 @@
 import { Message, EmbedBuilder } from 'discord.js';
 import {
-    resolveTargetOc, getOrCreateWallet, getGuildEconomy, formatMoney,
+    resolveOcInGuild, explicitMention, getSoleOc, AMBIGUOUS_MSG,
+    getOrCreateWallet, getGuildEconomy, formatMoney,
 } from '../../../tools/utils/economy';
 import { coinToUsd } from '../../../tools/utils/economyEngine';
+import { IOC } from '../../../tools/models/OCSchema';
 
 // rp!wallet ["Nome"] [@dono]  → mostra o saldo (e itens) de um OC.
 export default async function handleView(message: Message, nameTokens: string[], userId: string) {
@@ -10,7 +12,17 @@ export default async function handleView(message: Message, nameTokens: string[],
     const first = nameTokens[0] || '';
     const name = first.startsWith('<@') ? '' : first;
 
-    const oc = await resolveTargetOc(message, name, userId);
+    let oc: IOC | null = null;
+    if (name) {
+        const res = await resolveOcInGuild(message, name, userId);
+        if (res.status === 'ambiguous') return message.reply(AMBIGUOUS_MSG);
+        oc = res.status === 'found' ? res.oc : null;
+    } else {
+        // Sem nome: OC único do mencionado (se houver menção explícita) ou do autor.
+        const mentioned = explicitMention(message);
+        oc = await getSoleOc(mentioned ? mentioned.id : userId);
+    }
+
     if (!oc) {
         return message.reply(
             "📭 Não achei esse OC. Use `rp!wallet \"Nome\"` (ou tenha só um OC pra poder omitir o nome).",

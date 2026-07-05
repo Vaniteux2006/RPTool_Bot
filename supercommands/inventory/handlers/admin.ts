@@ -1,16 +1,10 @@
 import { Message, EmbedBuilder } from 'discord.js';
-import { OCModel, IOC } from '../../../tools/models/OCSchema';
 import { ItemModel } from '../../../tools/models/EconomySchema';
 import {
-    isStaff, slugify, parseAmount, resolveItem, findOcByName,
+    isStaff, slugify, parseAmount, resolveItem,
+    resolveOcForAdmin, stripMentionTokens, AMBIGUOUS_MSG,
     getOrCreateWallet, addItemToWallet, removeItemFromWallet,
 } from '../../../tools/utils/economy';
-
-async function resolveAnyOc(message: Message, name: string): Promise<IOC | null> {
-    const mentioned = message.mentions.users.first();
-    if (mentioned) return findOcByName(name, mentioned.id);
-    return OCModel.findOne({ name }).collation({ locale: 'pt', strength: 2 });
-}
 
 // ── additem "Nome" <preço> [emoji] ["descrição"] ──────────────────────────────
 async function addItem(message: Message, rest: string[]) {
@@ -93,7 +87,7 @@ async function removeItem(message: Message, rest: string[]) {
 }
 
 // ── giveitem/takeitem "OC" "item" [qtd] [@dono] ───────────────────────────────
-async function transferRaw(message: Message, rest: string[], mode: 'give' | 'take') {
+async function transferRaw(message: Message, rest: string[], mode: 'give' | 'take', userId: string) {
     const ocName = rest[0];
     const itemName = rest[1];
     let qty = 1;
@@ -104,8 +98,10 @@ async function transferRaw(message: Message, rest: string[], mode: 'give' | 'tak
     }
 
     const guildId = message.guild!.id;
-    const oc = await resolveAnyOc(message, ocName);
-    if (!oc) return message.reply(`📭 OC **${ocName}** não encontrado.`);
+    const res = await resolveOcForAdmin(message, ocName, userId);
+    if (res.status === 'ambiguous') return message.reply(AMBIGUOUS_MSG);
+    if (res.status === 'notfound') return message.reply(`📭 OC **${ocName}** não encontrado neste servidor. (Se for de outra pessoa, mencione o dono.)`);
+    const oc = res.oc;
 
     const item = await resolveItem(guildId, itemName);
     if (!item) return message.reply(`📭 Item **${itemName}** não existe no catálogo.`);
@@ -122,16 +118,19 @@ async function transferRaw(message: Message, rest: string[], mode: 'give' | 'tak
 }
 
 // ─── Roteador administrativo ──────────────────────────────────────────────────
-export default async function handleAdmin(message: Message, action: string, rest: string[], _userId: string) {
+export default async function handleAdmin(message: Message, action: string, rest: string[], userId: string) {
     if (!isStaff(message)) {
         return message.reply('🚫 Só a staff (permissão **Gerenciar Servidor**) pode gerenciar o catálogo/itens.');
     }
+
+    // Menções não são argumentos posicionais (só desambiguam o dono).
+    rest = stripMentionTokens(rest);
 
     switch (action) {
         case 'additem':    return addItem(message, rest);
         case 'edititem':   return editItem(message, rest);
         case 'removeitem': return removeItem(message, rest);
-        case 'giveitem':   return transferRaw(message, rest, 'give');
-        case 'takeitem':   return transferRaw(message, rest, 'take');
+        case 'giveitem':   return transferRaw(message, rest, 'give', userId);
+        case 'takeitem':   return transferRaw(message, rest, 'take', userId);
     }
 }

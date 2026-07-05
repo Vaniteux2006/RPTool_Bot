@@ -240,6 +240,8 @@ Carteira, mochila e loja **por personagem (OC)**, isoladas por servidor. Inspira
 - Resolução de OC por nome (via `extractName`/`tokenize`, respeitando aspas). Ações que gastam/movem exigem ownership; visualização aceita `@menção` pra ver o de outra pessoa.
 - Permissões de staff = `ManageGuild` (`isStaff`).
 
+**Resolução determinística de nome (`resolveOcInGuild`)** — OCs **não** têm escopo de guild e nomes colidem no bot inteiro (várias "Rem"). Todo comando que aceita um nome de OC alheio resolve nesta ordem: **1)** `@menção` explícita no texto (ping automático de reply é ignorado — `explicitMention`) → OC daquele dono; **2)** OC do próprio autor; **3)** OCs cujo dono está **neste servidor** — exatamente 1 usa, 2+ responde "ambíguo, mencione o dono", 0 não achou. **Nunca** há busca global arbitrária (era o bug em que `add` creditava uma "Rem" e o `view` lia outra). Staff tem um fallback extra (`resolveOcForAdmin`): OCs com carteira já existente neste servidor — permite `reset`/ajuste de carteira órfã cujo dono saiu. Menções também são removidas dos argumentos posicionais (`stripMentionTokens`) pra não deslocar nome/valor/qtd.
+
 ### 10.2 Modelos (`tools/models/EconomySchema.ts`, conexão `DB_ECONOMY`)
 | Model | Chave | Papel |
 |---|---|---|

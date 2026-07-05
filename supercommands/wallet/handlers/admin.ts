@@ -1,25 +1,20 @@
 import { Message, EmbedBuilder } from 'discord.js';
-import { OCModel, IOC } from '../../../tools/models/OCSchema';
 import { WalletModel, GuildEconomyModel } from '../../../tools/models/EconomySchema';
 import {
-    isStaff, findOcByName, getOrCreateWallet,
-    getGuildEconomy, formatMoney, parseAmount,
+    isStaff, resolveOcForAdmin, stripMentionTokens, AMBIGUOUS_MSG,
+    getOrCreateWallet, getGuildEconomy, formatMoney, parseAmount,
 } from '../../../tools/utils/economy';
 import { recordLedger } from '../../../tools/utils/economyEngine';
 
-// Resolve qualquer OC do servidor (staff mexe em carteira de qualquer um).
-async function resolveAnyOc(message: Message, name: string): Promise<IOC | null> {
-    const mentioned = message.mentions.users.first();
-    if (mentioned) return findOcByName(name, mentioned.id);
-    return OCModel.findOne({ name }).collation({ locale: 'pt', strength: 2 });
-}
-
 // Comandos administrativos (exigem ManageGuild):
 //   add/remove/set "Nome" <valor> | reset "Nome" | setcurrency <nome> <símbolo>
-export default async function handleAdmin(message: Message, action: string, rest: string[], _userId: string) {
+export default async function handleAdmin(message: Message, action: string, rest: string[], userId: string) {
     if (!isStaff(message)) {
         return message.reply('🚫 Só a staff (permissão **Gerenciar Servidor**) pode usar comandos administrativos da economia.');
     }
+
+    // Menções não são argumentos posicionais (só desambiguam o dono).
+    rest = stripMentionTokens(rest);
 
     const guildId = message.guild!.id;
     const econ = await getGuildEconomy(guildId);
@@ -43,10 +38,12 @@ export default async function handleAdmin(message: Message, action: string, rest
         return message.reply('⚠️ Informe o OC. Ex: `rp!wallet add "Ana" 1000`.');
     }
 
-    const oc = await resolveAnyOc(message, name);
-    if (!oc) {
-        return message.reply(`📭 Não achei o OC **${name}** neste servidor.`);
+    const res = await resolveOcForAdmin(message, name, userId);
+    if (res.status === 'ambiguous') return message.reply(AMBIGUOUS_MSG);
+    if (res.status === 'notfound') {
+        return message.reply(`📭 Não achei o OC **${name}** neste servidor. (Se for de outra pessoa, mencione o dono: \`rp!wallet ${action} "${name}" <valor> @dono\`.)`);
     }
+    const oc = res.oc;
 
     const wallet = await getOrCreateWallet(guildId, oc);
 

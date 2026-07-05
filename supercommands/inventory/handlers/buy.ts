@@ -2,13 +2,13 @@ import { Message, EmbedBuilder } from 'discord.js';
 import { WalletModel, ItemModel } from '../../../tools/models/EconomySchema';
 import {
     resolveOwnedOc, resolveItem, getOrCreateWallet, addItemToWallet,
-    getGuildEconomy, formatMoney, effectivePrice,
+    getGuildEconomy, formatMoney, effectivePrice, stripMentionTokens,
 } from '../../../tools/utils/economy';
 import { recordLedger } from '../../../tools/utils/economyEngine';
 
 // rp!inventory buy ["Nome"] "item" [qtd]
 export default async function handleBuy(message: Message, rest: string[], userId: string) {
-    const tokens = [...rest];
+    const tokens = stripMentionTokens(rest);
 
     // qtd opcional no final
     let qty = 1;

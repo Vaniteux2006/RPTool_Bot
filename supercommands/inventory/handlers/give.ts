@@ -1,12 +1,12 @@
 import { Message, EmbedBuilder } from 'discord.js';
-import { OCModel } from '../../../tools/models/OCSchema';
 import {
-    resolveOwnedOc, findOcByName, resolveItem,
-    getOrCreateWallet, addItemToWallet, removeItemFromWallet,
+    resolveOwnedOc, resolveOcInGuild, stripMentionTokens, AMBIGUOUS_MSG,
+    resolveItem, getOrCreateWallet, addItemToWallet, removeItemFromWallet,
 } from '../../../tools/utils/economy';
 
 // rp!inventory give "MeuOC" "item" [qtd] "AlvoOC" [@dono]
 export default async function handleGive(message: Message, rest: string[], userId: string) {
+    rest = stripMentionTokens(rest);
     const fromName = rest[0];
     const itemName = rest[1];
 
@@ -42,15 +42,12 @@ export default async function handleGive(message: Message, rest: string[], userI
         return message.reply(`🔒 **${item.name}** não pode ser transferido.`);
     }
 
-    const mentioned = message.mentions.users.first();
-    const toOc = mentioned
-        ? await findOcByName(toName, mentioned.id)
-        : (await findOcByName(toName, userId))
-            ?? await OCModel.findOne({ name: toName }).collation({ locale: 'pt', strength: 2 });
-
-    if (!toOc) {
-        return message.reply(`📭 Não achei o OC de destino **${toName}**.`);
+    const toRes = await resolveOcInGuild(message, toName, userId);
+    if (toRes.status === 'ambiguous') return message.reply(AMBIGUOUS_MSG);
+    if (toRes.status === 'notfound') {
+        return message.reply(`📭 Não achei o OC de destino **${toName}** neste servidor. (Se o dono for outra pessoa, mencione: \`... "${toName}" @dono\`.)`);
     }
+    const toOc = toRes.oc;
     if (String(fromOc._id) === String(toOc._id)) {
         return message.reply('🔁 Origem e destino são o mesmo OC.');
     }

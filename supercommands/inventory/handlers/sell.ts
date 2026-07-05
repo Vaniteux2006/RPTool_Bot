@@ -2,7 +2,7 @@ import { Message, EmbedBuilder } from 'discord.js';
 import { WalletModel, ItemModel } from '../../../tools/models/EconomySchema';
 import {
     resolveOwnedOc, resolveItem, getOrCreateWallet, removeItemFromWallet,
-    getGuildEconomy, formatMoney, effectivePrice,
+    getGuildEconomy, formatMoney, effectivePrice, stripMentionTokens,
 } from '../../../tools/utils/economy';
 import { recordLedger } from '../../../tools/utils/economyEngine';
 
@@ -10,7 +10,7 @@ const SELL_RATE = 0.5; // recebe 50% do preço de mercado ao vender de volta
 
 // rp!inventory sell ["Nome"] "item" [qtd]
 export default async function handleSell(message: Message, rest: string[], userId: string) {
-    const tokens = [...rest];
+    const tokens = stripMentionTokens(rest);
 
     let qty = 1;
     if (tokens.length && /^\d+$/.test(tokens[tokens.length - 1])) {

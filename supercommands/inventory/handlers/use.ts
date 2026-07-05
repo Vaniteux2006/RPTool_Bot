@@ -1,10 +1,11 @@
 import { Message, EmbedBuilder } from 'discord.js';
 import {
-    resolveOwnedOc, resolveItem, removeItemFromWallet,
+    resolveOwnedOc, resolveItem, removeItemFromWallet, stripMentionTokens,
 } from '../../../tools/utils/economy';
 
 // rp!inventory use ["Nome"] "item"  → consome 1 unidade do item.
 export default async function handleUse(message: Message, rest: string[], userId: string) {
+    rest = stripMentionTokens(rest);
     // Com 2 tokens: "Nome" "item". Com 1: usa o OC único do autor.
     const name = rest.length >= 2 ? rest[0] : '';
     const itemName = rest.length >= 2 ? rest[1] : rest[0];

@@ -1,16 +1,15 @@
 import { Message, EmbedBuilder } from 'discord.js';
-import { OCModel } from '../../../tools/models/OCSchema';
 import { WalletModel } from '../../../tools/models/EconomySchema';
 import {
-    resolveOwnedOc, findOcByName, getOrCreateWallet,
-    getGuildEconomy, formatMoney, parseAmount,
+    resolveOwnedOc, resolveOcInGuild, stripMentionTokens, AMBIGUOUS_MSG,
+    getOrCreateWallet, getGuildEconomy, formatMoney, parseAmount,
 } from '../../../tools/utils/economy';
 import { recordLedger } from '../../../tools/utils/economyEngine';
 
 // rp!wallet pay "MeuOC" <valor> "AlvoOC" [@dono]
 // Transferência atômica entre carteiras. O OC de origem tem que ser SEU.
 export default async function handlePay(message: Message, rest: string[], userId: string) {
-    const [fromName, amountRaw, toName] = rest;
+    const [fromName, amountRaw, toName] = stripMentionTokens(rest);
 
     if (!fromName || !amountRaw || !toName) {
         return message.reply('⚠️ Uso: `rp!wallet pay "MeuOC" <valor> "AlvoOC"` (mencione o dono se o alvo for de outra pessoa).');
@@ -29,17 +28,14 @@ export default async function handlePay(message: Message, rest: string[], userId
         return message.reply(`🚫 Você não controla nenhum OC chamado **${fromName}**.`);
     }
 
-    // Destino: se houver @menção, procura entre os OCs dela; senão entre os seus,
-    // e por fim faz uma busca global pelo nome no servidor.
-    const mentioned = message.mentions.users.first();
-    let toOc = mentioned
-        ? await findOcByName(toName, mentioned.id)
-        : (await findOcByName(toName, userId))
-            ?? await OCModel.findOne({ name: toName }).collation({ locale: 'pt', strength: 2 });
-
-    if (!toOc) {
-        return message.reply(`📭 Não achei o OC de destino **${toName}**.`);
+    // Destino: resolução determinística no servidor (menção explícita → seus →
+    // dono presente no servidor; ambíguo pede menção). Nunca busca global.
+    const toRes = await resolveOcInGuild(message, toName, userId);
+    if (toRes.status === 'ambiguous') return message.reply(AMBIGUOUS_MSG);
+    if (toRes.status === 'notfound') {
+        return message.reply(`📭 Não achei o OC de destino **${toName}** neste servidor. (Se o dono for outra pessoa, mencione: \`... "${toName}" @dono\`.)`);
     }
+    const toOc = toRes.oc;
 
     if (String(fromOc._id) === String(toOc._id)) {
         return message.reply('🔁 Origem e destino são o mesmo OC.');
