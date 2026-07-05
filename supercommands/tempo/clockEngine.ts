@@ -127,6 +127,13 @@ export async function tickClocks(client: Client): Promise<void> {
 export async function startClockEngine(client: Client): Promise<void> {
     if (engineRunning) return;
     engineRunning = true;
+    // Migração de índices: derruba o unique global antigo em "name" e cria o
+    // composto guildId+name (nomes de relógio são únicos por servidor).
+    try {
+        await ClockModel.syncIndexes();
+    } catch (e) {
+        console.warn('[Clock Engine] Falha ao sincronizar índices (seguindo mesmo assim):', e);
+    }
     console.log('🕰️ [Clock Engine] Motor de relógios iniciado.');
     await tickClocks(client);
     setInterval(() => tickClocks(client), 30_000);

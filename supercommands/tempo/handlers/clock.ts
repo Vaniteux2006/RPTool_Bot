@@ -1,9 +1,8 @@
 // RPTool/supercommands/tempo/handlers/clock.ts
 // CRUD completo dos relógios RP
 import { Message, TextChannel } from 'discord.js';
-import { ClockModel } from '../../../tools/models/ClockSchema';
+import { ClockModel, IClock } from '../../../tools/models/ClockSchema';
 import { formatClockMessage, computeRPGTime } from '../clockEngine';
-import { extractArgs } from '../../../tools/utils/textUtils';
 
 // ─── Parseia "1m", "2h", "3d" em milissegundos ───────────────────────────────
 export function parseTimeStr(str: string): number {
@@ -28,6 +27,33 @@ function parseVelocityExpr(tokens: string[]): number {
     return from === 0 ? 1 : to / from;
 }
 
+// ─── Busca relógio por nome exato (case-insensitive), escopado ao servidor ───
+export async function findClockByName(guildId: string, name: string): Promise<IClock | null> {
+    const clocks = await ClockModel.find({ guildId });
+    const target = name.trim().toLowerCase();
+    return clocks.find((c: IClock) => c.name.toLowerCase() === target) ?? null;
+}
+
+// ─── Resolve relógio cujo nome pode ter espaços ───────────────────────────────
+// Nomes com espaço ("São Paulo") não podem ser lidos de args[1]: compara os
+// tokens com os nomes reais no banco e devolve o relógio + os args restantes.
+// Se mais de um nome casar, o mais longo vence.
+export async function resolveClock(guildId: string, tokens: string[]): Promise<{ clock: IClock; rest: string[] } | null> {
+    const clocks = await ClockModel.find({ guildId });
+    let best: { clock: IClock; used: number } | null = null;
+
+    for (const clock of clocks as IClock[]) {
+        const nameTokens = clock.name.split(/\s+/);
+        if (nameTokens.length === 0 || nameTokens.length > tokens.length) continue;
+        const candidate = tokens.slice(0, nameTokens.length).join(' ').toLowerCase();
+        if (candidate === clock.name.toLowerCase() && (!best || nameTokens.length > best.used)) {
+            best = { clock, used: nameTokens.length };
+        }
+    }
+
+    return best ? { clock: best.clock, rest: tokens.slice(best.used) } : null;
+}
+
 // ─── rp!tempo #canal [Nome] ────────────────────────────────────────────────────
 // Cria relógio simples com hora real
 export async function handleCreate(message: Message, args: string[]) {
@@ -41,14 +67,21 @@ export async function handleCreate(message: Message, args: string[]) {
     const ch   = message.guild?.channels.cache.get(cid) as TextChannel | undefined;
     if (!ch) return message.reply('❌ Canal não encontrado neste servidor.');
 
-    const name = args[1] ?? `AUTO_${cid}`;
+    // Nome pode ter espaços: tudo depois do #canal é o nome
+    let name = args.slice(1).join(' ').trim();
+    // Usuários copiam o "[Nome]" da ajuda ao pé da letra — remove colchetes externos
+    if (name.startsWith('[') && name.endsWith(']')) name = name.slice(1, -1).trim();
+    if (!name) name = `AUTO_${cid}`;
 
     if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageChannels')) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para criar relógios.');
     }
 
-    // Remove anterior com mesmo nome ou mesmo canal AUTO_
-    await ClockModel.deleteOne({ $or: [{ name }, { name: `AUTO_${cid}` }] });
+    // Remove anterior com mesmo nome ou o AUTO_ do mesmo canal — SEMPRE escopado
+    // ao servidor, senão apagaria relógio homônimo de outro servidor
+    const previous = await findClockByName(message.guild!.id, name);
+    if (previous) await ClockModel.deleteOne({ _id: previous._id });
+    await ClockModel.deleteOne({ guildId: message.guild!.id, name: `AUTO_${cid}` });
 
     const clockMsg  = await ch.send('⏳ Iniciando relógio...');
     const now       = Date.now();
@@ -91,7 +124,16 @@ export async function handleSet(message: Message, args: string[]) {
         timeStr  = args[chanIdx + 2] ?? '';
         modsStart = chanIdx + 3;
     } else {
-        name = args[1] ?? ''; dateStr = args[2] ?? ''; timeStr = args[3] ?? ''; modsStart = 4;
+        // Sem #canal: o nome vai até o token de data (DD/MM/AAAA)
+        const dateIdx = args.findIndex((a, i) => i >= 2 && /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(a));
+        if (dateIdx === -1) {
+            name = args[1] ?? ''; dateStr = args[2] ?? ''; timeStr = args[3] ?? ''; modsStart = 4;
+        } else {
+            name      = args.slice(1, dateIdx).join(' ');
+            dateStr   = args[dateIdx];
+            timeStr   = args[dateIdx + 1] ?? '';
+            modsStart = dateIdx + 2;
+        }
     }
 
     if (!name || !dateStr || !timeStr) {
@@ -120,9 +162,9 @@ export async function handleSet(message: Message, args: string[]) {
     const velocity = plusIdx  !== -1 ? parseVelocityExpr(mods.slice(plusIdx  + 1, plusIdx  + 4)) : 1;
     const dilation = slashIdx !== -1 ? parseVelocityExpr(mods.slice(slashIdx + 1, slashIdx + 4)) : 1;
 
-    // Preserva geo se já existia
-    const old = await ClockModel.findOne({ name });
-    await ClockModel.deleteOne({ name });
+    // Preserva geo se já existia (busca escopada ao servidor)
+    const old = await findClockByName(message.guild!.id, name);
+    if (old) await ClockModel.deleteOne({ _id: old._id });
 
     const clockMsg = await targetCh.send('⏳ Configurando relógio...');
     const now      = Date.now();
@@ -152,18 +194,22 @@ export async function handleSet(message: Message, args: string[]) {
 // ─── rp!tempo skip <Nome> <Quantidade> ────────────────────────────────────────
 // Avança ou recua o tempo RP de um relógio
 export async function handleSkip(message: Message, args: string[]) {
-    const name   = args[1];
-    const rawAmt = args[2];
-
-    if (!name || !rawAmt) {
+    if (args.length < 3) {
         return message.reply('⚠️ **Uso:** `rp!tempo skip <Nome> <Tempo>`\nEx: `rp!tempo skip Seattle 2h`');
     }
 
+    // O último arg é o tempo; o nome (pode ter espaços) é resolvido contra o banco
+    const resolved = await resolveClock(message.guild!.id, args.slice(1));
+    if (!resolved || resolved.rest.length !== 1) {
+        return message.reply(`❌ Relógio **${args.slice(1, -1).join(' ')}** não encontrado neste servidor.\nUse \`rp!tempo list\` para ver os nomes.`);
+    }
+
+    const { clock, rest } = resolved;
+    const rawAmt = rest[0];
+    const name   = clock.name;
+
     const amount = parseTimeStr(rawAmt);
     if (amount === 0) return message.reply('❌ Tempo inválido. Use `Xm`, `Xh` ou `Xd`.');
-
-    const clock = await ClockModel.findOne({ name, guildId: message.guild!.id });
-    if (!clock) return message.reply(`❌ Relógio **${name}** não encontrado neste servidor.`);
 
     const now     = Date.now();
     const current = clock.anchorRPG + (now - clock.anchorReal) * clock.velocity;
@@ -179,10 +225,10 @@ export async function handleSkip(message: Message, args: string[]) {
 
 // ─── rp!tempo pause <Nome> / rp!tempo resume <Nome> ──────────────────────────
 export async function handlePause(message: Message, args: string[], pause: boolean) {
-    const name = args[1];
+    const name = args.slice(1).join(' ');
     if (!name) return message.reply(`⚠️ **Uso:** \`rp!tempo ${pause ? 'pause' : 'resume'} <Nome>\``);
 
-    const clock = await ClockModel.findOne({ name, guildId: message.guild!.id });
+    const clock = await findClockByName(message.guild!.id, name);
     if (!clock) return message.reply(`❌ Relógio **${name}** não encontrado.`);
 
     if (pause) {
@@ -203,17 +249,18 @@ export async function handlePause(message: Message, args: string[], pause: boole
 
 // ─── rp!tempo delete <Nome> ────────────────────────────────────────────────────
 export async function handleDelete(message: Message, args: string[]) {
-    const name = args[1];
+    const name = args.slice(1).join(' ');
     if (!name) return message.reply('⚠️ **Uso:** `rp!tempo delete <Nome>`');
 
     if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageChannels')) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para deletar relógios.');
     }
 
-    const res = await ClockModel.deleteOne({ name, guildId: message.guild!.id });
-    if (res.deletedCount === 0) return message.reply(`❌ Relógio **${name}** não encontrado.`);
+    const clock = await findClockByName(message.guild!.id, name);
+    if (!clock) return message.reply(`❌ Relógio **${name}** não encontrado.`);
 
-    return message.reply(`🗑️ Relógio **${name}** deletado.`);
+    await ClockModel.deleteOne({ _id: clock._id });
+    return message.reply(`🗑️ Relógio **${clock.name}** deletado.`);
 }
 
 // ─── rp!tempo list ────────────────────────────────────────────────────────────
@@ -238,10 +285,10 @@ export async function handleList(message: Message) {
 
 // ─── rp!tempo info <Nome> ────────────────────────────────────────────────────
 export async function handleInfo(message: Message, args: string[]) {
-    const name = args[1];
+    const name = args.slice(1).join(' ');
     if (!name) return message.reply('⚠️ **Uso:** `rp!tempo info <Nome>`');
 
-    const clock = await ClockModel.findOne({ name, guildId: message.guild!.id });
+    const clock = await findClockByName(message.guild!.id, name);
     if (!clock) return message.reply(`❌ Relógio **${name}** não encontrado.`);
 
     const rpg      = computeRPGTime(clock);

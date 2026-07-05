@@ -11,7 +11,7 @@ import {
     STANDARD_WEATHERS,
 } from '../weatherUtils';
 import { computeRPGTime } from '../../tempo/clockEngine';
-import { extractArgs } from '../../../tools/utils/textUtils';
+import { resolveClock } from '../../tempo/handlers/clock';
 
 // ─── rp!clima <Local> ────────────────────────────────────────────────────────
 // Consulta clima atual (tempo real) em qualquer lugar
@@ -74,10 +74,7 @@ export async function handleRPQuery(message: Message, channelId: string) {
 // ─── rp!clima sync <Nome> <Local> ────────────────────────────────────────────
 // Vincula um local geográfico a um relógio (habilita clima automático)
 export async function handleSync(message: Message, args: string[]) {
-    const name  = args[1];
-    const query = args.slice(2).join(' ');
-
-    if (!name || !query) {
+    if (args.length < 3) {
         return message.reply(
             '⚠️ **Uso:** `rp!clima sync <Nome do Relógio> <Local>`\n' +
             'Ex: `rp!clima sync Seattle Seattle, USA`',
@@ -88,12 +85,24 @@ export async function handleSync(message: Message, args: string[]) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para sincronizar o clima.');
     }
 
+    // Nome do relógio pode ter espaços: resolve contra os nomes reais no banco
+    const resolved = await resolveClock(message.guild!.id, args.slice(1));
+    if (!resolved || resolved.rest.length === 0) {
+        return message.reply(
+            `❌ Não achei um relógio no começo de **${args.slice(1).join(' ')}**.\n` +
+            'Use `rp!tempo list` para ver os nomes exatos (o local vem depois do nome).',
+        );
+    }
+
+    const { clock, rest } = resolved;
+    const query = rest.join(' ');
+
     const waitMsg = await message.reply('🔍 Buscando coordenadas...');
     const geo     = await getCoords(query);
     if (!geo) return waitMsg.edit(`❌ Local não encontrado: **${query}**`);
 
-    const res = await ClockModel.updateOne(
-        { name, guildId: message.guild!.id },
+    await ClockModel.updateOne(
+        { _id: clock._id },
         {
             latitude:      geo.lat,
             longitude:     geo.lon,
@@ -102,10 +111,8 @@ export async function handleSync(message: Message, args: string[]) {
         },
     );
 
-    if (res.matchedCount === 0) return waitMsg.edit(`❌ Relógio **${name}** não encontrado neste servidor.`);
-
     return waitMsg.edit(
-        `🌍 Relógio **${name}** sincronizado com **${geo.name}${geo.country ? `, ${geo.country}` : ''}**\n` +
+        `🌍 Relógio **${clock.name}** sincronizado com **${geo.name}${geo.country ? `, ${geo.country}` : ''}**\n` +
         `📡 Coordenadas: \`${geo.lat.toFixed(4)}, ${geo.lon.toFixed(4)}\`\n` +
         `O clima agora será buscado automaticamente com base na data RP.`,
     );
@@ -115,10 +122,7 @@ export async function handleSync(message: Message, args: string[]) {
 // Força uma condição climática em um relógio (override manual)
 // Use "null" ou "auto" para voltar ao automático
 export async function handleForce(message: Message, args: string[]) {
-    const name      = args[1];
-    const condition = args.slice(2).join(' ');
-
-    if (!name || !condition) {
+    if (args.length < 3) {
         return message.reply(
             '⚠️ **Uso:** `rp!clima force <Nome do Relógio> <Condição>`\n' +
             'Ex: `rp!clima force Seattle Tempestade ⚡`\n' +
@@ -131,15 +135,26 @@ export async function handleForce(message: Message, args: string[]) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para forçar o clima.');
     }
 
+    // Nome do relógio pode ter espaços: resolve contra os nomes reais no banco
+    const resolved = await resolveClock(message.guild!.id, args.slice(1));
+    if (!resolved || resolved.rest.length === 0) {
+        return message.reply(
+            `❌ Não achei um relógio no começo de **${args.slice(1).join(' ')}**.\n` +
+            'Use `rp!tempo list` para ver os nomes exatos (a condição vem depois do nome).',
+        );
+    }
+
+    const { clock, rest } = resolved;
+    const condition = rest.join(' ');
+    const name      = clock.name;
+
     const isReset = ['null', 'auto', 'automático', '🚫', 'reset'].includes(condition.toLowerCase());
     const val     = isReset ? null : condition;
 
-    const res = await ClockModel.updateOne(
-        { name, guildId: message.guild!.id },
+    await ClockModel.updateOne(
+        { _id: clock._id },
         { forcedWeather: val },
     );
-
-    if (res.matchedCount === 0) return message.reply(`❌ Relógio **${name}** não encontrado.`);
 
     if (isReset) {
         return message.reply(`🔄 Clima de **${name}** voltou ao **automático**.`);

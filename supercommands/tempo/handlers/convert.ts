@@ -1,8 +1,7 @@
 // RPTool/supercommands/tempo/handlers/convert.ts
 // Conversão de tempo: IRL ↔ RP e contagem de mensagens → tempo RP
 import { Message } from 'discord.js';
-import { ClockModel } from '../../../tools/models/ClockSchema';
-import { parseTimeStr } from './clock';
+import { parseTimeStr, resolveClock } from './clock';
 
 // ─── rp!tempo conv <Nome> <Xm -> Yh> ─────────────────────────────────────────
 // Exibe quanto tempo RP corresponde a uma quantidade de tempo real,
@@ -40,24 +39,25 @@ export async function handleConvert(message: Message, args: string[]) {
         );
     }
 
-    // Com relógio
-    const name  = args[1];
-    const input = args[2];
-
-    if (!name || !input) {
+    // Com relógio: o último arg é o tempo, o resto é o nome (pode ter espaços)
+    if (args.length < 3) {
         return message.reply('⚠️ **Uso:** `rp!tempo conv <Nome do Relógio> <Tempo Real>`\nEx: `rp!tempo conv Seattle 30m`');
     }
 
-    const clock = await ClockModel.findOne({ name, guildId: message.guild!.id });
-    if (!clock) return message.reply(`❌ Relógio **${name}** não encontrado.`);
+    const resolved = await resolveClock(message.guild!.id, args.slice(1));
+    if (!resolved || resolved.rest.length !== 1) {
+        return message.reply(`❌ Relógio **${args.slice(1, -1).join(' ')}** não encontrado.\nUse \`rp!tempo list\` para ver os nomes.`);
+    }
 
-    const realMs = parseTimeStr(input);
+    const { clock, rest } = resolved;
+
+    const realMs = parseTimeStr(rest[0]);
     if (!realMs) return message.reply('❌ Tempo inválido. Use `Xm`, `Xh` ou `Xd`.');
 
     const rpMs = realMs * clock.velocity;
 
     return message.reply(
-        `⏱️ **${name}** — Conversão:\n` +
+        `⏱️ **${clock.name}** — Conversão:\n` +
         `${formatDuration(realMs)} real = **${formatDuration(rpMs)} RP**\n` +
         `*(Velocidade atual: ${clock.velocity}x)*`,
     );
@@ -67,26 +67,32 @@ export async function handleConvert(message: Message, args: string[]) {
 // Calcula quanto tempo RP passa em um canal a cada N mensagens
 // Ex: rp!tempo msg Seattle 1 msg por 5m   → 1 mensagem = 5 minutos RP
 export async function handleMsgRate(message: Message, args: string[]) {
-    // Argumentos esperados:
-    //   args[1] = nome do relógio
-    //   args[2] = número de mensagens
-    //   args[3] = "msg" ou "mensagens" (opcional)
-    //   args[4] = "por" ou "->" (opcional)
-    //   args[5] = duração RP por mensagem
+    // Argumentos esperados (após o nome, que pode ter espaços):
+    //   <N mensagens> ["msg"|"mensagens"] ["por"|"->"] <duração RP>
 
-    const name     = args[1];
-    const countStr = args[2];
-    const durStr   = args[args.length - 1]; // pega sempre o último argumento como duração
-
-    if (!name || !countStr || !durStr || countStr === durStr) {
+    if (args.length < 3) {
         return message.reply(
             '⚠️ **Uso:** `rp!tempo msg <Nome> <N> <Tempo RP por mensagem>`\n' +
             'Ex: `rp!tempo msg Seattle 1 5m` — cada mensagem no canal = 5 min RP',
         );
     }
 
-    const clock = await ClockModel.findOne({ name, guildId: message.guild!.id });
-    if (!clock) return message.reply(`❌ Relógio **${name}** não encontrado.`);
+    const resolved = await resolveClock(message.guild!.id, args.slice(1));
+    if (!resolved) {
+        return message.reply(`❌ Relógio não encontrado em **${args.slice(1).join(' ')}**.\nUse \`rp!tempo list\` para ver os nomes.`);
+    }
+
+    const { clock, rest } = resolved;
+    const countStr = rest[0];
+    const durStr   = rest[rest.length - 1]; // pega sempre o último argumento como duração
+    const name     = clock.name;
+
+    if (!countStr || !durStr || countStr === durStr) {
+        return message.reply(
+            '⚠️ **Uso:** `rp!tempo msg <Nome> <N> <Tempo RP por mensagem>`\n' +
+            'Ex: `rp!tempo msg Seattle 1 5m` — cada mensagem no canal = 5 min RP',
+        );
+    }
 
     const msgCount = parseInt(countStr, 10);
     const rpPerMsg = parseTimeStr(durStr);

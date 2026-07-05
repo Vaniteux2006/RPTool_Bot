@@ -35,7 +35,7 @@ export interface IClock extends Document {
 }
 
 const ClockSchema = new Schema<IClock>({
-    name:         { type: String, required: true, unique: true },
+    name:         { type: String, required: true },
     channelId:    { type: String, required: true },
     messageId:    { type: String, required: true },
     guildId:      { type: String, required: true, index: true },
@@ -55,6 +55,11 @@ const ClockSchema = new Schema<IClock>({
     timezone:     { type: String, default: 'UTC' },
     paused:       { type: Boolean, default: false },
 });
+
+// Nome é único POR SERVIDOR (não globalmente — senão um servidor apagaria
+// o relógio homônimo de outro). O clockEngine roda syncIndexes() no boot
+// para derrubar o índice unique global antigo em "name".
+ClockSchema.index({ guildId: 1, name: 1 }, { unique: true });
 
 // Garante idempotência: se o model já existe, reutiliza
 export const ClockModel = mainConnection.models['Clock']
