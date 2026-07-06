@@ -2,4 +2,6 @@ node_modules
 dist
 .env
 bin/stockfish_linux
+bin/yt-dlp
+bin/yt-dlp.exe
 docs

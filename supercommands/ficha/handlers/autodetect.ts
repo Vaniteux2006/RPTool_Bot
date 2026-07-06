@@ -8,10 +8,18 @@ import {
     TextChannel,
 } from 'discord.js';
 import { TemplateModel, FichaModel } from '../../../tools/models/FichaSchema';
+import { templateSessions } from './template';
 
 export async function handleAutoDetect(message: Message): Promise<void> {
     if (message.author.bot) return;
     if (!message.guildId)   return;
+
+    // Mensagem de definição de modelo, não uma ficha preenchida:
+    // 1) o autor está com uma sessão de `rp!ficha template` aberta neste canal
+    //    (checado antes de qualquer await, senão o coletor remove a chave primeiro);
+    // 2) ou o texto contém placeholders de tipo, ex: "Idade: {int}".
+    if (templateSessions.has(`${message.channelId}:${message.author.id}`)) return;
+    if (/\{\s*(string(_name)?|int|float|anex|prefix)\s*\}/i.test(message.content)) return;
 
     const template = await TemplateModel.findOne({ guildId: message.guildId });
     if (!template?.submitChannelId)  return;

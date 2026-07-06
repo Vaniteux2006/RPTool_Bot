@@ -41,18 +41,21 @@ export default {
                 const block = message.content.substring(message.content.indexOf('{') + 1, message.content.lastIndexOf('}'));
                 const lines = block.split('\n');
                 let addedCount = 0;
+                let pastCount = 0;
 
                 for (const line of lines) {
                     if (!line.includes('->')) continue;
                     const [datePart, namePart] = line.split('->').map(s => s.trim());
                     if (!datePart || !namePart) continue;
 
-                    const success = await this.saveBirthday(guildId, datePart, namePart);
-                    if (success) addedCount++;
+                    const result = await this.saveBirthday(guildId, datePart, namePart);
+                    if (result === 'ok') addedCount++;
+                    if (result === 'past') pastCount++;
                 }
-                
+
                 await this.updateBirthdayPanels(message.client, guildId);
-                return message.reply(`✅ **${addedCount}** datas foram salvas para a eternidade!`);
+                const aviso = pastCount > 0 ? `\n⚠️ **${pastCount}** ignorada(s) por estarem no passado.` : '';
+                return message.reply(`✅ **${addedCount}** datas foram salvas para a eternidade!${aviso}`);
             }
 
             const dataStr = args[1];
@@ -61,10 +64,12 @@ export default {
             let namePart = args.slice(2).join(" ");
             if (!namePart) namePart = `<@${message.author.id}>`; 
 
-            const success = await this.saveBirthday(guildId, dataStr, namePart);
-            if (success) {
+            const result = await this.saveBirthday(guildId, dataStr, namePart);
+            if (result === 'ok') {
                 await this.updateBirthdayPanels(message.client, guildId);
                 return message.reply(`🎉 Evento salvo para **${dataStr}**!`);
+            } else if (result === 'past') {
+                return message.reply("❌ Essa data já passou! Use uma data futura ou apenas `DD/MM` para eventos anuais.");
             } else {
                 return message.reply("❌ Data inválida! Use `DD/MM` ou `DD/MM/AAAA`.");
             }
@@ -73,13 +78,14 @@ export default {
         return message.reply("⚠️ Use `rp!birthday add`, `rp!birthday list`, ou `rp!birthday #chat` para instalar o painel.");
     },
 
-    async saveBirthday(guildId: string, dateStr: string, namePart: string) {
+    async saveBirthday(guildId: string, dateStr: string, namePart: string): Promise<'ok' | 'invalid' | 'past'> {
         const parts = dateStr.split('/');
         const day = parseInt(parts[0]);
         const month = parseInt(parts[1]);
         const year = parts[2] ? parseInt(parts[2]) : undefined;
 
-        if (isNaN(day) || isNaN(month) || day < 1 || day > 31 || month < 1 || month > 12) return false;
+        if (isNaN(day) || isNaN(month) || day < 1 || day > 31 || month < 1 || month > 12) return 'invalid';
+        if (year !== undefined && isNaN(year)) return 'invalid';
 
         let isUser = false;
         let identifier = namePart;
@@ -90,12 +96,22 @@ export default {
             identifier = mentionMatch[1];
         }
 
+        // Evento com data completa não pode estar no passado. Aniversários de usuários
+        // ficam de fora: o ano informado é o de nascimento, sempre no passado.
+        if (year !== undefined && !isUser) {
+            const hoje = new Date();
+            hoje.setHours(hoje.getHours() - 3);
+            const dataEvento = new Date(year, month - 1, day);
+            const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+            if (dataEvento < inicioHoje) return 'past';
+        }
+
         await BirthdayModel.findOneAndUpdate(
             { guildId, identifier },
             { guildId, identifier, isUser, day, month, year },
             { upsert: true }
         );
-        return true;
+        return 'ok';
     },
 
     async updateBirthdayPanels(client: Client, specificGuildId: string | null = null) {

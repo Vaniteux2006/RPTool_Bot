@@ -273,21 +273,39 @@ client.on('messageCreate', async (message) => {
     await routePrefixCommand(message);
 });
 
-// ─── Evento: Mensagens Editadas ───────────────────────────────────────────────
-// Se o usuário EDITA uma mensagem transformando-a num comando válido (ex: corrige
-// `rp!aio` → `rp!ai`), o bot reage à mudança. Guarda contra re-execução: só roteia
-// se o conteúdo ANTIGO não era um comando válido. Se o antigo for desconhecido
-// (mensagem fora do cache), não faz nada — evita rodar duas vezes.
+// ─── Evento: Mensagens Editadas (correção de comandos) ───────────────────────
+// Se o usuário edita uma mensagem de comando — corrigindo o NOME (`rp!aio` →
+// `rp!ai`) ou os ARGUMENTOS (`rp!tempo set X 1/1/2002` → data válida) — o
+// comando é re-executado como se fosse novo. Age no dispatcher, então vale
+// para TODOS os comandos e supercommands automaticamente.
+// Guardas contra re-execução indevida:
+//   • updates sem edição real de conteúdo (embed carregado, pin...) não têm
+//     editedTimestamp novo → dedupe por (messageId, editedTimestamp);
+//   • janela de 5 min após o envio — edição tardia não ressuscita comando;
+//   • anti-spam do routePrefixCommand também conta edições.
+// Trade-off consciente: editar um comando que JÁ funcionou re-executa ele.
 // (O proxy de OC na edição é tratado por `oc:proxy:edit` em tools/webhook.ts.)
+const EDIT_WINDOW_MS = 5 * 60_000;
+const processedEdits = new Map<string, number>(); // messageId → editedTimestamp já roteado
+
 client.on(Events.MessageUpdate, async (oldMsg, newMsg) => {
     try {
         if (newMsg.partial) { try { newMsg = await newMsg.fetch(); } catch { return; } }
         if (!newMsg.content || newMsg.author?.bot) return;
 
-        if (!resolveCommand(newMsg.content)) return;   // conteúdo novo não é comando
-        const oldContent = oldMsg?.content ?? null;
-        if (oldContent === null) return;               // antigo desconhecido → não arrisca
-        if (resolveCommand(oldContent)) return;        // antigo já era comando → já rodou
+        const edited = newMsg.editedTimestamp;
+        if (!edited) return;                                           // não foi edição de conteúdo
+        if (edited - newMsg.createdTimestamp > EDIT_WINDOW_MS) return; // edição tardia demais
+
+        if (!resolveCommand(newMsg.content)) return;                   // conteúdo novo não é comando
+        if (oldMsg?.content != null && oldMsg.content === newMsg.content) return; // nada mudou
+
+        if (processedEdits.get(newMsg.id) === edited) return;          // este edit já foi roteado
+        processedEdits.set(newMsg.id, edited);
+        if (processedEdits.size > 500) {
+            const oldest = processedEdits.keys().next().value;
+            if (oldest) processedEdits.delete(oldest);
+        }
 
         await routePrefixCommand(newMsg as Message);
     } catch (error) {

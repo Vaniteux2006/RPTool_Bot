@@ -26,6 +26,10 @@ import { TemplateModel } from '../../../tools/models/FichaSchema';
  * ──────────────────────────────────────────────────────
  */
 
+// Sessões de criação de template abertas (`canal:usuário`) — o autodetect consulta
+// este Set para não tratar a mensagem de definição do modelo como uma ficha enviada.
+export const templateSessions = new Set<string>();
+
 export function compilarTemplate(rawText: string): { fields: any[]; ocPrefixLabel: string | null } {
     const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);
     const fields: any[] = [];
@@ -123,6 +127,9 @@ export default async function handleTemplate(message: Message, args: string[]) {
         'Digite **CANCELAR** para cancelar.'
     );
 
+    const sessionKey = `${message.channelId}:${message.author.id}`;
+    templateSessions.add(sessionKey);
+
     const collector = new MessageCollector(message.channel as TextChannel, {
         filter: m => m.author.id === message.author.id,
         time: 300_000,
@@ -171,6 +178,7 @@ export default async function handleTemplate(message: Message, args: string[]) {
     });
 
     collector.on('end', (_, reason) => {
+        templateSessions.delete(sessionKey);
         if (reason === 'time') message.reply('⏳ Tempo esgotado. Operação cancelada.');
     });
 }

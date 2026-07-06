@@ -5,14 +5,12 @@ import {
 import axios from 'axios';
 
 // ─── rp!img ───────────────────────────────────────────────────────────────────
-// Pesquisa de imagens via Google Custom Search API (searchType=image).
-// Requer no .env:
-//   GOOGLE_SEARCH_KEY → chave da API (https://console.cloud.google.com, ativar "Custom Search API")
-//   GOOGLE_SEARCH_CX  → ID do mecanismo de busca (https://programmablesearchengine.google.com,
-//                       criar buscador com "Pesquisar em toda a web" + "Pesquisa de imagens" ativados)
+// Pesquisa de imagens via DuckDuckGo (resultados do Bing por baixo) — gratuito,
+// sem chave de API e sem cota. Fluxo: pega o token "vqd" da página de busca,
+// depois consulta o endpoint JSON i.js.
 // O proxy do Discord não busca imagens de qualquer host (hotlink protection),
 // então baixamos a imagem no bot e anexamos via attachment://. Se o site
-// bloquear o download, caímos para a thumbnail do Google (gstatic, sempre embeda).
+// bloquear o download, caímos para a thumbnail do Bing (sempre embeda).
 
 const MAX_RESULTS = 10;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // limite de upload sem Nitro/boost
@@ -34,27 +32,52 @@ const EXT_BY_MIME: Record<string, string> = {
     'image/webp': 'webp'
 };
 
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+
+// O DuckDuckGo exige um token "vqd" atrelado à query, extraído do HTML da busca
+async function getVqd(query: string): Promise<string | null> {
+    const { data } = await axios.get('https://duckduckgo.com/', {
+        params: { q: query, ia: 'images', iax: 'images' },
+        headers: { 'User-Agent': BROWSER_UA },
+        timeout: 8_000
+    });
+    const match = String(data).match(/vqd=["']?([\d-]+)["']?/);
+    return match ? match[1] : null;
+}
+
 async function searchImages(query: string): Promise<ImageResult[]> {
-    const { data } = await axios.get('https://www.googleapis.com/customsearch/v1', {
+    const vqd = await getVqd(query);
+    if (!vqd) throw new Error('Não foi possível obter o token de busca (vqd) do DuckDuckGo.');
+
+    // O endpoint devolve 403 sem o conjunto completo de headers de navegador
+    const { data } = await axios.get('https://duckduckgo.com/i.js', {
         params: {
-            key: process.env.GOOGLE_SEARCH_KEY,
-            cx: process.env.GOOGLE_SEARCH_CX,
+            l: 'br-pt',
+            o: 'json',
             q: query,
-            searchType: 'image',
-            num: MAX_RESULTS,
-            safe: 'active',
-            hl: 'pt-BR'
+            vqd,
+            f: ',,,',
+            p: '1' // SafeSearch ativo
+        },
+        headers: {
+            'User-Agent': BROWSER_UA,
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+            'Referer': `https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`,
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin'
         },
         timeout: 10_000
     });
 
-    return (data.items || []).map((item: any) => ({
-        link: item.link,
+    return (data.results || []).slice(0, MAX_RESULTS).map((item: any) => ({
+        link: item.image,
         title: item.title || 'Sem título',
-        contextLink: item.image?.contextLink || item.link,
-        thumbnailLink: item.image?.thumbnailLink || '',
-        width: item.image?.width || 0,
-        height: item.image?.height || 0
+        contextLink: item.url || item.image,
+        thumbnailLink: item.thumbnail || '',
+        width: item.width || 0,
+        height: item.height || 0
     }));
 }
 
@@ -110,17 +133,13 @@ function buildRow(index: number, total: number, disabledAll = false): ActionRowB
 
 export default {
     name: 'img',
-    description: 'Pesquisa imagens no Google. Ex: rp!img seleção brasileira',
+    description: 'Pesquisa imagens na web. Ex: rp!img seleção brasileira',
     aliases: ['imagem', 'image', 'googleimg'],
 
     async execute(message: Message, args: string[]) {
         const query = args.join(' ').trim();
         if (!query) {
             return message.reply('🔎 O que você quer procurar? Ex: `rp!img seleção brasileira`');
-        }
-
-        if (!process.env.GOOGLE_SEARCH_KEY || !process.env.GOOGLE_SEARCH_CX) {
-            return message.reply('❌ Erro de configuração: `GOOGLE_SEARCH_KEY` e/ou `GOOGLE_SEARCH_CX` não estão no .env.');
         }
 
         if ('sendTyping' in message.channel && typeof message.channel.sendTyping === 'function') {
@@ -131,13 +150,8 @@ export default {
         try {
             results = await searchImages(query);
         } catch (error: any) {
-            const status = error?.response?.status;
-            if (status === 429 || status === 403) {
-                console.warn('[IMG] Cota da Custom Search API estourada ou chave inválida:', status);
-                return message.reply('❌ A cota diária de pesquisas do Google acabou (ou a chave é inválida). Tente novamente amanhã.');
-            }
             console.error('[IMG] Falha na pesquisa:', error?.message || error);
-            return message.reply('❌ Não consegui falar com o Google agora. Tente de novo em instantes.');
+            return message.reply('❌ Não consegui buscar imagens agora. Tente de novo em instantes.');
         }
 
         if (results.length === 0) {
