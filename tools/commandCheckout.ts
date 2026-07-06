@@ -15,6 +15,7 @@ import '../supercommands/tempo';
 import './webhook';             // proxy de OC (oc:proxy) — auto-registra no MessageCreate
 import './utils/aiUtils';       // IA de OC (oc:ai)      — auto-registra no MessageCreate
 import './utils/statusRotator'; // status rotativo do bot — auto-registra no ClientReady
+import './utils/telemetry';     // heartbeat + logs p/ o Watchdog — auto-registra no ClientReady
 
 // ─── Rotinas de inicialização ─────────────────────────────────────────────────
 import birthdayCmd from '../commands/birthday';
