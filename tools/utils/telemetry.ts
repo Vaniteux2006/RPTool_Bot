@@ -31,6 +31,7 @@ const original = {
 let HeartbeatModel: mongoose.Model<any> | null = null;
 let LogModel:       mongoose.Model<any> | null = null;
 let DeployModel:    mongoose.Model<any> | null = null;
+let GuildsModel:    mongoose.Model<any> | null = null;
 
 if (uri) {
     const conn = mongoose.createConnection(uri);
@@ -47,6 +48,9 @@ if (uri) {
 
     DeployModel = conn.model('WatchdogDeploy',
         new mongoose.Schema({}, { strict: false, collection: 'watchdog_deploys' }));
+
+    GuildsModel = conn.model('WatchdogGuilds',
+        new mongoose.Schema({}, { strict: false, collection: 'watchdog_guilds' }));
 } else {
     original.warn('⚠️ [Telemetry] DB_STATUS ausente — telemetria do vigia desativada.');
 }
@@ -105,6 +109,20 @@ async function flushLogs(): Promise<void> {
 }
 
 // ─── Heartbeat ────────────────────────────────────────────────────────────────
+// CPU% = tempo de CPU consumido entre batidas / tempo decorrido (% de 1 núcleo)
+let lastCpu = process.cpuUsage();
+let lastCpuAt = Date.now();
+
+function cpuPercent(): number {
+    const now = Date.now();
+    const cur = process.cpuUsage();
+    const usedMs = (cur.user + cur.system - lastCpu.user - lastCpu.system) / 1000;
+    const elapsed = now - lastCpuAt;
+    lastCpu = cur;
+    lastCpuAt = now;
+    return elapsed > 0 ? Math.round((usedMs / elapsed) * 1000) / 10 : 0;
+}
+
 async function beat(client: any): Promise<void> {
     if (!HeartbeatModel) return;
     const mem = process.memoryUsage();
@@ -116,6 +134,7 @@ async function beat(client: any): Promise<void> {
                 ts:        new Date(),
                 rssMb:     Math.round(mem.rss / 1048576),
                 heapMb:    Math.round(mem.heapUsed / 1048576),
+                cpuPct:    cpuPercent(),
                 uptimeSec: Math.round(process.uptime()),
                 guilds:    client.guilds.cache.size,
                 wsPing:    client.ws.ping,
@@ -125,6 +144,21 @@ async function beat(client: any): Promise<void> {
         },
         { upsert: true },
     ).catch(err => original.error('[Telemetry] Heartbeat falhou:', err));
+}
+
+// ─── Snapshot de servidores (a cada 5 min — lista muda devagar) ───────────────
+async function snapshotGuilds(client: any): Promise<void> {
+    if (!GuildsModel) return;
+    const list = client.guilds.cache.map((g: any) => ({
+        id:      g.id,
+        name:    g.name,
+        members: g.memberCount ?? 0,
+    }));
+    await GuildsModel.updateOne(
+        { botId: 'rptool' },
+        { $set: { botId: 'rptool', ts: new Date(), total: list.length, list } },
+        { upsert: true },
+    ).catch(err => original.error('[Telemetry] Snapshot de guilds falhou:', err));
 }
 
 // ─── Registro de deploy (versão/commit novos desde o último boot) ─────────────
@@ -153,6 +187,10 @@ if (uri) {
 
         const beatTimer = setInterval(() => void beat(client), 20_000);
         beatTimer.unref();
+
+        void snapshotGuilds(client);
+        const guildsTimer = setInterval(() => void snapshotGuilds(client), 300_000);
+        guildsTimer.unref();
 
         const flushTimer = setInterval(() => void flushLogs(), 10_000);
         flushTimer.unref();

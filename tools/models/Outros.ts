@@ -12,6 +12,16 @@ const BotStatusSchema = new mongoose.Schema({
     type: { type: String, required: true }
 });
 
+// Modo do rotator de status: 'rotate' sorteia da collection BotStatus a cada
+// 15s (comportamento clássico); 'fixed' congela em content/type deste doc sem
+// destruir o rodízio. Gerenciável remotamente pelo Watchdog (wd!setstatus).
+const BotStatusConfigSchema = new mongoose.Schema({
+    key: { type: String, required: true, unique: true }, // sempre 'main'
+    mode: { type: String, enum: ['rotate', 'fixed'], default: 'rotate' },
+    content: { type: String, default: null },
+    type: { type: String, default: 'Playing' },
+});
+
 const WikiArticleSchema = new mongoose.Schema({
     title: { type: String, required: true, unique: true },
     paragraphs: { type: [String], required: true }
@@ -35,5 +45,6 @@ const WelcomeSchema = new mongoose.Schema({
 
 export const WelcomeModel = restanteConnection.model('WelcomeConfig', WelcomeSchema);
 export const BotStatusModel = restanteConnection.model('BotStatus', BotStatusSchema);
+export const BotStatusConfigModel = restanteConnection.model('BotStatusConfig', BotStatusConfigSchema);
 export const WikiArticleModel = restanteConnection.model('WikiArticle', WikiArticleSchema);
 export const PhoneRegistryModel = restanteConnection.model('PhoneRegistry', PhoneRegistrySchema);
