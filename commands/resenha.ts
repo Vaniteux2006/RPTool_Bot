@@ -121,14 +121,14 @@ export default {
             }
 
             let statusEmoji = "💤";
-            let color = 0x3498db; 
+            let statusLabel = "NÃO HÁ RESENHA";
 
             if (result.status === "r-01") {
-                statusEmoji = "🔥"; 
-                color = 0xe74c3c; 
+                statusEmoji = "🔥";
+                statusLabel = "RESENHA CONFIRMADA";
             }
 
-            const finalText = `## Status: \`${result.status}\` ${statusEmoji}\n> 📝 **Veredito:** ${result.analysis}`;
+            const finalText = `## ${statusEmoji} ${statusLabel} — \`${result.status}\`\n> 📝 **Veredito:** ${result.analysis}`;
 
             if (loading.edit) await loading.edit(finalText);
             else await message.reply(finalText);

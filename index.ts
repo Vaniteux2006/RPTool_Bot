@@ -203,8 +203,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (error) {
         console.error(error);
         const errPayload = { content: '❌ Erro fatal no comando!', ephemeral: true };
-        if (interaction.replied || interaction.deferred) await interaction.followUp(errPayload);
-        else await interaction.reply(errPayload);
+        // .catch() obrigatório: se a interação expirou (10062), o reply também
+        // lança e derrubaria o processo com unhandled rejection.
+        if (interaction.replied || interaction.deferred) await interaction.followUp(errPayload).catch(() => {});
+        else await interaction.reply(errPayload).catch(() => {});
     }
 });
 

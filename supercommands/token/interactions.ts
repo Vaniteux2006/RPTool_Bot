@@ -70,7 +70,8 @@ export async function handleTokenInteraction(interaction: any): Promise<void> {
                     const modal = new ModalBuilder().setCustomId(`token_addmod:${uid}`).setTitle('Adicionar chave de IA');
                     const nameInput = new TextInputBuilder().setCustomId('name').setLabel('Nome (opcional)')
                         .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(60);
-                    const keyInput = new TextInputBuilder().setCustomId('key').setLabel('Chave de API (AIza… do Gemini ou sk-… da OpenAI)')
+                    // Discord limita labels de modal a 45 caracteres
+                    const keyInput = new TextInputBuilder().setCustomId('key').setLabel('Chave de API (AIza… Gemini ou sk-… OpenAI)')
                         .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200);
                     modal.addComponents(
                         new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
