@@ -102,6 +102,7 @@ Várias `mongoose.createConnection()` por domínio. Há **duplicação** (vária
 | `ReactionRoleModel` | `ReactionRoleSchema.ts` | DB_FICHA | reaction, reactionListener |
 | `ClockModel` | `ClockSchema.ts` | mainConnection | tempo, clima (schema único, com `guildId`/`paused`) |
 | `LogModel` | `LogConfig.ts` | mainConnection | logs |
+| `CensuraConfigModel` | `CensuraConfig.ts` | mainConnection | censura (engine cacheia 5 min por guild) |
 | `FichaModel`, `TemplateModel` | `FichaSchema.ts` | DB_FICHA | ficha |
 | `TeamModel` etc., `MatchReportModel` | `FutebolSchema.ts` / `FutebolReportSchema.ts` | DB_FB_* | futebol |
 | `GuildConfigModel` | `GuildConfig.ts` | DB_RESTANTE | só o `tools/utils/LogMinister.ts` antigo (morto) |
@@ -166,6 +167,7 @@ Padrão comum: `index.ts` com roteador `switch` + `sendHelp()`, handlers em arqu
 | **`futebol/`** | ❌ (prefix) | Simulador de futebol (o maior ecossistema): `engines/` (matchEngine, mathEngine, aiDirector, advancedEngine), torneios, escalações, táticas. `interactions.ts` roteado por `fb_`. |
 | **`exportchat/`** | ❌ (prefix) | Export de canal para HTML: scan paralelo → 3 workers → merger (7,5 MB) → DM → cleanup. Módulo mais "engenheirado". |
 | **`phone/`** | ✅ | Telefone inter-servidores: register/call/accept/decline/end; `phone:relay` repassa as mensagens da chamada. |
+| **`censura/`** | ❌ (prefix) | Filtro de palavrões estilo proxy: apaga a mensagem e reenvia via webhook com o nome/avatar do autor, termo em █. `wordlist.ts` (lista pt-BR padrão), `engine.ts` (normalização anti-leet/acento, matching por token com fronteira de palavra, cache 5 min). Integra com o proxy de OC via `registerProxyContentFilter` (fala de personagem também sai censurada) e `wasOCProxied` (não reprocessa). O filtro se inscreve no `messageCreate` **dentro do ClientReady** pra garantir que roda depois do `oc:proxy`. |
 | **`wallet/`** | ❌ (prefix) | Carteira por OC (§10). Handlers: `view`, `pay` (transferência atômica), `top`, `admin` (add/remove/set/setcurrency/reset), `economy` (dashboard + toggles do modo avançado). Aliases: `bank`, `saldo`, `money`, `carteira`, `w`. |
 | **`inventory/`** | ❌ (prefix) | Mochila por OC + loja do servidor (§10). Handlers: `view`, `give`, `use`, `shop`, `buy`, `sell`, `admin` (additem/edititem/removeitem/giveitem/takeitem). Aliases: `inv`, `bag`, `mochila`, `itens`, `i`. |
 

@@ -183,6 +183,22 @@ export const CATEGORIES: HelpCategory[] = [
                 keywords: ['limpar', 'apagar', 'purge', 'mensagens'],
             },
             {
+                id: 'censura', name: 'censura', emoji: '🔇', admin: true,
+                summary: 'Censura palavrões sem impedir a mensagem de sair.',
+                usage: ['rp!censura on', 'rp!censura'],
+                details: 'Com o filtro ligado, mensagens com palavrão são apagadas e reenviadas via webhook com o nome/avatar do autor, trocando cada letra do termo por █ — o resto da mensagem continua visível. Vale também pra fala de personagem (proxy de OC). A detecção ignora acento, maiúscula e leet (p0rr@ ≡ porra). Reagir ❌ apaga a versão censurada. Requer que o bot tenha Gerenciar Mensagens e Gerenciar Webhooks.',
+                subs: [
+                    { usage: 'rp!censura on|off', desc: 'Liga/desliga o filtro no servidor' },
+                    { usage: 'rp!censura', desc: 'Status: termos ativos, ajustes e canais isentos' },
+                    { usage: 'rp!censura add <termo>', desc: 'Adiciona palavra ou frase à lista' },
+                    { usage: 'rp!censura remove <termo>', desc: 'Remove termo custom ou desativa um da lista padrão' },
+                    { usage: 'rp!censura ignore #canal', desc: 'Alterna isenção do canal (ex: +18/OOC)' },
+                    { usage: 'rp!censura test <frase>', desc: 'Simula como uma frase sairia censurada' },
+                ],
+                aliases: ['censurar', 'filtro', 'palavrao'],
+                keywords: ['palavrão', 'xingamento', 'filtro', 'automod', 'bloquear', 'block'],
+            },
+            {
                 id: 'welcome', name: 'welcome', emoji: '👋', admin: true,
                 summary: 'Sistema de boas-vindas e registro de entrada/saída.',
                 usage: ['rp!welcome #canal'],

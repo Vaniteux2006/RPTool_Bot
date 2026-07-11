@@ -5,12 +5,92 @@ import {
 import { OCModel, IOC } from "./models/OCSchema";
 import { EventCheckout } from "./eventCheckout";
 
-function sanitizeOutput(text: string): string {
+export function sanitizeOutput(text: string): string {
     if (!text) return text;
     return text
         .replace(/@everyone/g, '@everyоne') 
         .replace(/@here/g, '@hеre')        
         .replace(/<@&(\d+)>/g, '<@&\u200b$1>');
+}
+
+// ─── Content filters ──────────────────────────────────────────────────────────
+// Módulos externos (ex: supercommands/censura) podem transformar o conteúdo
+// que sai pelas webhooks de proxy — sem que este arquivo os conheça. Se o
+// módulo for removido do bot, nada aqui quebra (projeto desmontável).
+export type ProxyContentFilter = (guildId: string, channelIds: string[], text: string) => Promise<string>;
+const contentFilters: ProxyContentFilter[] = [];
+
+export function registerProxyContentFilter(filter: ProxyContentFilter): void {
+    contentFilters.push(filter);
+}
+
+async function applyContentFilters(guildId: string, channelIds: string[], text: string): Promise<string> {
+    let out = text;
+    for (const filter of contentFilters) {
+        try { out = await filter(guildId, channelIds, out); } catch { /* filtro nunca derruba o proxy */ }
+    }
+    return out;
+}
+
+// ─── Mensagens já consumidas pelo proxy de OC ─────────────────────────────────
+// O filtro de censura (que roda DEPOIS no dispatch) consulta isto pra não
+// reprocessar uma mensagem que o proxy já apagou e reenviou.
+const proxiedOriginals = new Set<string>();
+const PROXIED_CACHE_CAP = 2000;
+
+function rememberProxiedOriginal(messageId: string): void {
+    proxiedOriginals.add(messageId);
+    if (proxiedOriginals.size > PROXIED_CACHE_CAP) {
+        const oldest = proxiedOriginals.values().next().value; // Set preserva ordem de inserção
+        if (oldest) proxiedOriginals.delete(oldest);
+    }
+}
+
+export function wasOCProxied(messageId: string): boolean {
+    return proxiedOriginals.has(messageId);
+}
+
+/**
+ * Busca (ou cria) a webhook de proxy do RPTool em um canal de texto.
+ * Usada pelo proxy de OC e pelo filtro de censura.
+ */
+export async function getOrCreateProxyWebhook(channel: TextChannel): Promise<Webhook> {
+    const webhooks = await channel.fetchWebhooks();
+    const existing = webhooks.find(w => w.owner?.id === channel.client.user?.id);
+    if (existing) return existing;
+    return channel.createWebhook({
+        name: 'RPTool OC Proxy',
+        avatar: channel.client.user?.displayAvatarURL()
+    });
+}
+
+/**
+ * Webhook não faz reply nativo — replicamos o contexto como um embed clicável
+ * (estilo PluralKit/Tupperbox). Devolve undefined se a mensagem não é resposta
+ * ou se a referenciada não está mais acessível.
+ */
+export async function buildReplyEmbed(message: Message): Promise<object | undefined> {
+    if (!message.reference?.messageId || !message.guild) return undefined;
+    try {
+        const ref = await message.channel.messages.fetch(message.reference.messageId);
+        const refAuthor = (ref.member?.displayName || ref.author.username);
+        let snippet = (ref.content || "").replace(/\n/g, " ").trim();
+        if (snippet.length > 100) snippet = snippet.slice(0, 100) + "…";
+        if (!snippet) {
+            snippet = ref.attachments.size > 0 ? "*(anexo)*" : (ref.embeds.length > 0 ? "*(embed)*" : "*(mensagem)*");
+        }
+        const jump = `https://discord.com/channels/${message.guild.id}/${ref.channelId}/${ref.id}`;
+        return {
+            color: 0x4f545c,
+            author: {
+                name: `↩️ ${refAuthor}`,
+                icon_url: ref.author.displayAvatarURL()
+            },
+            description: `**[Respondendo a:](${jump})** ${sanitizeOutput(snippet)}`
+        };
+    } catch {
+        return undefined;
+    }
 }
 
 export async function handleOCMessage(message: Message): Promise<boolean> {
@@ -138,50 +218,22 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
 
         if (!targetChannel || !('fetchWebhooks' in targetChannel)) return false;
 
-        const webhooks = await targetChannel.fetchWebhooks();
-        let webhook = webhooks.find(w => w.owner?.id === message.client.user?.id);
-
-        if (!webhook) {
-            webhook = await targetChannel.createWebhook({
-                name: 'RPTool OC Proxy',
-                avatar: message.client.user?.displayAvatarURL()
-            });
-        }
+        const webhook = await getOrCreateProxyWebhook(targetChannel as TextChannel);
+        const channelIds = threadId ? [threadId, targetChannel.id] : [targetChannel.id];
 
         const filesToSend = Array.from(message.attachments.values()).map(attachment => attachment.url);
 
-        // Webhook n\u00E3o faz reply nativo \u2014 replicamos o contexto como um embed clic\u00E1vel
-        // (estilo PluralKit/Tupperbox) s\u00F3 na primeira mensagem do lote.
-        let replyEmbed: object | undefined;
-        if (message.reference?.messageId) {
-            try {
-                const ref = await message.channel.messages.fetch(message.reference.messageId);
-                const refAuthor = (ref.member?.displayName || ref.author.username);
-                let snippet = (ref.content || "").replace(/\n/g, " ").trim();
-                if (snippet.length > 100) snippet = snippet.slice(0, 100) + "\u2026";
-                if (!snippet) {
-                    snippet = ref.attachments.size > 0 ? "*(anexo)*" : (ref.embeds.length > 0 ? "*(embed)*" : "*(mensagem)*");
-                }
-                const jump = `https://discord.com/channels/${message.guild.id}/${ref.channelId}/${ref.id}`;
-                replyEmbed = {
-                    color: 0x4f545c,
-                    author: {
-                        name: `\u21A9\uFE0F ${refAuthor}`,
-                        icon_url: ref.author.displayAvatarURL()
-                    },
-                    description: `**[Respondendo a:](${jump})** ${sanitizeOutput(snippet)}`
-                };
-            } catch {
-                // Mensagem referenciada foi apagada ou n\u00E3o est\u00E1 acess\u00EDvel \u2014 segue sem o embed.
-            }
-        }
+        const replyEmbed = await buildReplyEmbed(message);
 
         for (let i = 0; i < validMessages.length; i++) {
             const item = validMessages[i];
             const match = item.oc;
 
+            // Filtros externos (ex: censura) transformam a fala do personagem antes do envio
+            const filteredContent = await applyContentFilters(message.guild.id, channelIds, item.cleanContent);
+
             const sent = await webhook.send({
-                content: sanitizeOutput(item.cleanContent) || "\u200B",
+                content: sanitizeOutput(filteredContent) || "\u200B",
                 username: match.name,
                 avatarURL: match.avatar,
                 files: i === 0 ? filesToSend : [],
@@ -198,6 +250,7 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
             // (pela mensagem de webhook reenviada), por nome — não duplicar aqui.
         }
 
+        rememberProxiedOriginal(message.id);
         message.delete().catch(() => {});
 
         return true;
@@ -216,7 +269,7 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
 const recentOCMessages = new Map<string, string>();
 const OC_MSG_CACHE_CAP = 5000;
 
-function rememberOCMessage(messageId: string, userId: string): void {
+export function rememberOCMessage(messageId: string, userId: string): void {
     recentOCMessages.set(messageId, userId);
     if (recentOCMessages.size > OC_MSG_CACHE_CAP) {
         const oldest = recentOCMessages.keys().next().value; // Map preserva ordem de inserção
