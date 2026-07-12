@@ -1,20 +1,34 @@
 // RPTool/supercommands/censura/wordlist.ts
-// ─── Lista padrão de termos censurados (pt-BR) ────────────────────────────────
+// ─── Listas padrão de termos censurados (pt-BR + EN) ──────────────────────────
 // Base: LDNOOBW enriquecida com abreviações de internet e variações de
 // mascaramento (leet, trocas de letra). A comparação é feita pela forma
 // NORMALIZADA (sem acento, minúscula, leet desfeito: @→a, 0→o, 3→e...), então
 // variações que normalizam igual ("c@ralho" ≡ "caralho") são deduplicadas na
 // compilação — mantê-las aqui documenta a intenção e não custa nada.
 //
+// Variações com '*' no meio (ex: "f*ck") compilam como sequência de tokens
+// [f, ck] e casam exatamente quem digita a forma mascarada — por isso valem
+// a pena, EXCETO quando a sequência também é frase legítima (ver exclusões).
+//
 // Removidos da fonte original por gerarem falso positivo grave:
-//   "vc"  (abreviação de "você" — estava listada como variação de "vai se foder")
-//   "c*"  (compilaria para a letra "c" sozinha e censuraria qualquer "c" solto)
+//   pt-BR:
+//     "vc"  (abreviação de "você" — estava como variação de "vai se foder")
+//     "c*"  (compilaria para a letra "c" sozinha e censuraria qualquer "c" solto)
+//   EN (pensando em servidor brasileiro):
+//     "bj"  (= beijo!)              "hj"  (= hoje!)
+//     "hs"  (= horas, "3 hs")       "ah"  (interjeição universal)
+//     "sh"  (shhh de silêncio)      "gd"  ("gd night" = good)
+//     "jo"  (apelido/nome)          "ho"  ("ho ho ho" — mantidos hoe/h0e)
+//     "b"   (1 letra — rejeitado na compilação de qualquer forma)
+//     "a**hole"/"a-hole" (compilam [a, hole] e censurariam "a hole" legítimo)
+//     "a*se" (compila [a, se] e censuraria "a se" em português!)
+//     "k*ke" (compila [k, ke] e censuraria "k, ke..." do chat informal BR)
 //
 // A staff pode desativar termos por servidor com `rp!censura remove <termo>`
 // (vira disabledWords no CensuraConfig) — útil pra termos ambíguos como
-// "rola" (verbo), "pau" (madeira), "coco" (fruta), "pinto" (ave/sobrenome).
+// "rola" (verbo), "pau" (madeira), "coco" (fruta), "cnt" (can't), "dam".
 
-export const DEFAULT_TERMS: string[] = [
+export const PT_TERMS: string[] = [
     // ── caralho ──
     'caralho', 'krl', 'crl', 'klr', 'caraio', 'carai', 'caralio', 'c@ralho', 'karalho', 'kct',
     'caralhão', 'caralhao', 'karalhao',
@@ -96,3 +110,71 @@ export const DEFAULT_TERMS: string[] = [
     'lixo', 'lyxo',
     'nojento', 'nojenta', 'nojeira',
 ];
+
+export const EN_TERMS: string[] = [
+    // ── fuck ──
+    'fuck', 'wtf', 'stfu', 'gtfo', 'fu', 'af', 'mf', 'fk', 'fck',
+    'f*ck', 'fuk', 'fuc', 'phuck', 'fvck', 'f u c k', 'fcuk',
+    // conjugações comuns (não vinham na fonte, mas são a forma mais usada)
+    'fucking', 'fuckin', 'fucked', 'fucks',
+    'fucker', 'fucka', 'fvcker', 'f*cker',
+    'motherfucker', 'mofo', 'motherf*cker', 'mothafucka', 'muthafucker',
+    // ── shit ──
+    'shit', 'bs', 'wtsh', 'sh*t', 'sht', 'shyt', 'sh1t', '$hit', 's h i t',
+    'bullshit', 'bullsh*t', 'bullsht', 'bull sh1t',
+    // ── xingamentos ──
+    'bitch', 'biatch', 'biotch', 'b*tch', 'btch', 'b1tch', 'bytch', 'beetch', 'bish',
+    'asshole', 'asshat', 'assh0le',
+    'ass', 'az', 'a$$', '@ss',
+    'dumbass', 'dumba$$', 'dumbazz', 'dumb ass',
+    'jackass', 'jacka$$', 'jackazz',
+    'prick', 'pr*ck', 'pr1ck',
+    'cunt', 'c*nt', 'cnt', 'kunt', 'c u n t',
+    'twat', 'tw*t', 'twaat',
+    'whore', 'hoe', 'wh*re', 'whor', 'h0e',
+    'slut', 'sl*t', 'slutt', '$lut',
+    'bastard', 'b*stard', 'bastrd', 'basterd',
+    'wanker', 'w*nker', 'wanka',
+    'bollocks', 'bollox', 'ballox',
+    'arse', 'arsehole',
+    'scum', 'sc*m', 'scumbag',
+    'douche', 'douchebag', 'd*uche', 'doosh',
+    'idiot', 'idi0t', 'idyot',
+    'moron', 'mor0n', 'moran',
+    'loser', 'l0ser', 'looser',
+    'screw you', 'screw u', 'screwyou',
+    // ── anatomia/sexual ──
+    'dick', 'd*ck', 'dik', 'd1ck', 'dck',
+    'dickhead', 'd*ckhead', 'dikhead', 'dick head',
+    'cock', 'c*ck', 'cok', 'c0ck', 'kock',
+    'pussy', 'p*ssy', 'pussi', 'pu$$y', 'pussay',
+    'cum', 'c*m', 'cumming', 'kum',
+    'jerk off', 'jerkoff', 'jerk-off', 'jack off', 'jackoff',
+    'blowjob', 'blow job', 'bl0wjob',
+    'handjob', 'hand job',
+    'boobs', 'b00bs', 'boob', 'boobies',
+    'tits', 't*ts', 'titties', 't1ts',
+    'porn', 'pr0n', 'p0rn', 'pornography',
+    'horny', 'h0rny', 'horni',
+    // ── discriminatório ──
+    'retard', 'tard', 'ret*rd', 'retarded', 'r-word',
+    'faggot', 'fag', 'f*ggot', 'fagg0t', 'f@g', 'faggit',
+    'dyke', 'dy*e',
+    'tranny', 'tr*nny', 'trannie',
+    'nigger', 'n-word', 'n*gger', 'n1gger', 'nigga', 'n1gga', 'n!gger',
+    'chink', 'ch*nk',
+    'spic', 'sp*c',
+    'kike',
+    'wetback', 'wet back',
+    'nazi', 'n*zi', 'naz1',
+    // ── escatológico / leves ──
+    'piss', 'p*ss', 'pissed', 'pissoff', 'piss off',
+    'crap', 'cr*p', 'crappy',
+    'damn', 'dmn', 'd*mn', 'dam', 'damnit', 'dammit', 'goddamn',
+    'hell', 'wth', 'h*ll', 'hel', 'h3ll',
+    'bloody', 'bl**dy',
+    'sucks', 'suck', 'sux', 'sucker',
+    'freakin', 'freaking', 'friggin', 'frickin',
+];
+
+export const DEFAULT_TERMS: string[] = [...PT_TERMS, ...EN_TERMS];

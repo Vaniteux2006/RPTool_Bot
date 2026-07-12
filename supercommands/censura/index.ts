@@ -303,7 +303,7 @@ function sendStatus(
     const canais = canaisIsentos.length ? canaisIsentos.map(id => `<#${id}>`).join(', ') : '*nenhum*';
     return message.reply(
         `🔇 **Censura** — ${enabled ? '🟢 ativada' : '🔴 desativada'}\n\n` +
-        `**Termos ativos:** ${totalTermos} (lista padrão pt-BR + ajustes do servidor)\n` +
+        `**Termos ativos:** ${totalTermos} (listas padrão pt-BR + inglês + ajustes do servidor)\n` +
         `**Adicionados aqui:** ${fmtTermos(extras)}\n` +
         `**Padrão desativados aqui:** ${fmtTermos(desativados)}\n` +
         `**Canais isentos:** ${canais}\n\n` +

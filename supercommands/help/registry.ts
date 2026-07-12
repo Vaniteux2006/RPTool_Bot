@@ -186,7 +186,7 @@ export const CATEGORIES: HelpCategory[] = [
                 id: 'censura', name: 'censura', emoji: '🔇', admin: true,
                 summary: 'Censura palavrões sem impedir a mensagem de sair.',
                 usage: ['rp!censura on', 'rp!censura'],
-                details: 'Com o filtro ligado, mensagens com palavrão são apagadas e reenviadas via webhook com o nome/avatar do autor, trocando cada letra do termo por █ — o resto da mensagem continua visível. Vale também pra fala de personagem (proxy de OC). A detecção ignora acento, maiúscula e leet (p0rr@ ≡ porra). Reagir ❌ apaga a versão censurada. Requer que o bot tenha Gerenciar Mensagens e Gerenciar Webhooks.',
+                details: 'Com o filtro ligado, mensagens com palavrão (lista padrão em português e inglês) são apagadas e reenviadas via webhook com o nome/avatar do autor, trocando cada letra do termo por █ — o resto da mensagem continua visível. Vale também pra fala de personagem (proxy de OC). A detecção ignora acento, maiúscula e leet (p0rr@ ≡ porra). Reagir ❌ apaga a versão censurada. Requer que o bot tenha Gerenciar Mensagens e Gerenciar Webhooks.',
                 subs: [
                     { usage: 'rp!censura on|off', desc: 'Liga/desliga o filtro no servidor' },
                     { usage: 'rp!censura', desc: 'Status: termos ativos, ajustes e canais isentos' },
