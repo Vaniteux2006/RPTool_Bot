@@ -1,6 +1,6 @@
 {
   "name": "rptool",
-  "version": "1.4.0",
+  "version": "1.6.0",
   "description": "Bot de RPG e Xadrez",
   "main": "loader.js",
   "scripts": {
