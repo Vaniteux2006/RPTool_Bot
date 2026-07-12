@@ -1,6 +1,6 @@
 import { Message, EmbedBuilder } from 'discord.js';
 import { ItemModel } from '../../../tools/models/EconomySchema';
-import { getGuildEconomy, formatMoney, effectivePrice } from '../../../tools/utils/economy';
+import { getGuildEconomy, formatMoney, effectivePrice, formatQty } from '../../../tools/utils/economy';
 
 // rp!inventory shop  → navega o catálogo do servidor.
 export default async function handleShop(message: Message, _userId: string) {
@@ -15,7 +15,7 @@ export default async function handleShop(message: Message, _userId: string) {
 
     const lines = items.map(it => {
         const price = effectivePrice(it, econ);
-        const stock = it.stock < 0 ? '' : ` • estoque: ${it.stock}`;
+        const stock = it.stock < 0 ? '' : ` • estoque: ${formatQty(it.stock)}`;
         const desc = it.description ? `\n> _${it.description.slice(0, 100)}_` : '';
         return `${it.emoji} **${it.name}** — ${formatMoney(price, econ)}${stock}${desc}`;
     });

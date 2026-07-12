@@ -31,7 +31,7 @@ export default {
                 { name: '👑 Fundador, Idealizador & Dev', value: '> @**vaniteux_reborn** (Vaniteux)', inline: false },
                 { name: '💻 Co-Fundador & QA Tester', value: '> @**mr.ivanol** (Ivan)', inline: false },
                 { name: '🎨 Ilustrador (Avatar)', value: '> @**skieeeell** (Skiel)', inline: false },
-                { name: '🐞 QA Tester', value: '> @**thejiveglitch** (Lukas)', inline: false },
+                { name: '🐞 QA Tester', value: '> @**thejiveglitch** (Lukas) \n @**elyathan_gm** (Ely)', inline: false },
             )
             .setFooter({ text: 'TypeScript Update 🚀' });
     }

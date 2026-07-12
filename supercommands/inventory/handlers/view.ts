@@ -2,7 +2,7 @@ import { Message, EmbedBuilder } from 'discord.js';
 import { ItemModel } from '../../../tools/models/EconomySchema';
 import {
     resolveOcInGuild, explicitMention, getSoleOc, AMBIGUOUS_MSG,
-    getOrCreateWallet, getGuildEconomy,
+    getOrCreateWallet, getGuildEconomy, formatQty,
 } from '../../../tools/utils/economy';
 import { IOC } from '../../../tools/models/OCSchema';
 
@@ -54,15 +54,28 @@ export default async function handleView(message: Message, nameTokens: string[],
                 const meta = metaByKey.get(i.key);
                 label = meta ? `${meta.emoji} ${meta.name}` : `📦 ${i.key}`;
             }
-            return `**${i.qty}×** ${label}`;
+            return `**${formatQty(i.qty)}×** ${label}`;
         });
+
+    // Descrição de embed aguenta 4096 chars — mochilas gigantes (cap de 1000
+    // tipos) são truncadas com contagem do que ficou de fora.
+    const MAX_DESC = 3900;
+    const shown: string[] = [];
+    let used = 0;
+    let hidden = 0;
+    for (const line of lines) {
+        if (used + line.length + 1 > MAX_DESC) { hidden++; continue; }
+        shown.push(line);
+        used += line.length + 1;
+    }
+    if (hidden) shown.push(`… e mais **${hidden}** tipos de item.`);
 
     const embed = new EmbedBuilder()
         .setColor(0x9B59B6)
         .setAuthor({ name: oc.name, iconURL: oc.avatar })
         .setTitle('🎒 Mochila')
         .setThumbnail(oc.avatar)
-        .setDescription(lines.join('\n'))
+        .setDescription(shown.join('\n'))
         .setFooter({ text: `${wallet.items.length} tipos de item${hasCustom ? ' • ✎ = pessoal' : ''} • ${message.guild!.name}` });
 
     return message.reply({ embeds: [embed] });

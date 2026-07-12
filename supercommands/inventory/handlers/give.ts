@@ -2,7 +2,7 @@ import { Message, EmbedBuilder } from 'discord.js';
 import { ItemModel } from '../../../tools/models/EconomySchema';
 import {
     resolveOwnedOc, resolveOcInGuild, stripMentionTokens, AMBIGUOUS_MSG,
-    getOrCreateWallet, findHeldItem, addItemToWallet, removeItemFromWallet,
+    getOrCreateWallet, findHeldItem, addItemToWallet, removeItemFromWallet, formatQty,
 } from '../../../tools/utils/economy';
 
 // rp!inventory give "MeuOC" "item" [qtd] "AlvoOC" [@dono]
@@ -71,7 +71,7 @@ export default async function handleGive(message: Message, rest: string[], userI
     // Remoção atômica da origem; se não tiver o bastante, aborta antes de creditar.
     const removed = await removeItemFromWallet(guildId, fromOc._id, held.key, qty);
     if (!removed) {
-        return message.reply(`🎒 **${fromOc.name}** não tem ${qty}× **${displayName}** pra dar.`);
+        return message.reply(`🎒 **${fromOc.name}** não tem ${formatQty(qty)}× **${displayName}** pra dar.`);
     }
 
     // Itens pessoais carregam nome/emoji pro destino (o catálogo resolve sozinho).
@@ -84,7 +84,7 @@ export default async function handleGive(message: Message, rest: string[], userI
     const embed = new EmbedBuilder()
         .setColor(0x2ECC71)
         .setTitle('🎁 Item transferido')
-        .setDescription(`**${fromOc.name}** deu **${qty}× ${displayEmoji} ${displayName}** para **${toOc.name}**.`);
+        .setDescription(`**${fromOc.name}** deu **${formatQty(qty)}× ${displayEmoji} ${displayName}** para **${toOc.name}**.`);
 
     return message.reply({ embeds: [embed] });
 }

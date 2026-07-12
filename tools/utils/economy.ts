@@ -32,6 +32,40 @@ export function slugify(name: string): string {
         .slice(0, 60);
 }
 
+// ─── Caps da mochila (compartilhados por add/levar/admin) ─────────────────────
+// Quantidade: SEM limite de política — o teto é 2^53-1 (Number.MAX_SAFE_INTEGER),
+// acima disso double do JS/Mongo perde precisão e o $inc erra a conta.
+export const MAX_ITEM_QTY = Number.MAX_SAFE_INTEGER;
+// Tipos distintos: guarda anti-abuso, não regra de RP — cada tipo cresce o doc
+// da carteira (lido a cada comando) e a exibição trunca além do embed.
+export const MAX_DISTINCT_ITEMS = 1000;
+
+// ─── Exibição de quantidades ──────────────────────────────────────────────────
+// Até 10 mil: número normal (9.999). Acima: notação científica (1,5 × 10¹⁰) —
+// com o teto em 2^53-1, quantidades épicas não podem entupir o embed.
+const SUPERSCRIPT = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
+export function formatQty(n: number): string {
+    if (!Number.isFinite(n) || n <= 10_000) return n.toLocaleString('pt-BR');
+    let exp = Math.floor(Math.log10(n));
+    let mantissa = n / Math.pow(10, exp);
+    if (Math.round(mantissa * 100) >= 1000) { mantissa /= 10; exp += 1; } // 9,999e6 → 1 × 10⁷
+    const m = mantissa.toFixed(2).replace(/\.?0+$/, '').replace('.', ',');
+    const sup = String(exp).split('').map(d => SUPERSCRIPT[+d]).join('');
+    return `${m} × 10${sup}`;
+}
+
+// ─── Emoji de item (unicode OU emoji personalizado do servidor) ───────────────
+// Emoji custom do Discord é um token `<:nome:id>` / `<a:nome:id>` com 20+ chars:
+// o antigo `.slice(0, 8)` decapitava o token e virava texto quebrado — por isso
+// "só funcionava emoji padrão". Custom passa inteiro; unicode (inclusive
+// sequências ZWJ e bandeiras) é limitado a 16 unidades.
+export function sanitizeEmoji(raw: string | undefined, fallback: string): string {
+    const v = (raw || '').trim();
+    if (!v) return fallback;
+    if (/^<a?:\w{2,32}:\d{17,20}>$/.test(v)) return v; // emoji custom, token completo
+    return v.slice(0, 16);
+}
+
 // ─── Parse de valor monetário (inteiro positivo) ──────────────────────────────
 // Retorna null se inválido. Aceita "1000", "1.000", "1_000".
 export function parseAmount(raw: string | undefined): number | null {

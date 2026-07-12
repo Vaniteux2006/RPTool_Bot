@@ -5,7 +5,7 @@ import { ItemModel, WalletModel, IWalletItem, IItem } from '../../../tools/model
 import {
     resolveOwnedOc, stripMentionTokens,
     getOrCreateWallet, findHeldItem, addItemToWallet, removeItemFromWallet,
-    CustomItemMeta,
+    CustomItemMeta, MAX_DISTINCT_ITEMS, formatQty,
 } from '../../../tools/utils/economy';
 import { IOC } from '../../../tools/models/OCSchema';
 
@@ -26,8 +26,6 @@ import { IOC } from '../../../tools/models/OCSchema';
 
 // Trava por OC: impede dois `levar` simultâneos duplicarem a mesma mochila.
 const inFlight = new Set<string>();
-
-const MAX_DISTINCT = 100; // mesmo cap de tipos por mochila do handlers/add.ts
 
 interface MovePlan {
     item: IWalletItem;       // snapshot do item na origem
@@ -83,7 +81,7 @@ export default async function handleLevar(message: Message, rest: string[], user
         }
         const qty = wantedQty ?? held.qty;
         if (qty > held.qty) {
-            return message.reply(`🎒 **${oc.name}** só tem **${held.qty}×** desse item aqui.`);
+            return message.reply(`🎒 **${oc.name}** só tem **${formatQty(held.qty)}×** desse item aqui.`);
         }
         candidates = [{ item: held, qty }];
     } else {
@@ -109,7 +107,7 @@ export default async function handleLevar(message: Message, rest: string[], user
 
     // ── Embed numerado: "pra onde levar?" ────────────────────────────────────
     const what = itemName
-        ? `**${candidates[0].qty}× ${candidates[0].item.emoji || '📦'} ${candidates[0].item.name || candidates[0].item.key}**`
+        ? `**${formatQty(candidates[0].qty)}× ${candidates[0].item.emoji || '📦'} ${candidates[0].item.name || candidates[0].item.key}**`
         : `a **mochila inteira** (${srcWallet.items.length} tipos de item)`;
 
     const destLines = destinations.map((d, i) =>
@@ -239,9 +237,9 @@ export default async function handleLevar(message: Message, rest: string[], user
         const destWallet = await getOrCreateWallet(destGuildId, oc);
         const destHeld = new Set(destWallet.items.map(i => i.key));
         const newTypes = plans.filter(p => !destHeld.has(p.item.key)).length;
-        if (destWallet.items.length + newTypes > MAX_DISTINCT) {
+        if (destWallet.items.length + newTypes > MAX_DISTINCT_ITEMS) {
             return message.reply(
-                `🎒 A mochila de **${oc.name}** em **${dest.guild.name}** estouraria o limite de ${MAX_DISTINCT} tipos de item. Leve menos itens por vez (\`rp!levar "item" "${oc.name}"\`).`,
+                `🎒 A mochila de **${oc.name}** em **${dest.guild.name}** estouraria o limite de ${MAX_DISTINCT_ITEMS} tipos de item. Leve menos itens por vez (\`rp!levar "item" "${oc.name}"\`).`,
             );
         }
 
@@ -252,7 +250,7 @@ export default async function handleLevar(message: Message, rest: string[], user
             const removed = await removeItemFromWallet(srcGuildId, oc._id, p.item.key, p.qty);
             if (!removed) continue; // mudou embaixo de nós (drop/give concorrente) — pula
             await addItemToWallet(destGuildId, oc._id, p.item.key, p.qty, p.meta);
-            moved.push(`**${p.qty}×** ${p.label}${p.converted ? ' → virou pessoal ✎' : ''}`);
+            moved.push(`**${formatQty(p.qty)}×** ${p.label}${p.converted ? ' → virou pessoal ✎' : ''}`);
         }
 
         if (!moved.length) {

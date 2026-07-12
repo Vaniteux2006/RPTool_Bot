@@ -2,7 +2,7 @@ import { Message, EmbedBuilder } from 'discord.js';
 import { WalletModel, ItemModel } from '../../../tools/models/EconomySchema';
 import {
     resolveOwnedOc, resolveItem, getOrCreateWallet, findHeldItem, removeItemFromWallet,
-    getGuildEconomy, formatMoney, effectivePrice, stripMentionTokens,
+    getGuildEconomy, formatMoney, effectivePrice, stripMentionTokens, formatQty,
 } from '../../../tools/utils/economy';
 import { recordLedger } from '../../../tools/utils/economyEngine';
 
@@ -50,7 +50,7 @@ export default async function handleSell(message: Message, rest: string[], userI
     // Remove atomicamente da mochila; se não tiver o bastante, aborta.
     const removed = await removeItemFromWallet(guildId, oc._id, item.key, qty);
     if (!removed) {
-        return message.reply(`🎒 **${oc.name}** não tem ${qty}× **${item.name}** pra vender.`);
+        return message.reply(`🎒 **${oc.name}** não tem ${formatQty(qty)}× **${item.name}** pra vender.`);
     }
 
     // Devolve ao estoque da loja (se limitado) e credita o OC.
@@ -69,7 +69,7 @@ export default async function handleSell(message: Message, rest: string[], userI
     const embed = new EmbedBuilder()
         .setColor(0xF1C40F)
         .setTitle('💱 Venda realizada')
-        .setDescription(`**${oc.name}** vendeu **${qty}× ${item.emoji} ${item.name}**.`)
+        .setDescription(`**${oc.name}** vendeu **${formatQty(qty)}× ${item.emoji} ${item.name}**.`)
         .addFields(
             { name: 'Recebido', value: formatMoney(refund, econ), inline: true },
             { name: 'Novo saldo', value: formatMoney(credited?.balance ?? 0, econ), inline: true },

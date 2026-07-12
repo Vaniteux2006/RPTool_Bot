@@ -2,6 +2,7 @@ import { Message, EmbedBuilder } from 'discord.js';
 import { ItemModel } from '../../../tools/models/EconomySchema';
 import {
     resolveOwnedOc, getOrCreateWallet, findHeldItem, removeItemFromWallet, stripMentionTokens,
+    formatQty,
 } from '../../../tools/utils/economy';
 
 // rp!inventory drop ["MeuOC"] "item" [qtd]  → descarta um item da mochila.
@@ -45,12 +46,12 @@ export default async function handleDrop(message: Message, rest: string[], userI
 
     const removed = await removeItemFromWallet(guildId, oc._id, held.key, qty);
     if (!removed) {
-        return message.reply(`🎒 **${oc.name}** não tem ${qty}× **${displayName}** pra descartar.`);
+        return message.reply(`🎒 **${oc.name}** não tem ${formatQty(qty)}× **${displayName}** pra descartar.`);
     }
 
     const embed = new EmbedBuilder()
         .setColor(0xE74C3C)
-        .setDescription(`🗑️ **${oc.name}** descartou **${qty}× ${displayEmoji} ${displayName}**.`);
+        .setDescription(`🗑️ **${oc.name}** descartou **${formatQty(qty)}× ${displayEmoji} ${displayName}**.`);
 
     return message.reply({ embeds: [embed] });
 }

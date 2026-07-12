@@ -4,6 +4,7 @@ import {
     isStaff, slugify, parseAmount, resolveItem,
     resolveOcForAdmin, stripMentionTokens, AMBIGUOUS_MSG,
     getOrCreateWallet, addItemToWallet, removeItemFromWallet,
+    sanitizeEmoji, MAX_ITEM_QTY, formatQty,
 } from '../../../tools/utils/economy';
 
 // ── additem "Nome" <preço> [emoji] ["descrição"] ──────────────────────────────
@@ -23,17 +24,18 @@ async function addItem(message: Message, rest: string[]) {
     const exists = await ItemModel.findOne({ guildId, key });
     if (exists) return message.reply(`❌ Já existe um item com a chave \`${key}\`. Use \`edititem\`.`);
 
+    const itemEmoji = sanitizeEmoji(emoji, '📦');
     await ItemModel.create({
         guildId,
         key,
         name,
-        emoji: emoji || '📦',
+        emoji: itemEmoji,
         description: descParts.join(' ').slice(0, 400),
         basePrice: price ?? 0,
         createdBy: message.author.id,
     });
 
-    return message.reply(`✅ Item **${emoji || '📦'} ${name}** criado (chave: \`${key}\`, preço base: ${price ?? 0}).`);
+    return message.reply(`✅ Item **${itemEmoji} ${name}** criado (chave: \`${key}\`, preço base: ${price ?? 0}).`);
 }
 
 // ── edititem "Nome" <campo> <valor...> ────────────────────────────────────────
@@ -57,7 +59,7 @@ async function editItem(message: Message, rest: string[]) {
             set.basePrice = p ?? 0; break;
         }
         case 'name': case 'nome': set.name = value.slice(0, 80); break;
-        case 'emoji': set.emoji = value.slice(0, 8); break;
+        case 'emoji': set.emoji = sanitizeEmoji(value, '📦'); break;
         case 'desc': case 'descricao': case 'descrição': set.description = value.slice(0, 400); break;
         case 'stock': case 'estoque': {
             const s = value === '-1' ? -1 : parseAmount(value);
@@ -96,6 +98,9 @@ async function transferRaw(message: Message, rest: string[], mode: 'give' | 'tak
     if (!ocName || !itemName) {
         return message.reply(`⚠️ Uso: \`rp!inventory ${mode}item "OC" "item" [qtd]\`.`);
     }
+    if (qty > MAX_ITEM_QTY) {
+        return message.reply(`⚠️ Quantidade inválida (máx ${MAX_ITEM_QTY.toLocaleString('pt-BR')} — acima disso o número perde precisão).`);
+    }
 
     const guildId = message.guild!.id;
     const res = await resolveOcForAdmin(message, ocName, userId);
@@ -109,11 +114,11 @@ async function transferRaw(message: Message, rest: string[], mode: 'give' | 'tak
     if (mode === 'give') {
         await getOrCreateWallet(guildId, oc);
         await addItemToWallet(guildId, oc._id, item.key, qty);
-        return message.reply(`✅ Entregue **${qty}× ${item.emoji} ${item.name}** a **${oc.name}**.`);
+        return message.reply(`✅ Entregue **${formatQty(qty)}× ${item.emoji} ${item.name}** a **${oc.name}**.`);
     } else {
         const ok = await removeItemFromWallet(guildId, oc._id, item.key, qty);
-        if (!ok) return message.reply(`🎒 **${oc.name}** não tem ${qty}× **${item.name}**.`);
-        return message.reply(`✅ Removido **${qty}× ${item.emoji} ${item.name}** de **${oc.name}**.`);
+        if (!ok) return message.reply(`🎒 **${oc.name}** não tem ${formatQty(qty)}× **${item.name}**.`);
+        return message.reply(`✅ Removido **${formatQty(qty)}× ${item.emoji} ${item.name}** de **${oc.name}**.`);
     }
 }
 

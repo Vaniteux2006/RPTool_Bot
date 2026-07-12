@@ -6,8 +6,15 @@ import {
     ButtonBuilder,
     ButtonStyle,
     TextChannel,
+    DMChannel,
 } from 'discord.js';
 import { TemplateModel, FichaModel } from '../../../tools/models/FichaSchema';
+
+// Trava por usuário: o wizard roda na DM via awaitMessages, e DOIS wizards
+// simultâneos (ex: fichas pra dois servidores) escutariam o MESMO canal —
+// cada resposta seria capturada pelos dois e contaminaria as duas fichas
+// (mesma classe de bug do "Escolha entre 1 e 1" do rp!levar).
+const inFlight = new Set<string>();
 
 export default async function handleNew(message: Message, args: string[]) {
     // args[0] = 'new', args[1] = '+oc' (opcional)
@@ -33,8 +40,21 @@ export default async function handleNew(message: Message, args: string[]) {
         }
     }
 
+    if (inFlight.has(message.author.id)) {
+        return message.reply('⏳ Você já tem uma ficha em criação na DM — termine-a (ou digite `CANCELAR` lá) antes de começar outra.');
+    }
+    inFlight.add(message.author.id);
+    try {
+        return await runWizard(message, template, integrateOC);
+    } finally {
+        inFlight.delete(message.author.id);
+    }
+}
+
+// ─── O wizard em si (perguntas na DM, campo a campo) ──────────────────────────
+async function runWizard(message: Message, template: any, integrateOC: boolean) {
     // Abre DM
-    let dmChannel;
+    let dmChannel: DMChannel;
     try {
         dmChannel = await message.author.createDM();
         await dmChannel.send(

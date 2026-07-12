@@ -2,7 +2,7 @@ import { Message, EmbedBuilder } from 'discord.js';
 import { WalletModel, ItemModel } from '../../../tools/models/EconomySchema';
 import {
     resolveOwnedOc, resolveItem, getOrCreateWallet, addItemToWallet,
-    getGuildEconomy, formatMoney, effectivePrice, stripMentionTokens,
+    getGuildEconomy, formatMoney, effectivePrice, stripMentionTokens, formatQty,
 } from '../../../tools/utils/economy';
 import { recordLedger } from '../../../tools/utils/economyEngine';
 
@@ -50,7 +50,7 @@ export default async function handleBuy(message: Message, rest: string[], userId
             { new: true },
         );
         if (!reserved) {
-            return message.reply(`📦 Estoque insuficiente de **${item.name}** (restam ${item.stock}).`);
+            return message.reply(`📦 Estoque insuficiente de **${item.name}** (restam ${formatQty(item.stock)}).`);
         }
     }
 
@@ -66,7 +66,7 @@ export default async function handleBuy(message: Message, rest: string[], userId
         if (item.stock >= 0) {
             await ItemModel.updateOne({ guildId, key: item.key }, { $inc: { stock: qty } });
         }
-        return message.reply(`💸 **${oc.name}** não tem ${formatMoney(total, econ)} pra comprar ${qty}× **${item.name}**.`);
+        return message.reply(`💸 **${oc.name}** não tem ${formatMoney(total, econ)} pra comprar ${formatQty(qty)}× **${item.name}**.`);
     }
 
     // 3) Entrega do item.
@@ -77,7 +77,7 @@ export default async function handleBuy(message: Message, rest: string[], userId
     const embed = new EmbedBuilder()
         .setColor(0x2ECC71)
         .setTitle('🛒 Compra realizada')
-        .setDescription(`**${oc.name}** comprou **${qty}× ${item.emoji} ${item.name}**.`)
+        .setDescription(`**${oc.name}** comprou **${formatQty(qty)}× ${item.emoji} ${item.name}**.`)
         .addFields(
             { name: 'Custo', value: formatMoney(total, econ), inline: true },
             { name: 'Novo saldo', value: formatMoney(debited.balance, econ), inline: true },
