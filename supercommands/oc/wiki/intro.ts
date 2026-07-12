@@ -12,7 +12,7 @@ export default async function handleIntro(message: Message, args: string[], user
     const oc = await OCModel.findOne({ adminId: userId, name: extracted.name });
     if (!oc) return message.reply("❌ OC não encontrado ou você não é o dono.");
 
-    message.reply(`📝 **Escrevendo a Introdução de ${oc.name}**\nDigite o texto principal. O bot dividirá automaticamente em páginas se ficar muito grande. Digite **END** para salvar.`);
+    message.reply(`📝 **Escrevendo a Introdução de ${oc.name}**\nDigite o texto principal. O bot dividirá automaticamente em páginas se ficar muito grande. Digite **END** para salvar. \n ⚠️ **SE QUISER ENCERRAR, NÃO MANDE NADA E ENVIE APENAS "END". NÃO APAGUE A MENSAGEM PRINCIPAL!**`);
 
     const collector = new MessageCollector(message.channel as TextChannel, { filter: (m: Message) => m.author.id === userId, time: 300000 });
     let introStr = "";

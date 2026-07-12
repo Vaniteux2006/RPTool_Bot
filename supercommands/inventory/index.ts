@@ -10,14 +10,18 @@ import handleSell from './handlers/sell';
 import handleAdd from './handlers/add';
 import handleDrop from './handlers/drop';
 import handleAdmin from './handlers/admin';
+import handleLevar from './handlers/levar';
+import handleOnde from './handlers/onde';
 import helpCommand from '../help/index';
 
 // ─── SuperComando rp!inventory ────────────────────────────────────────────────
 // Mochila POR PERSONAGEM (OC), isolada por servidor. Loja definida pela staff.
+// `levar` na lista de aliases = atalho top-level: rp!levar roteia pra cá e o
+// shim abaixo despacha direto pro handler (sem passar pelo switch de ações).
 export default {
     name: 'inventory',
     description: 'Mochila e loja dos seus OCs (itens por personagem)',
-    aliases: ['inv', 'bag', 'mochila', 'itens', 'i'],
+    aliases: ['inv', 'bag', 'mochila', 'itens', 'i', 'levar'],
 
     execute: async (message: Message, args: string[]) => {
         const userId = message.author.id;
@@ -31,6 +35,13 @@ export default {
         const rest = tokens.slice(2);
 
         try {
+            // Shim do atalho top-level: em `rp!levar "item" "OC"` o tokens[1] é
+            // argumento, não ação — despacha direto pro handler.
+            const invoked = (tokens[0] || '').toLowerCase().split('!').pop();
+            if (invoked === 'levar') {
+                return handleLevar(message, tokens.slice(1), userId);
+            }
+
             switch (action) {
                 case 'give': case 'dar': case 'trade':
                     return handleGive(message, rest, userId);
@@ -52,6 +63,12 @@ export default {
 
                 case 'drop': case 'descartar': case 'jogarfora': case 'remove': case 'remover':
                     return handleDrop(message, rest, userId);
+
+                case 'levar': case 'transferir': case 'transfer': case 'mudar': case 'viajar':
+                    return handleLevar(message, rest, userId);
+
+                case 'onde': case 'where': case 'servidores': case 'servers':
+                    return handleOnde(message, rest, userId);
 
                 case 'additem': case 'edititem': case 'removeitem':
                 case 'giveitem': case 'takeitem':

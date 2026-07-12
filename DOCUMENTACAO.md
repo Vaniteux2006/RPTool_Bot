@@ -169,7 +169,7 @@ Padrão comum: `index.ts` com roteador `switch` + `sendHelp()`, handlers em arqu
 | **`phone/`** | ✅ | Telefone inter-servidores: register/call/accept/decline/end; `phone:relay` repassa as mensagens da chamada. |
 | **`censura/`** | ❌ (prefix) | Filtro de palavrões estilo proxy: apaga a mensagem e reenvia via webhook com o nome/avatar do autor, termo em █. `wordlist.ts` (listas padrão pt-BR + EN), `engine.ts` (normalização anti-leet/acento, matching por token com fronteira de palavra, cache 5 min). Integra com o proxy de OC via `registerProxyContentFilter` (fala de personagem também sai censurada) e `wasOCProxied` (não reprocessa). O filtro se inscreve no `messageCreate` **dentro do ClientReady** pra garantir que roda depois do `oc:proxy`. |
 | **`wallet/`** | ❌ (prefix) | Carteira por OC (§10). Handlers: `view`, `pay` (transferência atômica), `top`, `admin` (add/remove/set/setcurrency/reset), `economy` (dashboard + toggles do modo avançado). Aliases: `bank`, `saldo`, `money`, `carteira`, `w`. |
-| **`inventory/`** | ❌ (prefix) | Mochila por OC + loja do servidor (§10). Handlers: `view`, `give`, `use`, `shop`, `buy`, `sell`, `admin` (additem/edititem/removeitem/giveitem/takeitem). Aliases: `inv`, `bag`, `mochila`, `itens`, `i`. |
+| **`inventory/`** | ❌ (prefix) | Mochila por OC + loja do servidor (§10). Handlers: `view`, `give`, `use`, `shop`, `buy`, `sell`, `levar` (move itens entre servidores), `onde` (mapa de mochilas), `admin` (additem/edititem/removeitem/giveitem/takeitem). Aliases: `inv`, `bag`, `mochila`, `itens`, `i`, `levar` (atalho top-level `rp!levar` via shim no index). |
 
 ---
 
@@ -254,7 +254,9 @@ Carteira, mochila e loja **por personagem (OC)**, isoladas por servidor. Inspira
 
 ### 10.3 Comandos
 **`rp!wallet`** — `["Nome"]` (saldo), `pay "De" <valor> "Para"`, `top`, `economia [avancada|reajuste|dolar|reset]`, e admin `add/remove/set/setcurrency/reset`.
-**`rp!inventory`** — `["Nome"]` (mochila), `shop`, `buy/sell "OC" "item" [qtd]`, `use "OC" "item"`, `give "De" "item" [qtd] "Para"`, `add`/`drop` (itens pessoais), e admin `additem/edititem/removeitem/giveitem/takeitem`.
+**`rp!inventory`** — `["Nome"]` (mochila), `shop`, `buy/sell "OC" "item" [qtd]`, `use "OC" "item"`, `give "De" "item" [qtd] "Para"`, `add`/`drop` (itens pessoais), `onde ["OC"]` (em quais servidores o OC tem mochila — só o dono vê), e admin `additem/edititem/removeitem/giveitem/takeitem`.
+
+**`rp!levar`** (atalho de `rp!inventory levar`) — **move** (nunca copia) itens do OC pro mesmo OC em OUTRO servidor: `rp!levar ["OC"]` (mochila inteira) ou `rp!levar "item" [qtd] "OC"` (qtd omitida = pilha inteira). Roda no servidor de ORIGEM; um embed numera os servidores onde o OC já tem carteira (o `rp!bag` cria ao ser usado) e o dono responde `1`, `2`, `3`... Regras de chegada: item **pessoal** viaja intacto; item **de loja** mapeia pro catálogo do destino se o `key` existir lá, senão **vira pessoal** (perde preço/venda); `tradable: false` **não viaja**; 💰 **saldo nunca viaja** (cada servidor é uma economia — moeda própria, M/Q/priceIndex próprios). Débito atômico na origem antes do crédito no destino (ordem do `give` — sem duplicação), trava em memória por OC contra transferências concorrentes, e o cap de 100 tipos do destino é respeitado.
 
 **Dois tipos de item:**
 - **De loja (catálogo `ItemModel`)** — staff cria (`additem`), têm `basePrice`, entram em `buy`/`sell`, contam na riqueza real Q, respeitam `tradable`/`usable`.
