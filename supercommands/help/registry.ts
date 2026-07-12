@@ -648,7 +648,7 @@ export const CATEGORIES: HelpCategory[] = [
                 aliases: ['inv', 'bag', 'mochila', 'itens', 'i'],
                 subs: [
                     { usage: 'rp!inventory ["Nome"]', desc: 'Lista a mochila do OC (✎ = item pessoal)' },
-                    { usage: 'rp!levar ["OC"]', desc: 'Move a mochila INTEIRA pra outro servidor (escolha numerada)' },
+                    { usage: 'rp!levar ["OC"]', desc: 'Move a mochila INTEIRA pra outro servidor (menu de escolha)' },
                     { usage: 'rp!levar "item" [qtd] "OC"', desc: 'Move só um item pra outro servidor (qtd omitida = tudo)' },
                     { usage: 'rp!inventory onde ["OC"]', desc: 'Em quais servidores o OC tem mochila (só o dono vê)' },
                     { usage: 'rp!inventory add "MeuOC" "Nome do item" [qtd] [emoji]', desc: 'Cria um item PESSOAL na sua mochila (RP)' },

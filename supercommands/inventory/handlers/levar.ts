@@ -1,4 +1,6 @@
-import { Message, EmbedBuilder, TextChannel } from 'discord.js';
+import {
+    Message, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ComponentType,
+} from 'discord.js';
 import { ItemModel, WalletModel, IWalletItem, IItem } from '../../../tools/models/EconomySchema';
 import {
     resolveOwnedOc, stripMentionTokens,
@@ -96,7 +98,7 @@ export default async function handleLevar(message: Message, rest: string[], user
     const destinations = wallets
         .map(w => ({ wallet: w, guild: message.client.guilds.cache.get(w.guildId) }))
         .filter((d): d is { wallet: typeof d.wallet; guild: NonNullable<typeof d.guild> } => !!d.guild)
-        .slice(0, 9);
+        .slice(0, 20); // select menu comporta até 25 opções (20 destinos + cancelar)
 
     if (!destinations.length) {
         return message.reply(
@@ -121,32 +123,58 @@ export default async function handleLevar(message: Message, rest: string[], user
             `Levando ${what} de **${message.guild!.name}** para:\n\n${destLines.join('\n')}\n\n` +
             '> Os itens são **movidos** (não copiados). 💰 O saldo não viaja — cada servidor tem sua própria moeda.',
         )
-        .setFooter({ text: 'Responda com o número do servidor • "cancelar" pra abortar • 60s' });
+        .setFooter({ text: 'Escolha o destino no menu abaixo • 60s' });
 
-    await message.reply({ embeds: [askEmbed] });
+    // ── Escolha via select menu PRESO A ESTA MENSAGEM ─────────────────────────
+    // Nada de awaitMessages no canal: coletores de execuções antigas ainda vivos
+    // capturavam a resposta numérica de qualquer um (o bug do "Escolha entre 1
+    // e 1"). O componente só dispara neste embed, e só pra quem invocou.
+    const select = new StringSelectMenuBuilder()
+        .setCustomId(`levar_dest_${message.id}`)
+        .setPlaceholder('Levar pra qual servidor?')
+        .addOptions([
+            ...destinations.map((d, i) => ({
+                label: `${i + 1}. ${d.guild.name}`.slice(0, 100),
+                description: `${d.wallet.items.length} tipos de item`,
+                value: String(i),
+            })),
+            { label: '❌ Cancelar', description: 'Nada é movido.', value: 'cancel' },
+        ]);
+    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 
-    // ── Coleta a escolha (1, 2, 3... ou cancelar) ─────────────────────────────
-    let choice: number;
-    try {
-        const collected = await (message.channel as TextChannel).awaitMessages({
-            filter: (m: Message) =>
-                m.author.id === userId && (/^\d{1,2}$/.test(m.content.trim()) || /^cancelar$/i.test(m.content.trim())),
-            max: 1,
+    const prompt = await message.reply({ embeds: [askEmbed], components: [row] });
+
+    const picked = await new Promise<string>((resolve) => {
+        const collector = prompt.createMessageComponentCollector({
+            componentType: ComponentType.StringSelect,
             time: 60_000,
-            errors: ['time'],
         });
-        const answer = collected.first()!.content.trim();
-        if (/^cancelar$/i.test(answer)) {
-            return message.reply('🛑 Transferência cancelada.');
-        }
-        choice = parseInt(answer, 10);
-    } catch {
+        collector.on('collect', async (i) => {
+            if (i.user.id !== userId) {
+                await i.reply({ content: '🚫 Só quem pediu a mudança pode escolher o destino.', ephemeral: true }).catch(() => null);
+                return;
+            }
+            await i.deferUpdate().catch(() => null);
+            collector.stop('picked');
+            resolve(i.values[0]);
+        });
+        collector.on('end', (_collected, reason) => {
+            if (reason !== 'picked') resolve('timeout');
+        });
+    });
+
+    await prompt.edit({ components: [] }).catch(() => null); // desarma o menu
+
+    if (picked === 'timeout') {
         return message.reply('⌛ Tempo esgotado — transferência cancelada.');
     }
+    if (picked === 'cancel') {
+        return message.reply('🛑 Transferência cancelada.');
+    }
 
-    const dest = destinations[choice - 1];
+    const dest = destinations[Number(picked)];
     if (!dest) {
-        return message.reply(`⚠️ Escolha entre **1** e **${destinations.length}**. Rode o comando de novo.`);
+        return message.reply('❌ Destino inválido — rode o comando de novo.');
     }
     const destGuildId = dest.wallet.guildId;
 
