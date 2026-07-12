@@ -59,10 +59,13 @@ export function formatQty(n: number): string {
 // o antigo `.slice(0, 8)` decapitava o token e virava texto quebrado — por isso
 // "só funcionava emoji padrão". Custom passa inteiro; unicode (inclusive
 // sequências ZWJ e bandeiras) é limitado a 16 unidades.
+// O grupo de captura é o ID — usado pra checar se o bot tem acesso ao emoji.
+export const CUSTOM_EMOJI_RE = /^<a?:\w{2,32}:(\d{17,20})>$/;
+
 export function sanitizeEmoji(raw: string | undefined, fallback: string): string {
     const v = (raw || '').trim();
     if (!v) return fallback;
-    if (/^<a?:\w{2,32}:\d{17,20}>$/.test(v)) return v; // emoji custom, token completo
+    if (CUSTOM_EMOJI_RE.test(v)) return v; // emoji custom, token completo
     return v.slice(0, 16);
 }
 

@@ -1,4 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+import helpCommand from '../supercommands/help/index';
 
 export default {
     name: 'roll',
@@ -28,6 +29,11 @@ export default {
     },
 
     async execute(message: Message, args: string[]) {
+        // "rp!roll help" merece o verbete do help, não "formato inválido".
+        const first = (args[0] || '').toLowerCase();
+        if (['help', 'ajuda', 'comandos'].includes(first)) {
+            return helpCommand.execute(message, ['roll', ...args.slice(1)]);
+        }
         const formula = args.join("");
         const success = await this.processRoll(message, formula);
         if (!success) {

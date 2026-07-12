@@ -108,7 +108,12 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
 
     const ocs = myOCs
         .filter(oc => oc.prefix || oc.suffix)
-        .sort((a, b) => (b.prefix?.length || 0) - (a.prefix?.length || 0));
+        // Prefixo mais longo primeiro ("??:" ganha de "?:"); empate exato entre
+        // OCs do MESMO autor → o mais antigo vence (determinístico, antes era
+        // ordem arbitrária do Mongo).
+        .sort((a, b) =>
+            (b.prefix?.length || 0) - (a.prefix?.length || 0) ||
+            (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0));
 
     const messagesToSend: { oc: IOC, cleanContent: string }[] = [];
     let contentToParse = message.content.trim();
@@ -173,38 +178,16 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
 
     if (messagesToSend.length === 0) return false;
 
-    const validMessages: { oc: IOC, cleanContent: string }[] = [];
-    const guildMembers = message.guild.members.cache;
-
-    for (const item of messagesToSend) {
-        const match = item.oc;
-        const prefixQuery = match.prefix ? match.prefix : { $in: [null, ""] };
-        const suffixQuery = match.suffix ? match.suffix : { $in: [null, ""] };
-
-        const conflicts = await OCModel.find({ 
-            prefix: prefixQuery, 
-            suffix: suffixQuery,
-            _id: { $ne: match._id } 
-        });
-
-        let hasConflict = false;
-        if (conflicts.length > 0) {
-            for (const rival of conflicts) {
-                const rivalIsHere = guildMembers.has(rival.adminId) || rival.duoIds.some(id => guildMembers.has(id));
-                if (rivalIsHere && rival.createdAt < match.createdAt) {
-                    console.log(`Conflito: ${match.name} perdeu para ${rival.name} (Mais antigo)`);
-                    hasConflict = true;
-                    break;
-                }
-            }
-        }
-
-        if (!hasConflict) {
-            validMessages.push(item);
-        }
-    }
-
-    if (validMessages.length === 0) return false;
+    // ⚠️ REMOVIDO (12/07/2026): o antigo "conflito de prefixo" global. Ele buscava
+    // OCs de QUALQUER usuário do bot com o mesmo prefixo e, se o dono rival
+    // estivesse no members.cache do servidor com um OC mais antigo, descartava a
+    // mensagem EM SILÊNCIO (sem aviso — só console.log). Dois defeitos fatais:
+    //   1. O proxy só casa OCs do AUTOR da mensagem (myOCs) — o prefixo de um
+    //      estranho nunca é ambíguo; a checagem só quebrava proxies legítimos.
+    //   2. members.cache é varrido de hora em hora (sweepers) → o conflito
+    //      disparava aleatoriamente ("antes funcionava, agora não").
+    // Empate entre OCs do PRÓPRIO autor já é resolvido no sort acima.
+    const validMessages = messagesToSend;
 
     // Disparo dos Webhooks
     try {

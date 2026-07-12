@@ -368,7 +368,7 @@ export const CATEGORIES: HelpCategory[] = [
                     { usage: 'rp!oc wiki edit ["Nome"] ["Tópico"]', desc: 'Edita um tópico existente' },
                     { usage: 'rp!oc wiki remove ["Nome"] ["Tópico"]', desc: 'Apaga o tópico' },
                     { usage: 'rp!oc wiki extra ["Nome"] ["Chave"] ["Valor"]', desc: 'Adiciona info curta (ex: Idade, Altura)' },
-                    { usage: 'rp!oc wiki emoji ["Nome"] ["Tópico"] [Emoji]', desc: 'Muda o ícone do tópico no menu' },
+                    { usage: 'rp!oc wiki emoji ["Nome"] ["Tópico"] [Emoji]', desc: 'Muda o ícone do tópico no menu (padrão ou custom do servidor)' },
                     { usage: 'rp!oc wiki ref ["Nome"] ["NomeReferência"]', desc: 'Linka com a Wiki de outro OC' },
                 ],
                 keywords: ['bio', 'topico', 'lore', 'escrever', 'referencia'],

@@ -1,11 +1,23 @@
 // RPTool/supercommands/oc/wiki/view.ts
 import { Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, EmbedBuilder } from "discord.js";
 import { OCModel, WikiModel } from "../../../tools/models/OCSchema";
+import { CUSTOM_EMOJI_RE } from "../../../tools/utils/economy";
 import { extractName } from "../utils";
 
 export default async function handleView(message: Message, args: string[], userId: string) {
     const extracted = extractName(message.content, "wiki");
     if (!extracted) return message.reply('De quem é a Wiki? `rp!oc wiki "Nome"`');
+
+    // Emoji seguro pra COMPONENTE: um valor inválido (lixo herdado, custom de
+    // servidor onde o bot não está mais, emoji deletado) faria o Discord rejeitar
+    // a mensagem inteira (Invalid Form Body) — melhor cair no 📄 que matar a wiki.
+    const menuEmoji = (raw?: string): string => {
+        const v = (raw || '').trim();
+        const custom = v.match(CUSTOM_EMOJI_RE);
+        if (custom) return message.client.emojis.cache.has(custom[1]) ? v : '📄';
+        if (v && !/\s/.test(v) && /\p{Emoji_Presentation}|\p{Extended_Pictographic}/u.test(v)) return v;
+        return '📄';
+    };
 
     const generateWikiView = async (targetName: string, mode: "main" | "section" | "gallery" = "main", index: number = 0, pageIndex: number = 0): Promise<{ embeds: EmbedBuilder[], components: ActionRowBuilder<any>[], currentTarget: string } | null> => {
         const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -175,7 +187,7 @@ export default async function handleView(message: Message, args: string[], userI
 
         if (wiki?.sections && wiki.sections.length > 0) {
             wiki.sections.forEach((sec: any, idx: number) => {
-                sectionMenu.addOptions(new StringSelectMenuOptionBuilder().setLabel(sec.title.substring(0, 100)).setValue(`section_${idx}`).setEmoji(sec.emoji || '📄'));
+                sectionMenu.addOptions(new StringSelectMenuOptionBuilder().setLabel(sec.title.substring(0, 100)).setValue(`section_${idx}`).setEmoji(menuEmoji(sec.emoji)));
             });
         }
         
