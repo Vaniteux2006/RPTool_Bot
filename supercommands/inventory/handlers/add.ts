@@ -4,7 +4,7 @@ import {
     resolveOwnedOc, slugify, getOrCreateWallet, addItemToWallet, stripMentionTokens,
 } from '../../../tools/utils/economy';
 
-const MAX_QTY = 10_000;         // por operação
+const MAX_QTY = 1_000_000_000;         // por operação
 const MAX_DISTINCT = 100;       // tipos de item por mochila
 const MAX_NAME = 60;
 
