@@ -199,6 +199,20 @@ export const CATEGORIES: HelpCategory[] = [
                 keywords: ['palavrão', 'xingamento', 'filtro', 'automod', 'bloquear', 'block'],
             },
             {
+                id: 'lockdown', name: 'lockdown', emoji: '🔒', admin: true,
+                summary: 'Tranca o servidor: todos veem os chats, ninguém fala.',
+                usage: ['rp!lockdown on', 'rp!lockdown off'],
+                details: 'Com o lockdown ativo, todo mundo continua vendo os canais mas ninguém envia mensagem, reação, enquete, thread nem fala em call. O estado anterior de cada canal é salvo — `off` restaura tudo exatamente como estava. Administradores não são afetados, canais já fechados/ocultos pro @everyone (anúncios, staff) não são tocados, e canal criado durante o lockdown já nasce trancado. Requer que o bot tenha Gerenciar Cargos.',
+                subs: [
+                    { usage: 'rp!lockdown on|off', desc: 'Tranca o servidor / restaura tudo como estava' },
+                    { usage: 'rp!lockdown access @membro', desc: 'Alterna liberação individual (cargo bypass)' },
+                    { usage: 'rp!lockdown free #canal', desc: 'Alterna liberação de um canal pra todo mundo' },
+                    { usage: 'rp!lockdown status', desc: 'Situação atual: canais trancados, liberados e bypass' },
+                ],
+                aliases: ['lock'],
+                keywords: ['trancar', 'fechar', 'silenciar', 'panico', 'emergencia', 'raid', 'mutar servidor'],
+            },
+            {
                 id: 'welcome', name: 'welcome', emoji: '👋', admin: true,
                 summary: 'Sistema de boas-vindas e registro de entrada/saída.',
                 usage: ['rp!welcome #canal'],

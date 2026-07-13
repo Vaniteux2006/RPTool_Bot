@@ -103,6 +103,7 @@ Várias `mongoose.createConnection()` por domínio. Há **duplicação** (vária
 | `ClockModel` | `ClockSchema.ts` | mainConnection | tempo, clima (schema único, com `guildId`/`paused`) |
 | `LogModel` | `LogConfig.ts` | mainConnection | logs |
 | `CensuraConfigModel` | `CensuraConfig.ts` | mainConnection | censura (engine cacheia 5 min por guild) |
+| `LockdownConfigModel` | `LockdownConfig.ts` | mainConnection | lockdown (snapshots dos overwrites pré-lockdown; cache 5 min por guild) |
 | `FichaModel`, `TemplateModel` | `FichaSchema.ts` | DB_FICHA | ficha |
 | `TeamModel` etc., `MatchReportModel` | `FutebolSchema.ts` / `FutebolReportSchema.ts` | DB_FB_* | futebol |
 | `GuildConfigModel` | `GuildConfig.ts` | DB_RESTANTE | só o `tools/utils/LogMinister.ts` antigo (morto) |
@@ -168,6 +169,7 @@ Padrão comum: `index.ts` com roteador `switch` + `sendHelp()`, handlers em arqu
 | **`exportchat/`** | ❌ (prefix) | Export de canal para HTML: scan paralelo → 3 workers → merger (7,5 MB) → DM → cleanup. Módulo mais "engenheirado". |
 | **`phone/`** | ✅ | Telefone inter-servidores: register/call/accept/decline/end; `phone:relay` repassa as mensagens da chamada. |
 | **`censura/`** | ❌ (prefix) | Filtro de palavrões estilo proxy: apaga a mensagem e reenvia via webhook com o nome/avatar do autor, termo em █. `wordlist.ts` (listas padrão pt-BR + EN), `engine.ts` (normalização anti-leet/acento, matching por token com fronteira de palavra, cache 5 min). Integra com o proxy de OC via `registerProxyContentFilter` (fala de personagem também sai censurada) e `wasOCProxied` (não reprocessa). O filtro se inscreve no `messageCreate` **dentro do ClientReady** pra garantir que roda depois do `oc:proxy`. |
+| **`lockdown/`** | ❌ (prefix) | Tranca o servidor (todos veem, ninguém fala): deny dos LOCK_PERMS no @everyone **por canal** (O(canais), não O(membros)) + cargo `🔓 Lockdown Bypass` com allow (dado ao bot ao ativar). `engine.ts` (snapshot/lock/restore + pool de 4). Snapshot pré-lockdown no Mongo → `off` restaura exato; canais já fechados/ocultos pro @everyone são pulados; categorias não são trancadas de propósito (canal novo copiaria os denies); canal criado durante o lockdown nasce trancado (`lockdown:newChannel`). `access @membro` e `free #canal` alternam liberações. |
 | **`wallet/`** | ❌ (prefix) | Carteira por OC (§10). Handlers: `view`, `pay` (transferência atômica), `top`, `admin` (add/remove/set/setcurrency/reset), `economy` (dashboard + toggles do modo avançado). Aliases: `bank`, `saldo`, `money`, `carteira`, `w`. |
 | **`inventory/`** | ❌ (prefix) | Mochila por OC + loja do servidor (§10). Handlers: `view`, `give`, `use`, `shop`, `buy`, `sell`, `levar` (move itens entre servidores), `onde` (mapa de mochilas), `admin` (additem/edititem/removeitem/giveitem/takeitem). Aliases: `inv`, `bag`, `mochila`, `itens`, `i`, `levar` (atalho top-level `rp!levar` via shim no index). |
 
