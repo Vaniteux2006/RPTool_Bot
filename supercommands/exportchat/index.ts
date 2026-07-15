@@ -4,7 +4,7 @@
 // Arquitetura:
 //   1. parseArgs    → valida canal + intervalo → buildDayQueue (fila de dias)
 //   2. confirm      → botão de confirmação se > 10 mensagens estimadas
-//   3. 3 workers    → consomem a fila de dias em paralelo, escrevem seg_YYYYMMDD.html em /data
+//   3. 3-6 workers  → consomem a fila de dias em paralelo, escrevem seg_YYYYMMDD.html em /data
 //   4. merger       → concatena segmentos em ordem → divide em arquivos de 7.5 MB
 //   5. Envia HTMLs  → DM do usuário, parte por parte
 //   6. cleanup      → deleta a pasta de sessão do disco
@@ -236,12 +236,15 @@ export default {
 
         const makeRenderer = () => new SegmentRenderer(colorCache, nameCache, message.guild!, pendingFetch);
 
-        // ── 10. Lançar 3 workers em paralelo ──────────────────────────────────
+        // ── 10. Lançar workers em paralelo ────────────────────────────────────
         // A fila é um array compartilhado — .shift() é atômico em JS single-thread.
         // Cada worker pega o próximo dia disponível ao terminar o atual.
         const sharedQueue = [...dayQueue]; // cópia da fila para os workers consumirem
 
-        const NUM_WORKERS = 3;
+        // Adaptativo: export sozinho ganha 6 workers; com exports concorrentes
+        // cai para 3 cada, mantendo o pico agregado ≤ 9 workers (~36 req/s),
+        // dentro do limite global de 50 req/s do Discord.
+        const NUM_WORKERS = activeExportCount > 1 ? 3 : 6;
         const workerPromises = Array.from({ length: NUM_WORKERS }, (_, i) =>
             runWorker(i + 1, sharedQueue, sessionPath, targetChannel, makeRenderer(), progress, isCancelled),
         );

@@ -10,7 +10,7 @@ import { DaySegment, dateToSnowflake } from './parseArgs';
 import { SegmentRenderer }              from './SegmentRenderer';
 import { ProgressTracker }              from './ProgressTracker';
 
-const FETCH_DELAY_MS = 250; // ~4 req/s por worker → 12 req/s total com 3 workers
+const FETCH_DELAY_MS = 150; // delay + latência do fetch ≈ 2-3 req/s reais por worker
 const MAX_RETRIES    = 3;
 
 function sleep(ms: number) {

@@ -12,8 +12,8 @@
 import { TextChannel } from 'discord.js';
 import { DaySegment, dateToSnowflake } from './parseArgs';
 
-const NUM_SCANNERS   = 3;   // mesmo número dos workers de export — evita pressão extra no rate limit
-const SCAN_DELAY_MS  = 150; // ~6 req/s por scanner → ~48 req/s total, dentro do limite
+const NUM_SCANNERS   = 3;   // scan é 1 req/dia, rápido — não precisa acompanhar os workers
+const SCAN_DELAY_MS  = 150; // ~20 req/s total no pico, dentro do limite global de 50 req/s
 const MAX_RETRIES    = 2;
 
 function sleep(ms: number) {
