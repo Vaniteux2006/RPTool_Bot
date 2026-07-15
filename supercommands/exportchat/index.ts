@@ -13,7 +13,7 @@
 // Disco: O(tamanho total do export) em /data/session_<userId>_<ts>/ — limpo após envio.
 
 import {
-    Message, TextChannel, AttachmentBuilder,
+    Message, TextChannel, GuildTextBasedChannel, AttachmentBuilder,
 } from 'discord.js';
 import path from 'path';
 
@@ -72,15 +72,15 @@ export default {
         // ── 1. Parsear canal ──────────────────────────────────────────────────
         if (!args.length) {
             return safeReply(message,
-                '❌ Uso: `rp!exportchat #canal`\n' +
+                '❌ Uso: `rp!exportchat #canal` (canal de texto ou tópico)\n' +
                 'Com intervalo: `rp!exportchat #canal DD/MM/AAAA -> DD/MM/AAAA`\n' +
                 'Com hora: `rp!exportchat #canal HH:MM DD/MM/AAAA -> HH:MM DD/MM/AAAA`',
             );
         }
 
-        const targetChannel = parseChannel(args, message.guild);
+        const targetChannel = await parseChannel(args, message.guild);
         if (!targetChannel) {
-            return safeReply(message, '❌ Canal inválido! Mencione um canal de texto com #.');
+            return safeReply(message, '❌ Canal inválido! Mencione um canal de texto ou tópico com #.');
         }
 
         // ── 2. Parsear intervalo ──────────────────────────────────────────────
@@ -123,7 +123,7 @@ export default {
     },
 
     // ─── Pipeline do export (chamado com a vaga do semáforo já garantida) ─────
-    async _run(message: Message, targetChannel: TextChannel, rangeStart: Date, rangeEnd: Date) {
+    async _run(message: Message, targetChannel: GuildTextBasedChannel, rangeStart: Date, rangeEnd: Date) {
         // ── 3. Construir fila de dias ─────────────────────────────────────────
         // Para histórico completo, pega a data da msg mais antiga do canal
         let effectiveStart = rangeStart;

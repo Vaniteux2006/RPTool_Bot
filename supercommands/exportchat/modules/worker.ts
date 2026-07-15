@@ -5,7 +5,7 @@
 
 import fs   from 'fs';
 import path from 'path';
-import { TextChannel } from 'discord.js';
+import { GuildTextBasedChannel } from 'discord.js';
 import { DaySegment, dateToSnowflake } from './parseArgs';
 import { SegmentRenderer }              from './SegmentRenderer';
 import { ProgressTracker }              from './ProgressTracker';
@@ -28,7 +28,7 @@ export async function runWorker(
     workerId:    number,
     queue:       DaySegment[],
     sessionPath: string,
-    channel:     TextChannel,
+    channel:     GuildTextBasedChannel,
     renderer:    SegmentRenderer,
     progress:    ProgressTracker,
     cancelled:   () => boolean,

@@ -1,7 +1,7 @@
 // RPTool/supercommands/exportchat/modules/parseArgs.ts
 // ─── Parsing de argumentos do comando ────────────────────────────────────────
 
-import { Guild, TextChannel } from 'discord.js';
+import { Guild, GuildTextBasedChannel } from 'discord.js';
 
 export interface TimeRange {
     start: Date;
@@ -15,11 +15,22 @@ export function dateToSnowflake(date: Date): string {
 }
 
 // ─── Canal ────────────────────────────────────────────────────────────────────
-export function parseChannel(args: string[], guild: Guild): TextChannel | null {
+// Aceita canais de texto E tópicos (threads). Threads não ficam em
+// guild.channels.cache — buscamos no cache global do client e, se for um
+// tópico arquivado fora do cache, via fetch na API.
+export async function parseChannel(args: string[], guild: Guild): Promise<GuildTextBasedChannel | null> {
     if (!args.length) return null;
     const id = args[0].replace(/\D/g, '');
-    const ch = guild.channels.cache.get(id);
-    return ch?.isTextBased() && !ch.isDMBased() ? ch as TextChannel : null;
+    if (!id) return null;
+
+    const ch = guild.channels.cache.get(id)
+        ?? guild.client.channels.cache.get(id)
+        ?? await guild.client.channels.fetch(id).catch(() => null);
+
+    if (!ch || ch.isDMBased() || !ch.isTextBased()) return null;
+    if (ch.guildId !== guild.id) return null; // não exportar canais de outros servidores
+
+    return ch;
 }
 
 // ─── Intervalo de datas ───────────────────────────────────────────────────────

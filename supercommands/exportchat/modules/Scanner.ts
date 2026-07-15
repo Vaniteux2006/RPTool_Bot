@@ -9,7 +9,7 @@
 // gastarem um loop inteiro em cada dia vazio, 8 scanners confirmam em ~1s
 // quais dias realmente têm mensagens antes de qualquer trabalho pesado.
 
-import { TextChannel } from 'discord.js';
+import { GuildTextBasedChannel } from 'discord.js';
 import { DaySegment, dateToSnowflake } from './parseArgs';
 
 const NUM_SCANNERS   = 3;   // scan é 1 req/dia, rápido — não precisa acompanhar os workers
@@ -35,7 +35,7 @@ export interface ScanResult {
  */
 export async function scanActiveDays(
     dayQueue:    DaySegment[],
-    channel:     TextChannel,
+    channel:     GuildTextBasedChannel,
     onProgress?: (scanned: number, total: number) => void,
 ): Promise<ScanResult> {
     const queue      = [...dayQueue]; // cópia — os scanners fazem .shift()
@@ -65,7 +65,7 @@ export async function scanActiveDays(
 // ─── Scanner individual ───────────────────────────────────────────────────────
 async function runScanner(
     queue:      DaySegment[],
-    channel:    TextChannel,
+    channel:    GuildTextBasedChannel,
     results:    DaySegment[],
     onDone:     () => void,
 ): Promise<void> {
@@ -85,7 +85,7 @@ async function runScanner(
 }
 
 // ─── Verifica se um único dia tem mensagens ───────────────────────────────────
-async function checkDay(day: DaySegment, channel: TextChannel): Promise<boolean> {
+async function checkDay(day: DaySegment, channel: GuildTextBasedChannel): Promise<boolean> {
     const afterId = dateToSnowflake(new Date(day.start.getTime() - 1));
     let retries   = 0;
 
