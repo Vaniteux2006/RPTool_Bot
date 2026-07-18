@@ -48,16 +48,107 @@ export function wmoToEmoji(code: number): string {
     return '🌡️';
 }
 
-// ─── Geocoding: nome de cidade / coordenada → { lat, lon, name, country } ────
+// ─── Geocoding: nome de cidade / estado / país / coordenada → GeoResult ──────
+// Ordem de resolução (o "padrão" de decidir o que é cidade, estado ou país):
+//   1. Coordenadas diretas ("47.6N 122.3W", "-33.87, 151.21")
+//   2. Estado brasileiro por nome ou UF ("Acre", "RS") — a API da Open-Meteo
+//      não retorna estados, então usamos tabela local (coords da capital)
+//   3. "Local, Qualificador" — busca o local e filtra pelo qualificador
+//      (estado, UF ou país): "Nova Iorque, Maranhão", "Montenegro, RS"
+//   4. Nome livre — primeiro resultado da API (países já vêm ranqueados acima)
 export interface GeoResult {
     lat: number;
     lon: number;
     name: string;
     country: string;
+    admin1?: string;
+}
+
+// Comparações ignoram acentos e caixa ("Maranhao" == "Maranhão")
+function norm(s: string): string {
+    return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+}
+
+// Estados brasileiros — coordenadas da capital (referência de clima do estado)
+const BR_STATES: { uf: string; name: string; lat: number; lon: number }[] = [
+    { uf: 'AC', name: 'Acre',                lat:  -9.9750, lon: -67.8243 },
+    { uf: 'AL', name: 'Alagoas',             lat:  -9.6660, lon: -35.7350 },
+    { uf: 'AP', name: 'Amapá',               lat:   0.0389, lon: -51.0664 },
+    { uf: 'AM', name: 'Amazonas',            lat:  -3.1019, lon: -60.0250 },
+    { uf: 'BA', name: 'Bahia',               lat: -12.9711, lon: -38.5108 },
+    { uf: 'CE', name: 'Ceará',               lat:  -3.7172, lon: -38.5431 },
+    { uf: 'DF', name: 'Distrito Federal',    lat: -15.7797, lon: -47.9297 },
+    { uf: 'ES', name: 'Espírito Santo',      lat: -20.3194, lon: -40.3378 },
+    { uf: 'GO', name: 'Goiás',               lat: -16.6786, lon: -49.2539 },
+    { uf: 'MA', name: 'Maranhão',            lat:  -2.5297, lon: -44.3028 },
+    { uf: 'MT', name: 'Mato Grosso',         lat: -15.5961, lon: -56.0967 },
+    { uf: 'MS', name: 'Mato Grosso do Sul',  lat: -20.4428, lon: -54.6464 },
+    { uf: 'MG', name: 'Minas Gerais',        lat: -19.9208, lon: -43.9378 },
+    { uf: 'PA', name: 'Pará',                lat:  -1.4558, lon: -48.5044 },
+    { uf: 'PB', name: 'Paraíba',             lat:  -7.1150, lon: -34.8631 },
+    { uf: 'PR', name: 'Paraná',              lat: -25.4278, lon: -49.2731 },
+    { uf: 'PE', name: 'Pernambuco',          lat:  -8.0539, lon: -34.8811 },
+    { uf: 'PI', name: 'Piauí',               lat:  -5.0892, lon: -42.8019 },
+    { uf: 'RJ', name: 'Rio de Janeiro',      lat: -22.9064, lon: -43.1822 },
+    { uf: 'RN', name: 'Rio Grande do Norte', lat:  -5.7950, lon: -35.2094 },
+    { uf: 'RS', name: 'Rio Grande do Sul',   lat: -30.0331, lon: -51.2300 },
+    { uf: 'RO', name: 'Rondônia',            lat:  -8.7619, lon: -63.9039 },
+    { uf: 'RR', name: 'Roraima',             lat:   2.8197, lon: -60.6733 },
+    { uf: 'SC', name: 'Santa Catarina',      lat: -27.5967, lon: -48.5492 },
+    { uf: 'SP', name: 'São Paulo',           lat: -23.5475, lon: -46.6361 },
+    { uf: 'SE', name: 'Sergipe',             lat: -10.9111, lon: -37.0717 },
+    { uf: 'TO', name: 'Tocantins',           lat: -10.1675, lon: -48.3277 },
+];
+
+const BR_STATE_LOOKUP = new Map<string, typeof BR_STATES[number]>();
+for (const s of BR_STATES) {
+    BR_STATE_LOOKUP.set(norm(s.name), s);
+    BR_STATE_LOOKUP.set(norm(s.uf), s);
+}
+
+// Nome de exibição completo: "Nova Iorque, Maranhão, Brasil" (sem repetições)
+export function formatGeoName(g: GeoResult): string {
+    const parts = [g.name];
+    if (g.admin1  && norm(g.admin1)  !== norm(g.name)) parts.push(g.admin1);
+    if (g.country && norm(g.country) !== norm(g.name)) parts.push(g.country);
+    return parts.join(', ');
+}
+
+interface RawGeo {
+    latitude:      number;
+    longitude:     number;
+    name:          string;
+    country?:      string;
+    admin1?:       string;
+    admin2?:       string;
+    feature_code?: string;
+}
+
+async function searchGeo(query: string, count: number): Promise<RawGeo[]> {
+    try {
+        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=${count}&language=pt&format=json`;
+        const res  = await axios.get(url, { timeout: 8000 });
+        return res.data?.results ?? [];
+    } catch (e) {
+        console.error('[weatherUtils] Erro no Geocoding:', e);
+        return [];
+    }
+}
+
+function toGeoResult(r: RawGeo): GeoResult {
+    // PCL* = país inteiro (a API já devolve o centroide)
+    const isCountry = r.feature_code?.startsWith('PCL') ?? false;
+    return {
+        lat:     r.latitude,
+        lon:     r.longitude,
+        name:    isCountry ? `${r.name} (país)` : r.name,
+        country: isCountry ? '' : (r.country ?? ''),
+        admin1:  isCountry ? '' : (r.admin1  ?? ''),
+    };
 }
 
 export async function getCoords(query: string): Promise<GeoResult | null> {
-    // Tenta interpretar como coordenadas diretas (ex: "47.6N 122.3W" ou "-33.87, 151.21")
+    // 1. Coordenadas diretas — antes da lógica de vírgula, pois "-33.87, 151.21" tem vírgula
     const coordRegex = /^(-?[0-9]+[.,]?[0-9]*)\s*([NS])?\s*[,\s]+\s*(-?[0-9]+[.,]?[0-9]*)\s*([WE])?$/i;
     const match = query.trim().match(coordRegex);
 
@@ -69,23 +160,32 @@ export async function getCoords(query: string): Promise<GeoResult | null> {
         return { lat, lon, name: `📍 ${lat.toFixed(4)}, ${lon.toFixed(4)}`, country: 'Coordenadas' };
     }
 
-    // Geocoding via Open-Meteo
-    try {
-        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=pt&format=json`;
-        const res  = await axios.get(url, { timeout: 8000 });
-        if (res.data?.results?.length > 0) {
-            const r = res.data.results[0];
-            return {
-                lat:     r.latitude,
-                lon:     r.longitude,
-                name:    r.name,
-                country: r.country ?? '',
-            };
-        }
-    } catch (e) {
-        console.error('[weatherUtils] Erro no Geocoding:', e);
+    const q = query.trim();
+
+    // 2. Estado brasileiro (nome ou UF)
+    const state = BR_STATE_LOOKUP.get(norm(q));
+    if (state) {
+        return { lat: state.lat, lon: state.lon, name: `${state.name} (estado)`, country: 'Brasil' };
     }
-    return null;
+
+    // 3. "Local, Qualificador" — filtra os resultados pelo estado/UF/país indicado
+    const commaIdx = q.indexOf(',');
+    if (commaIdx > 0) {
+        const place     = q.slice(0, commaIdx).trim();
+        let   qualifier = norm(q.slice(commaIdx + 1));
+        const qualState = BR_STATE_LOOKUP.get(qualifier);
+        if (qualState) qualifier = norm(qualState.name);
+
+        const results = await searchGeo(place, 10);
+        const hit = results.find(r =>
+            [r.admin1, r.admin2, r.country].some(f => f && norm(f) === qualifier),
+        );
+        return hit ? toGeoResult(hit) : null;
+    }
+
+    // 4. Nome livre — primeiro resultado da API
+    const results = await searchGeo(q, 1);
+    return results.length > 0 ? toGeoResult(results[0]) : null;
 }
 
 // ─── Clima atual (tempo real) ─────────────────────────────────────────────────

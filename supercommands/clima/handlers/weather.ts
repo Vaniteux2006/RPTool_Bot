@@ -5,6 +5,7 @@ import {
     getCoords,
     getWeatherInstant,
     getWeatherHistorical,
+    formatGeoName,
     wmoToText,
     wmoToEmoji,
     WMO_TABLE,
@@ -21,13 +22,18 @@ export async function handleLookup(message: Message, args: string[]) {
 
     const waitMsg = await message.reply('🔍 Buscando...');
     const geo     = await getCoords(query);
-    if (!geo) return waitMsg.edit(`❌ Local não encontrado: **${query}**`);
+    if (!geo) {
+        return waitMsg.edit(
+            `❌ Local não encontrado: **${query}**\n` +
+            `-# Dica: para desambiguar, use \`Cidade, Estado\` ou \`Cidade, País\` — ex: \`rp!clima Montenegro, RS\``,
+        );
+    }
 
     const weather = await getWeatherInstant(geo.lat, geo.lon);
     if (!weather) return waitMsg.edit('❌ Erro na API de clima. Tente novamente.');
 
     await waitMsg.edit(
-        `📍 **${geo.name}${geo.country ? `, ${geo.country}` : ''}**\n` +
+        `📍 **${formatGeoName(geo)}**\n` +
         `🌡️ **${weather.temp}°C**\n` +
         `${wmoToEmoji(weather.code)} **${wmoToText(weather.code)}**\n` +
         `-# (Tempo real, agora)`,
@@ -106,13 +112,13 @@ export async function handleSync(message: Message, args: string[]) {
         {
             latitude:      geo.lat,
             longitude:     geo.lon,
-            locationName:  `${geo.name}${geo.country ? `, ${geo.country}` : ''}`,
+            locationName:  formatGeoName(geo),
             forcedWeather: null,
         },
     );
 
     return waitMsg.edit(
-        `🌍 Relógio **${clock.name}** sincronizado com **${geo.name}${geo.country ? `, ${geo.country}` : ''}**\n` +
+        `🌍 Relógio **${clock.name}** sincronizado com **${formatGeoName(geo)}**\n` +
         `📡 Coordenadas: \`${geo.lat.toFixed(4)}, ${geo.lon.toFixed(4)}\`\n` +
         `O clima agora será buscado automaticamente com base na data RP.`,
     );
@@ -213,7 +219,7 @@ export async function handleHistorical(message: Message, args: string[]) {
     const dateFmt = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', dateStyle: 'long' }).format(date);
 
     return waitMsg.edit(
-        `📍 **${geo.name}${geo.country ? `, ${geo.country}` : ''}** — ${dateFmt}\n` +
+        `📍 **${formatGeoName(geo)}** — ${dateFmt}\n` +
         `${wmoToEmoji(weather.code)} **${wmoToText(weather.code)}**\n` +
         `🌡️ Mín **${weather.min}°C** / Máx **${weather.max}°C**\n` +
         `-# (Dados históricos via Open-Meteo Archive)`,

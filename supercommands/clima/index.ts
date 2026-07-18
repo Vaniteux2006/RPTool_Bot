@@ -81,8 +81,9 @@ function sendHelp(message: Message) {
         `🌦️ **Sistema de Clima RP**\n\n` +
 
         `**🔹 Consulta Rápida (Tempo Real)**\n` +
-        `\`rp!clima <Local>\` — clima atual em qualquer cidade/coordenada\n` +
-        `Ex: \`rp!clima Seattle\`, \`rp!clima 47.6N 122.3W\`\n\n` +
+        `\`rp!clima <Local>\` — cidade, estado, país ou coordenada\n` +
+        `Ex: \`rp!clima Seattle\`, \`rp!clima Acre\`, \`rp!clima Nova Zelândia\`, \`rp!clima 47.6N 122.3W\`\n` +
+        `Cidade ambígua? Use vírgula: \`rp!clima Montenegro, RS\`, \`rp!clima Nova Iorque, Maranhão\`\n\n` +
 
         `**🔹 Consulta RP**\n` +
         `\`rp!clima #canal\` — clima no relógio vinculado àquele canal\n` +
