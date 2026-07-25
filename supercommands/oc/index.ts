@@ -27,6 +27,7 @@ import handleDuo from './social_handlers/duo';
 import handleSolo from './social_handlers/solo';
 import handleBirthday from './social_handlers/birthday';
 import handleInfo from './social_handlers/info';
+import handleFind from './social_handlers/find';
 import handleWikiMain from "./wiki/index";
 import helpCommand from "../help/index";
 
@@ -109,6 +110,7 @@ Use \`rp!help oc\` para detalhes.
                 case 'solo': return handleSolo(message, args, userId);
                 case 'birthday': return handleBirthday(message, args, userId);
                 case 'info': return handleInfo(message, args, userId);
+                case 'find': case 'buscar': case 'procurar': return handleFind(message, args);
                 case 'help': case 'ajuda': case 'comandos':
                     // Abre a Central de Ajuda já no contexto de OC (ex: `rp!oc help wiki` → `rp!help oc wiki`)
                     return helpCommand.execute(message, ['oc', ...args.slice(1)]);
