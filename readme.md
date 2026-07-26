@@ -25,7 +25,7 @@ O **RPTool** é um bot de Discord avançado e multifuncional, focado em servidor
 * **Gestão Individual de API Keys:** Para não sobrecarregar uma única chave, o bot possui um sistema via DM (`rp!token`) onde cada usuário pode inserir sua própria chave de API (Google Gemini ou OpenAI) com segurança.
 * **Comandos de IA:**
     * `rp!ai [texto]`: Conversa rápida com uma IA.
-    * `rp!resume [data]`: Gera resumos automáticos do que aconteceu na história/RP do servidor.
+    * `rp!resumo [data]`: Gera resumos automáticos do que aconteceu na história/RP do servidor.
     * `rp!resenha`: IA lê o histórico recente do chat e faz avaliações cômicas do nível de caos da conversa.
 
 ### 🛡️ Moderação, Logs e Utilidades

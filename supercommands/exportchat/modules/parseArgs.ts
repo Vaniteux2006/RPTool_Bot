@@ -1,8 +1,6 @@
 // RPTool/supercommands/exportchat/modules/parseArgs.ts
 // ─── Parsing de argumentos do comando ────────────────────────────────────────
 
-import { Guild, GuildTextBasedChannel } from 'discord.js';
-
 export interface TimeRange {
     start: Date;
     end:   Date;
@@ -15,23 +13,8 @@ export function dateToSnowflake(date: Date): string {
 }
 
 // ─── Canal ────────────────────────────────────────────────────────────────────
-// Aceita canais de texto E tópicos (threads). Threads não ficam em
-// guild.channels.cache — buscamos no cache global do client e, se for um
-// tópico arquivado fora do cache, via fetch na API.
-export async function parseChannel(args: string[], guild: Guild): Promise<GuildTextBasedChannel | null> {
-    if (!args.length) return null;
-    const id = args[0].replace(/\D/g, '');
-    if (!id) return null;
-
-    const ch = guild.channels.cache.get(id)
-        ?? guild.client.channels.cache.get(id)
-        ?? await guild.client.channels.fetch(id).catch(() => null);
-
-    if (!ch || ch.isDMBased() || !ch.isTextBased()) return null;
-    if (ch.guildId !== guild.id) return null; // não exportar canais de outros servidores
-
-    return ch;
-}
+// A resolução do canal alvo (menção, ID ou link) e a checagem de acesso vivem em
+// `resolveTarget.ts` — o mesmo caminho serve pro servidor e pro PV.
 
 // ─── Intervalo de datas ───────────────────────────────────────────────────────
 export function parseTimeRange(raw: string): TimeRange | null {

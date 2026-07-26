@@ -2,12 +2,14 @@
 // ─── Confirmação via botão ────────────────────────────────────────────────────
 
 import {
-    Message, TextChannel,
+    SendableChannels,
     ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType,
 } from 'discord.js';
 
+// SendableChannels (e não TextChannel): o mesmo fluxo roda no canal do servidor
+// e no DMChannel quando o export é pedido pelo PV.
 export async function askConfirmation(
-    commandChannel: TextChannel,
+    commandChannel: SendableChannels,
     userId:         string,
     estimatedFiles: number,
 ): Promise<boolean> {

@@ -2,7 +2,8 @@
 // ─── Exportação de Chat para HTML — v2 (workers paralelos + disco) ────────────
 //
 // Arquitetura:
-//   1. parseArgs    → valida canal + intervalo → buildDayQueue (fila de dias)
+//   1. resolveTarget→ canal (menção no servidor, link/ID no PV) + checagem de acesso
+//   1b. parseArgs   → valida o intervalo → buildDayQueue (fila de dias)
 //   2. confirm      → botão de confirmação se > 10 mensagens estimadas
 //   3. 3-6 workers  → consomem a fila de dias em paralelo, escrevem seg_YYYYMMDD.html em /data
 //   4. merger       → concatena segmentos em ordem → divide em arquivos de 7.5 MB
@@ -17,7 +18,8 @@ import {
 } from 'discord.js';
 import path from 'path';
 
-import { parseChannel, parseTimeRange, buildDayQueue } from './modules/parseArgs';
+import { parseTimeRange, buildDayQueue } from './modules/parseArgs';
+import { resolveTarget }    from './modules/resolveTarget';
 import { createSessionDir, deleteSession, cleanOrphanSessions } from './modules/cleanup';
 import { ProgressTracker }  from './modules/ProgressTracker';
 import { SegmentRenderer }  from './modules/SegmentRenderer';
@@ -50,6 +52,20 @@ async function safeEdit(msg: Message, content: string): Promise<void> {
     }
 }
 
+// ─── Texto de uso (muda entre servidor e PV) ─────────────────────────────────
+// No PV não existe menção de canal, então o alvo é o ID ou o link.
+function textoDeUso(emDM: boolean): string {
+    const alvo = emDM ? '<link ou ID do canal>' : '#canal';
+    return (
+        `❌ Uso: \`rp!exportchat ${alvo}\` (canal de texto ou tópico)\n` +
+        `Com intervalo: \`rp!exportchat ${alvo} DD/MM/AAAA -> DD/MM/AAAA\`\n` +
+        `Com hora: \`rp!exportchat ${alvo} HH:MM DD/MM/AAAA -> HH:MM DD/MM/AAAA\`` +
+        (emDM
+            ? '\n-# No PV: botão direito no canal → **Copiar link**. Só dá pra exportar canais que você já consegue ler.'
+            : '\n-# Também funciona aqui no meu PV: mande o link do canal em vez da menção.')
+    );
+}
+
 // ─── Estado de cancelamento por usuário ──────────────────────────────────────
 const activeExports = new Map<string, boolean>();
 
@@ -67,21 +83,14 @@ export default {
     aliases:     ['exportar', 'backupchat'],
 
     async execute(message: Message, args: string[]) {
-        if (!message.guild) return message.reply('❌ Este comando só funciona em servidores.');
-
         // ── 1. Parsear canal ──────────────────────────────────────────────────
-        if (!args.length) {
-            return safeReply(message,
-                '❌ Uso: `rp!exportchat #canal` (canal de texto ou tópico)\n' +
-                'Com intervalo: `rp!exportchat #canal DD/MM/AAAA -> DD/MM/AAAA`\n' +
-                'Com hora: `rp!exportchat #canal HH:MM DD/MM/AAAA -> HH:MM DD/MM/AAAA`',
-            );
-        }
+        // Funciona em servidor (#menção) e no PV (ID ou link do canal). Quem
+        // decide se o usuário pode exportar aquele canal é o resolveTarget.
+        if (!args.length) return safeReply(message, textoDeUso(!message.guild));
 
-        const targetChannel = await parseChannel(args, message.guild);
-        if (!targetChannel) {
-            return safeReply(message, '❌ Canal inválido! Mencione um canal de texto ou tópico com #.');
-        }
+        const alvo = await resolveTarget(message, args[0]);
+        if (!alvo.canal) return safeReply(message, alvo.erro!);
+        const targetChannel = alvo.canal;
 
         // ── 2. Parsear intervalo ──────────────────────────────────────────────
         const rangeStr = args.slice(1).join(' ').trim();
@@ -191,10 +200,15 @@ export default {
         );
 
         // ── 5. Confirmação ────────────────────────────────────────────────────
+        // No PV a confirmação acontece no próprio PV — isSendable() cobre os dois
+        // casos (canal de servidor e DMChannel).
         const estimatedFiles = Math.max(1, Math.ceil(totalDays * 0.5));
 
         if (totalDays > 3) {
-            const commandCh = message.channel as TextChannel;
+            const commandCh = message.channel;
+            if (!commandCh.isSendable()) {
+                return safeEdit(scanStatus, '❌ Não consigo mandar mensagem neste canal para confirmar o export.');
+            }
             const confirmed = await askConfirmation(commandCh, message.author.id, estimatedFiles);
             if (!confirmed) return;
         }
@@ -212,6 +226,8 @@ export default {
         const exportKey = message.author.id;
         activeExports.set(exportKey, false);
 
+        // O collector escuta onde o comando foi pedido — no PV, é o próprio PV
+        // (DMChannel também tem createMessageCollector; o cast é só pro TS).
         const cancelCollector = (message.channel as TextChannel).createMessageCollector({
             filter: (m: Message) =>
                 m.author.id === message.author.id &&
@@ -234,7 +250,9 @@ export default {
         const nameCache    = new Map<string, string>();
         const pendingFetch = new Set<string>(); // evita fetch duplicado do mesmo userId
 
-        const makeRenderer = () => new SegmentRenderer(colorCache, nameCache, message.guild!, pendingFetch);
+        // O renderer resolve cor/apelido/menções pelo servidor DO CANAL — que no
+        // PV não é o servidor de onde veio o comando (não existe nenhum).
+        const makeRenderer = () => new SegmentRenderer(colorCache, nameCache, targetChannel.guild, pendingFetch);
 
         // ── 10. Lançar workers em paralelo ────────────────────────────────────
         // A fila é um array compartilhado — .shift() é atômico em JS single-thread.
