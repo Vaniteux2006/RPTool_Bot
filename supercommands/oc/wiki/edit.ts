@@ -20,17 +20,22 @@ export default async function handleWikiEdit(message: Message, args: string[], u
     const sectionIndex = wiki.sections.findIndex((s: any) => s.title.toLowerCase() === sectionTitle.toLowerCase());
     if (sectionIndex === -1) return message.reply(`❌ Seção **"${sectionTitle}"** não encontrada.`);
 
-    message.reply(`✏️ **Editando "${wiki.sections[sectionIndex].title}"**\nEnvie o novo texto. Digite **END** para salvar.`);
+    message.reply(`✏️ **Editando "${wiki.sections[sectionIndex].title}"**\nEnvie o novo texto. Digite **END** para salvar, ou **CANCEL** para descartar.`);
 
     const collector = new MessageCollector(message.channel as TextChannel, { filter: (m: Message) => m.author.id === userId, time: 300000 });
     let newContent = "";
 
     collector.on('collect', (m: Message) => {
-        if (m.content.trim() === "END") collector.stop("finished");
+        const text = m.content.trim();
+        if (text.toUpperCase() === "CANCEL" || text.toUpperCase() === "CANCELAR") collector.stop("cancelled");
+        else if (text === "END") collector.stop("finished");
         else newContent += m.content + "\n";
     });
 
     collector.on('end', async (_, reason) => {
+        if (reason === "cancelled") {
+            return void message.reply(`🛑 Edição cancelada. A seção **${wiki.sections[sectionIndex].title}** continua como estava.`);
+        }
         if (reason === "finished") {
             wiki.sections[sectionIndex].content = newContent.trim();
             wiki.markModified('sections');

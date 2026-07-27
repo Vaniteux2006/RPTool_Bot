@@ -16,17 +16,22 @@ export default async function handleAdd(message: Message, args: string[], userId
     
     const sectionTitle = titleMatch[2] || titleMatch[3] || titleMatch[4] || titleMatch[5];
 
-    message.reply(`📖 **Enviando Lore para a seção "${sectionTitle}"**\nDigite o texto. Digite **END** em uma nova mensagem para salvar.`);
+    message.reply(`📖 **Enviando Lore para a seção "${sectionTitle}"**\nDigite o texto. Digite **END** em uma nova mensagem para salvar, ou **CANCEL** para descartar.`);
 
     const collector = new MessageCollector(message.channel as TextChannel, { filter: (m: Message) => m.author.id === userId, time: 300000 });
     let contentStr = "";
 
     collector.on('collect', (m: Message) => {
-        if (m.content.trim() === "END") collector.stop("finished");
+        const text = m.content.trim();
+        if (text.toUpperCase() === "CANCEL" || text.toUpperCase() === "CANCELAR") collector.stop("cancelled");
+        else if (text === "END") collector.stop("finished");
         else contentStr += m.content + "\n";
     });
 
     collector.on('end', async (_, reason) => {
+        if (reason === "cancelled") {
+            return void message.reply(`🛑 Envio cancelado. A seção **${sectionTitle}** não foi criada.`);
+        }
         if (reason === "finished") {
             let wiki = await WikiModel.findOne({ ocId: oc._id });
             if (!wiki) wiki = new WikiModel({ ocId: oc._id, adminId: userId, bio: "", extras: new Map(), sections: [], references: [], gallery: [] });

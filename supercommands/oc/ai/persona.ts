@@ -18,7 +18,7 @@ export default async function handlePersona(message: Message, args: string[]) {
     }
 
     // Inicia o processo de configuração
-    await message.reply(`📝 **Configurando IA para ${oc.name}**\nEnvie a PERSONALIDADE do personagem em mensagens separadas ou tudo de uma vez. Digite **END** pra salvar e terminar.`);
+    await message.reply(`📝 **Configurando IA para ${oc.name}**\nEnvie a PERSONALIDADE do personagem em mensagens separadas ou tudo de uma vez. Digite **END** pra salvar e terminar, ou **CANCEL** pra cancelar.`);
     
     // Coletor de mensagens de 5 minutos (300000ms)
     const channel = message.channel as TextChannel;
@@ -30,7 +30,10 @@ export default async function handlePersona(message: Message, args: string[]) {
     let personaText = "";
     
     collector.on('collect', m => {
-        if (m.content.trim().toUpperCase() === "END") {
+        const text = m.content.trim().toUpperCase();
+        if (text === "CANCEL" || text === "CANCELAR") {
+            collector.stop("cancelled");
+        } else if (text === "END") {
             collector.stop("finished");
         } else {
             personaText += m.content + "\n";
@@ -46,6 +49,9 @@ export default async function handlePersona(message: Message, args: string[]) {
             oc.markModified('ai');
             await oc.save();
             message.reply(`🤖 IA Ativada e configurada com sucesso para **${oc.name}** **neste canal**!`);
+        } else if (reason === "cancelled") {
+            // Cancelado pelo usuário: nada é salvo, a persona antiga (se houver) fica intacta
+            message.reply(`🛑 Configuração cancelada. A IA de **${oc.name}** não foi alterada.`);
         } else {
             // Caso o tempo esgote sem o usuário digitar "END"
             message.reply("⏱️ O tempo limite de 5 minutos para configurar a persona esgotou. Tente novamente.");
