@@ -9,9 +9,9 @@
 import {
     Interaction, ButtonInteraction, ModalSubmitInteraction, Guild,
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-    ModalBuilder, TextInputBuilder, TextInputStyle,
-} from 'discord.js';
+    ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import ServerStats from '../../tools/models/ServerStats';
+import { parseBRDateISO } from '../../tools/utils/date';
 import { LOOKBACK_DAYS } from './index';
 import { handleExploreInteraction } from './handlers/explore';
 import { handleTrendingInteraction } from './handlers/trending';
@@ -52,15 +52,7 @@ function escapeMd(s: string): string {
     return (s || '').replace(/([*_`~|\\])/g, '\\$1');
 }
 
-function parseDate(input: string): string | null {
-    const m = (input || '').trim().match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
-    if (!m) return null;
-    const day = +m[1], month = +m[2], year = m[3] ? +m[3] : new Date().getUTCFullYear();
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    const d = new Date(Date.UTC(year, month - 1, day));
-    if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
-    return d.toISOString().split('T')[0];
-}
+const parseDate = (input: string): string | null => parseBRDateISO(input);
 
 function formatBR(iso: string): string {
     const [y, mo, da] = iso.split('-');
@@ -186,7 +178,7 @@ export async function handleStatusInteraction(interaction: Interaction): Promise
             const uid = interaction.customId.split(':').pop() as string;
             const iso = parseDate(interaction.fields.getTextInputValue('data'));
             if (!iso) {
-                await interaction.reply({ content: '❌ Data inválida. Use `DD/MM` ou `DD/MM/AAAA` (ex: `15/06` ou `15/06/2026`).', ephemeral: true });
+                await interaction.reply({ content: '❌ Data inválida. Use `DD/MM` ou `DD/MM/AAAA` (ex: `15/06` ou `15/06/2026`).', flags: MessageFlags.Ephemeral });
                 return;
             }
             return await renderDay(interaction, iso, 1, uid);
@@ -194,7 +186,7 @@ export async function handleStatusInteraction(interaction: Interaction): Promise
     } catch (e) {
         console.error('[Status] Erro na interação de ranking:', e);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '🚨 Erro ao montar o ranking.', ephemeral: true }).catch(() => {});
+            await interaction.reply({ content: '🚨 Erro ao montar o ranking.', flags: MessageFlags.Ephemeral }).catch(() => {});
         }
     }
 }

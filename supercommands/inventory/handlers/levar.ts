@@ -1,6 +1,5 @@
 import {
-    Message, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ComponentType,
-} from 'discord.js';
+    Message, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, MessageFlags } from 'discord.js';
 import { ItemModel, WalletModel, IWalletItem, IItem } from '../../../tools/models/EconomySchema';
 import {
     resolveOwnedOc, stripMentionTokens,
@@ -149,7 +148,7 @@ export default async function handleLevar(message: Message, rest: string[], user
         });
         collector.on('collect', async (i) => {
             if (i.user.id !== userId) {
-                await i.reply({ content: '🚫 Só quem pediu a mudança pode escolher o destino.', ephemeral: true }).catch(() => null);
+                await i.reply({ content: '🚫 Só quem pediu a mudança pode escolher o destino.', flags: MessageFlags.Ephemeral }).catch(() => null);
                 return;
             }
             await i.deferUpdate().catch(() => null);

@@ -24,8 +24,7 @@ import {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    ActionRowBuilder,
-} from 'discord.js';
+    ActionRowBuilder, MessageFlags } from 'discord.js';
 import { CATEGORIES } from './registry';
 import { normalize } from './search';
 import { render, HelpState } from './views';
@@ -66,14 +65,14 @@ async function runHelp(target: Message | ChatInputCommandInteraction, isSlash: b
         : (target as Message).author.id;
 
     let sent: Message;
-    if (isSlash) sent = await (target as ChatInputCommandInteraction).reply({ ...render(state), fetchReply: true });
+    if (isSlash) sent = await (target as ChatInputCommandInteraction).reply(render(state)).then(() => (target as ChatInputCommandInteraction).fetchReply());
     else         sent = await (target as Message).reply(render(state));
 
     const collector = sent.createMessageComponentCollector({ time: COLLECTOR_TIME });
 
     collector.on('collect', async (i) => {
         if (i.user.id !== ownerId) {
-            return i.reply({ content: '❌ Ei! Esse menu pertence a outra pessoa. Use `rp!help` para abrir o seu.', ephemeral: true });
+            return i.reply({ content: '❌ Ei! Esse menu pertence a outra pessoa. Use `rp!help` para abrir o seu.', flags: MessageFlags.Ephemeral });
         }
 
         try {

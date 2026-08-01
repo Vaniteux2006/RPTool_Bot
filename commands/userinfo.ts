@@ -1,4 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder, ChatInputCommandInteraction, Message, GuildMember } from 'discord.js';
+import returnVersion from '../tools/returnVersion';
 
 export default {
     name: 'userinfo',
@@ -85,7 +86,7 @@ export default {
                 { name: '👤 Identidade', value: `**Nome:** ${targetUser.username}\n**ID:** \`${targetUser.id}\``, inline: false },
                 { name: '📅 Conta Criada', value: criadoEm, inline: false }
             )
-            .setFooter({ text: `RPTool v1.4.1` });
+            .setFooter({ text: `RPTool v${returnVersion()}` });
 
         if (targetMember && message.guild) {
             const entrouEm = `<t:${Math.floor(targetMember.joinedTimestamp! / 1000)}:F>`; 

@@ -12,6 +12,7 @@
 // Auto-registra no ClientReady via EventCheckout — importado pelo bloco de
 // auto-registro do commandCheckout. Sem DB_STATUS no .env, desativa-se sozinho.
 import mongoose from 'mongoose';
+import { getConnection } from '../database';
 import { inspect } from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -34,7 +35,7 @@ let DeployModel:    mongoose.Model<any> | null = null;
 let GuildsModel:    mongoose.Model<any> | null = null;
 
 if (uri) {
-    const conn = mongoose.createConnection(uri);
+    const conn = getConnection(uri, 'Status');
     conn.on('error', (err) => original.error('❌ [Telemetry] Erro na conexão DB_STATUS:', err));
 
     HeartbeatModel = conn.model('WatchdogHeartbeat',

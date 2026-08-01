@@ -1,7 +1,8 @@
+import { getConnection } from '../database';
 import mongoose from 'mongoose';
 import 'dotenv/config';
 
-const statusConnection = mongoose.createConnection(process.env.DB_STATUS as string);
+const statusConnection = getConnection(process.env.DB_STATUS as string, 'Status');
 
 statusConnection.on('connected', () => {
     console.log('✅ [MongoDB] Conectado ao banco de Status');

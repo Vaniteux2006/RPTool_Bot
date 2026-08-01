@@ -3,6 +3,7 @@ import axios from 'axios';
 import { EventCheckout } from '../tools/eventCheckout';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { semaphore } from '../tools/utils/pool';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -30,8 +31,7 @@ const YTDLP_ASSET =
     'yt-dlp_linux'; // standalone, não precisa de Python
 
 const DOWNLOAD_TIMEOUT_MS = 4 * 60_000;
-const MAX_CONCURRENT = 2;
-let activeDownloads = 0;
+const downloadSlots = semaphore(2);
 
 // ffmpeg é opcional: sem ele, só formatos de arquivo único (TikTok/Twitter ok)
 let ffmpegPath: string | null = null;
@@ -198,14 +198,13 @@ export default {
         const url = validateUrl(raw.replace(/^<|>$/g, '')); // aceita link entre <> (sem embed)
         if (!url) return message.reply('❌ Link inválido. Use um endereço `http(s)` público.');
 
-        if (activeDownloads >= MAX_CONCURRENT) {
+        if (!downloadSlots.tryAcquire()) {
             return message.reply('🚦 Já tem downloads demais em andamento. Tenta de novo em instantes.');
         }
 
         const limit  = uploadLimitBytes(message);
         const status = await message.reply('📥 Baixando mídia... isso pode levar um tempinho.');
         const jobId  = message.id;
-        activeDownloads++;
 
         try {
             // 1) Link direto de imagem/vídeo/áudio → sem yt-dlp
@@ -239,7 +238,7 @@ export default {
             console.error('[DOWNLOAD] Falha:', error?.stderr || error?.message || error);
             await status.edit(friendlyYtdlpError(error)).catch(() => {});
         } finally {
-            activeDownloads--;
+            downloadSlots.release();
             cleanupJob(jobId);
         }
     }

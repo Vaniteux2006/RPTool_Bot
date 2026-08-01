@@ -1,5 +1,9 @@
 import { getGuildAIConfig } from '../../../tools/utils/tokenHelper';
-import { chamarIA } from '../../../tools/utils/aiUtils';
+import { chamarIA as chamarIAClient } from '../../../tools/utils/ai/client';
+import type { AIConfig } from '../../../tools/utils/tokenHelper';
+
+// O diretor de IA sempre espera JSON — preserva o contrato da antiga aiUtils.chamarIA.
+const chamarIA = (prompt: string, config: AIConfig) => chamarIAClient(prompt, config, { json: true });
 import { IPlayer, ITeam } from '../../../tools/models/FutebolSchema';
 import path from 'path';
 import fs from 'fs';

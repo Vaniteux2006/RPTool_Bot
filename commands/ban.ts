@@ -9,8 +9,7 @@ import {
     ChatInputCommandInteraction,
     GuildMember,
     ButtonInteraction,
-    User
-} from 'discord.js';
+    User, MessageFlags } from 'discord.js';
 
 export default {
     name: 'ban',
@@ -28,7 +27,7 @@ export default {
 
         const member = interaction.guild?.members.cache.get(targetUser.id);
         if (member && !member.bannable) {
-            return interaction.reply({ content: '❌ Não posso banir este usuário (Cargos superiores ou iguais ao meu).', ephemeral: true });
+            return interaction.reply({ content: '❌ Não posso banir este usuário (Cargos superiores ou iguais ao meu).', flags: MessageFlags.Ephemeral });
         }
 
         await this.runConfirmation(interaction, targetUser, reason, true);
@@ -74,7 +73,7 @@ export default {
         const text = `⚠️ O usuário **${targetUser.tag}** (ID: ${targetUser.id}) será banido pelo motivo: \`${reason}\`.\nEle está ${ctx.guild.members.cache.has(targetUser.id) ? 'no servidor' : 'fora do servidor'}.\nTem certeza disso?`;
         
         const response = isSlash 
-            ? await (ctx as ChatInputCommandInteraction).reply({ content: text, components: [row], fetchReply: true }) 
+            ? await (ctx as ChatInputCommandInteraction).reply({ content: text, components: [row] }).then(() => (ctx as ChatInputCommandInteraction).fetchReply()) 
             : await (ctx as Message).reply({ content: text, components: [row] });
 
         const filter = (i: ButtonInteraction) => i.user.id === (isSlash ? ctx.member?.user.id : (ctx as Message).author.id);

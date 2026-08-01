@@ -10,6 +10,7 @@
 import {
     Message, Client, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Guild,
 } from 'discord.js';
+import { truncarCampo } from '../../tools/utils/discord/embed';
 import { TokenModel } from '../../tools/models/TokenSchema';
 
 // ─── Servidores em comum entre o usuário e o bot ──────────────────────────────
@@ -74,8 +75,8 @@ export async function buildDashboardPayload(userId: string, client: Client) {
         .setTitle('⚙️ Painel de Controle de IA (RPTool)')
         .setDescription('Gerencie as chaves que dão vida aos comandos de IA nos seus servidores.\n**Nunca compartilhe essas chaves com ninguém!**')
         .addFields(
-            { name: '🔑 Suas Chaves', value: keysList.slice(0, 1024), inline: false },
-            { name: '🌐 Servidores Vinculados', value: serversList.slice(0, 1024), inline: false },
+            { name: '🔑 Suas Chaves', value: truncarCampo(keysList), inline: false },
+            { name: '🌐 Servidores Vinculados', value: truncarCampo(serversList), inline: false },
         )
         .setColor(0x2b2d31)
         .setFooter({ text: 'Use os botões abaixo para gerenciar.' });

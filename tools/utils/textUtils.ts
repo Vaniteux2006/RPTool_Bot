@@ -1,15 +1,8 @@
 import { Message } from "discord.js";
 import { AttachmentBuilder } from 'discord.js';
 
-// Limpa pings perigosos (ótimo para qualquer comando de IA ou Webhook)
-export function sanitizeOutput(text: string): string {
-    if (!text) return text;
-    return text
-        .replace(/@everyone/g, '@everyоne')
-        .replace(/@here/g, '@hеre')
-
-        .replace(/<@&(\d+)>/g, '<@&\u200b$1>');
-}
+// Fonte única em tools/utils/text.ts — re-exportado para os consumidores antigos.
+export { sanitizeOutput } from './text';
 
 export function extractArgs(content: string, commandName: string): string[] {
     // 1. Encontra onde a palavra-chave do comando (ex: 'create', 'addplayer') termina
@@ -61,12 +54,3 @@ export function formatLongContent(content: string, fileName: string) {
 
     return { text, files };
 }
-
-export const cleanWrapper = (str: string) => {
-    if ((str.startsWith('') && str.endsWith('')) ||
-        (str.startsWith('"') && str.endsWith('"')) ||
-        (str.startsWith("'") && str.endsWith("'"))) {
-        return str.slice(1, -1);
-    }
-    return str;
-};

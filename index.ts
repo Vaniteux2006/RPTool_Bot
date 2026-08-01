@@ -1,8 +1,7 @@
 import 'dotenv/config';
 import {
     Client, GatewayIntentBits, Collection,
-    Events, REST, Routes, Partials, Options, Message,
-} from 'discord.js';
+    Events, REST, Routes, Partials, Options, Message, MessageFlags } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -88,8 +87,43 @@ const client = new Client({
 client.commands = new Collection();
 const commandsArray: any[] = [];
 const prefix = 'rp!';
+// Anti-spam por USUÁRIO (`guildId:userId`) — antes era por guild inteiro, e
+// 8 comandos em 10s de uma pessoa travavam rp! pro servidor todo por 30s.
+// O teto por guild (bem mais alto) fica como proteção contra raid coordenado.
 const cooldowns = new Map<string, number>();
 const commandStrikes = new Map<string, number[]>();
+const SPAM_USER_LIMIT  = 8;   // comandos / 10s por usuário
+const SPAM_GUILD_LIMIT = 40;  // comandos / 10s por guild (raid)
+
+// Varredura periódica: sem isto os Maps crescem para sempre (1 entrada por
+// usuário que já digitou rp! desde o boot).
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, exp] of cooldowns) if (now >= exp) cooldowns.delete(k);
+    for (const [k, ts] of commandStrikes) {
+        const recent = ts.filter(t => now - t < 10_000);
+        if (recent.length === 0) commandStrikes.delete(k);
+        else commandStrikes.set(k, recent);
+    }
+}, 60_000).unref();
+
+// Registra o comando na janela do balde e diz se estourou o limite.
+function hitSpamBucket(key: string, limit: number, now: number): boolean {
+    if (cooldowns.has(key)) {
+        if (now < cooldowns.get(key)!) return true;
+        cooldowns.delete(key);
+        commandStrikes.delete(key);
+    }
+    const recent = (commandStrikes.get(key) ?? []).filter(t => now - t < 10_000);
+    if (recent.length >= limit) {
+        cooldowns.set(key, now + 30_000);
+        commandStrikes.delete(key);
+        return true;
+    }
+    recent.push(now);
+    commandStrikes.set(key, recent);
+    return false;
+}
 
 // ─── Carregador de SuperComandos ──────────────────────────────────────────────
 // SuperComandos são ecossistemas completos em /supercommands/<nome>/index.ts.
@@ -202,7 +236,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
     } catch (error) {
         console.error(error);
-        const errPayload = { content: '❌ Erro fatal no comando!', ephemeral: true };
+        const errPayload = { content: '❌ Erro fatal no comando!', flags: MessageFlags.Ephemeral } as const;
         // .catch() obrigatório: se a interação expirou (10062), o reply também
         // lança e derrubaria o processo com unhandled rejection.
         if (interaction.replied || interaction.deferred) await interaction.followUp(errPayload).catch(() => {});
@@ -230,27 +264,26 @@ async function routePrefixCommand(message: Message): Promise<void> {
     if (!message.content.startsWith(prefix)) return;
 
     const guildId = message.guild ? message.guild.id : message.author.id;
+    const userKey = `${guildId}:${message.author.id}`;
     const now = Date.now();
 
-    if (cooldowns.has(guildId)) {
-        const expiration = cooldowns.get(guildId)!;
-        if (now < expiration) return;
-        cooldowns.delete(guildId);
-        commandStrikes.set(guildId, []);
-    }
-
-    const timestamps = commandStrikes.get(guildId) ?? [];
-    const recent = timestamps.filter(t => now - t < 10_000);
-
-    if (recent.length >= 8) {
-        cooldowns.set(guildId, now + 30_000);
-        commandStrikes.set(guildId, []);
-        await message.reply('🛑 **Spam detectado!** Esperem 30 segundos antes de usar mais comandos.');
+    // Balde individual: quem spamma trava SÓ pra si.
+    const userWasLimited = cooldowns.has(userKey) && now < (cooldowns.get(userKey) ?? 0);
+    if (hitSpamBucket(userKey, SPAM_USER_LIMIT, now)) {
+        if (!userWasLimited) {
+            await message.reply('🛑 **Calma aí!** Muitos comandos seguidos — espera 30 segundos.').catch(() => {});
+        }
         return;
     }
 
-    recent.push(now);
-    commandStrikes.set(guildId, recent);
+    // Balde do servidor: só dispara em volume de raid coordenado.
+    const guildWasLimited = cooldowns.has(guildId) && now < (cooldowns.get(guildId) ?? 0);
+    if (hitSpamBucket(guildId, SPAM_GUILD_LIMIT, now)) {
+        if (!guildWasLimited) {
+            await message.reply('🛑 **Spam em massa detectado!** Comandos pausados no servidor por 30 segundos.').catch(() => {});
+        }
+        return;
+    }
 
     const resolved = resolveCommand(message.content);
     if (!resolved) return;

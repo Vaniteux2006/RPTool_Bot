@@ -1,8 +1,9 @@
+import { getConnection } from '../database';
 import mongoose, { Schema, Document } from 'mongoose';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const restanteConnection = mongoose.createConnection(process.env.DB_RESTANTE as string);
+const restanteConnection = getConnection(process.env.DB_RESTANTE as string, 'Geral');
 
 export interface IBirthday extends Document {
     guildId: string;

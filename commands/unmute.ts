@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits, Message, ChatInputCommandInteraction, GuildMember } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, Message, ChatInputCommandInteraction, GuildMember, MessageFlags } from 'discord.js';
 
 export default {
     name: 'unmute',
@@ -37,7 +37,7 @@ export default {
         const target = interaction.options.getMember('alvo') as GuildMember;
 
         if (!target.isCommunicationDisabled()) {
-            return interaction.reply({ content: 'Usuário não está mutado.', ephemeral: true });
+            return interaction.reply({ content: 'Usuário não está mutado.', flags: MessageFlags.Ephemeral });
         }
 
         try {
@@ -45,7 +45,7 @@ export default {
             await interaction.reply(`🗣️ **${target.user.tag}** está livre!`);
         } catch (error) {
             console.warn('[UNMUTE] Falha ao desmutar via slash:', target.user.tag, error);
-            await interaction.reply({ content: 'Erro ao desmutar.', ephemeral: true });
+            await interaction.reply({ content: 'Erro ao desmutar.', flags: MessageFlags.Ephemeral });
         }
     }
 };

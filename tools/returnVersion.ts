@@ -1,17 +1,8 @@
-import fs from 'fs';
-import path from 'path';
-
+// A versão vem do package.json — fonte única de verdade (bump lá, aparece em todo lugar).
 export default function returnVersion(): string {
     try {
-        const versionPath = path.join(__dirname, 'Data/version.json');
-        
-        if (fs.existsSync(versionPath)) {
-            const rawData = fs.readFileSync(versionPath, 'utf-8');
-            const data = JSON.parse(rawData);
-            return data.current_display || "?.?.?";
-        }
-    } catch (e) {
-        console.error("⚠️ [returnVersion] Não foi possível ler a versão.");
+        return require('../package.json').version || '?.?.?';
+    } catch {
+        return '?.?.?';
     }
-    return "1.6";
 }

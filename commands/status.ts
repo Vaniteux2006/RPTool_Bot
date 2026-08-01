@@ -7,7 +7,7 @@
 //
 // Este shim existe porque apenas o loader de /commands registra slash commands
 // no deploy (commandsArray do index.ts) — sem ele, o /status deixaria de existir.
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, Message, MessageFlags } from 'discord.js';
 
 // Redireciona para o supercommand real
 const statusSuper = (() => {
@@ -29,7 +29,7 @@ export default {
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
         if (statusSuper?.executeSlash) return statusSuper.executeSlash(interaction);
-        return interaction.reply({ content: '❌ Módulo de status não encontrado em supercommands/status/index.ts', ephemeral: true });
+        return interaction.reply({ content: '❌ Módulo de status não encontrado em supercommands/status/index.ts', flags: MessageFlags.Ephemeral });
     },
 
     async execute(message: Message, args: string[]) {

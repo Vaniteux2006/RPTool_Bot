@@ -29,8 +29,8 @@ Duas camadas de comando + uma de eventos:
 
 ```
 node loader.js → ts-node/register → index.ts
- ├─ chmod no binário do Stockfish (caminho fixo /home/node/stockfish — Discloud)
  ├─ new Client(...) com 16 intents (documentados inline, privilegiados incluídos)
+ │       ℹ️ o chmod do binário do Stockfish acontece em supercommands/chess/engine.ts, não aqui
  ├─ 1º: carrega supercommands/*/index.ts  → client.commands.set(name, cmd)
  ├─ 2º: loadCommands('commands/')          → client.commands.set(name, cmd)
  │       └─ se cmd.data && cmd.executeSlash → entra no commandsArray (deploy de slash)
@@ -51,7 +51,7 @@ node loader.js → ts-node/register → index.ts
 
 ## 3. Arquitetura de Eventos — `EventCheckout`
 
-`tools/event_checkout.ts` é a espinha dorsal do projeto:
+`tools/eventCheckout.ts` é a espinha dorsal do projeto:
 
 - **Registry interno** `Map<evento, {name, fn}[]>`; `subscribe()` deduplica por nome.
 - **API tipada**: `EventCheckout.onMessageCreate(name, fn)`, `onGuildMemberAdd(...)`, etc. — um wrapper por evento, agrupados por intent.
@@ -66,30 +66,32 @@ node loader.js → ts-node/register → index.ts
 | `commands/welcome.ts` | `welcome:join` / `welcome:leave` | boas-vindas/saída (detecta kick/ban via audit log) |
 | `commands/autorole.ts` | `autorole` | cargo automático na entrada |
 | `tools/reactionListener.ts` | `reactionRole` | reaction roles (add/remove) |
-| `tools/command_checkout.ts` | `__system.checkout` | estatísticas (humanos + OCs por webhook) + rotinas |
+| `tools/commandCheckout.ts` | `__system.checkout` / `system.routines` | estatísticas (humanos + OCs por webhook); rotinas horárias arrancam no ClientReady |
 | `tools/webhook.ts` | `oc:proxy` / `oc:proxy:edit` / `oc:reactionDelete` | proxy de OC (prefixo → webhook com nome/avatar), reprocessa na **edição** da mensagem, e apaga o próprio proxy reagindo ❌ |
 | `tools/utils/aiUtils.ts` | `oc:ai` | IA de OC (gatilho manual + autoMode) |
 | `supercommands/ficha/index.ts` | `ficha:autodetect` | detecta fichas postadas no canal |
 | `supercommands/phone/index.ts` | `phone:relay` | repassa mensagens da chamada |
 | `supercommands/logs/events/*` | `logs:*` (~40) | sistema de auditoria |
 
-**Interações** (botões/modais/selects) são roteadas pelo `tools/interaction_checkout.ts` por prefixo de `customId`: `ficha_` → ficha, `fb_` → futebol, `stats_` → status, `token_` → token.
+**Interações** (botões/modais/selects) são roteadas pelo `tools/interactionCheckout.ts` por prefixo de `customId`: `ficha_` → ficha, `fb_` → futebol, `stats_` → status, `token_` → token.
 
 ---
 
 ## 4. Banco de Dados
 
 ### 4.1 Conexões (`tools/database.ts` + models)
-Várias `mongoose.createConnection()` por domínio. Há **duplicação** (várias conexões para o mesmo `DB_RESTANTE`), candidata a centralização:
+Pool central: `getConnection(uri)` mantém **uma** Connection por URI (`maxPoolSize: 10`) — models
+com a mesma URI compartilham o mesmo pool. `mainConnection` e os antigos `restanteConnection`
+locais são a mesma instância.
 
 | Env var | Usada por | Observação |
 |---|---|---|
-| `DB_OC` / `DB_OC_WIKI` | OCs / Wiki de OCs | conexões dedicadas |
-| `DB_RESTANTE` | `database.ts` (mainConnection), Outros, Token, GuildConfig, Kanban, Birthday | **~7 conexões para o mesmo banco** |
-| `DB_STATUS` | ServerStats | estatísticas |
-| `DB_FICHA` | Ficha, ReactionRole | fichas + reaction roles |
+| `DB_OC` / `DB_OC_WIKI` | OCs / Wiki de OCs | pools dedicados |
+| `DB_RESTANTE` | mainConnection, Outros, Token, GuildConfig, Kanban, Birthday, Chess | **1 pool compartilhado** |
+| `DB_STATUS` | ServerStats, telemetry, watchdogRpc | **1 pool compartilhado** |
+| `DB_FICHA` | Ficha, ReactionRole | 1 pool |
 | `DB_FB_USER` / `DB_FB_REPORT` | Futebol | times/relatórios |
-| `DB_ECONOMY` | Economia (Wallet/Item/GuildEconomy/Ledger) | **persistente**; cai em `DB_RESTANTE` se vazio (`EconomySchema.ts`) |
+| `DB_ECONOMY` | Economia (Wallet/Item/GuildEconomy/Ledger) | **persistente**; cai no pool de `DB_RESTANTE` se vazio |
 
 ### 4.2 Models (`tools/models/`)
 | Model | Arquivo | Conexão | Usado por |
@@ -97,7 +99,7 @@ Várias `mongoose.createConnection()` por domínio. Há **duplicação** (vária
 | `OCModel`, `WikiModel` | `OCSchema.ts` | DB_OC / DB_OC_WIKI | oc/*, webhook, aiUtils, status |
 | `TokenModel` | `TokenSchema.ts` | DB_RESTANTE | token, tokenHelper |
 | `WelcomeModel`, `BotStatusModel`, `WikiArticleModel`, `PhoneRegistryModel` | `Outros.ts` | DB_RESTANTE | welcome, index, phone |
-| `ServerStats`, `BlockedWordsModel` | `ServerStats.ts` | DB_STATUS | command_checkout, status (rankings/docpast), ignorar |
+| `ServerStats`, `BlockedWordsModel` | `ServerStats.ts` | DB_STATUS | commandCheckout, status (rankings/docpast), ignorar |
 | `BirthdayModel`, `BirthdayConfigModel` | `BirthdaySchema.ts` | DB_RESTANTE | birthday |
 | `KanbanItemModel`, `KanbanPainelModel` | `KanbanSchema.ts` | DB_RESTANTE | kanban |
 | `AutoroleModel` | `AutoroleConfig.ts` | DB_RESTANTE | autorole |
@@ -159,15 +161,15 @@ Padrão comum: `index.ts` com roteador `switch` + `sendHelp()`, handlers em arqu
 | Supercommand | Slash | Descrição |
 |---|---|---|
 | **`oc/`** | ❌ (prefix) | Personagens (tupper): CRUD, grupos, export/import, wiki, social, e **IA** (`ai/` — persona, memórias, autoMode, delay, gaslight/forget/insert). O proxy de webhook está em `tools/webhook.ts`. |
-| **`logs/`** | shim | Auditoria. `index.ts` importa ~17 arquivos de `events/`; `utils/LogMinister.ts` (factory + categorias + paleta). Owner log opcional via `OWNER_LOG_CHANNEL_ID`. |
+| **`logs/`** | ❌ (prefix; shim em `commands/logs.ts` só p/ aliases antigos) | Auditoria. `index.ts` importa ~17 arquivos de `events/`; `utils/LogMinister.ts` (factory + categorias + paleta). Owner log opcional via `OWNER_LOG_CHANNEL_ID`. |
 | **`help/`** | shim | Central de ajuda interativa. `registry.ts` (todo o conteúdo), `search.ts`, `views.ts`. |
 | **`status/`** | shim | Dashboard de estatísticas (14 dias, layout Statbot). `interactions.ts` (rankings paginados Users/Chats/OCs + modal "Ranking do Dia"); `handlers/backfill.ts` (`rp!status docpast` — varre o histórico e popula o `ServerStats`, idempotente, com progresso ao vivo). |
 | **`token/`** | ❌ (prefix) | Painel de chaves de IA por DM. `index.ts` (painel) + `interactions.ts` (CRUD via customId/modais: criar, renomear, trocar modelo, deletar, vincular/desvincular a servidores, **testar chave** com `api.generateRaw`). |
 | **`tempo/`** | ❌ (prefix) | Relógios RP. `clockEngine.ts` (motor de 30s, iniciado no boot) edita a mensagem do relógio com hora/data/clima/velocidade. Comandos: set/skip/pause/resume/list/info/conv/msg. |
 | **`clima/`** | ❌ (prefix) | Clima RP vinculado aos relógios (Open-Meteo). Lookup em tempo real, consulta RP por canal, histórico, `sync` (lat/lon), `force` (override/Anomalia). Resolução de local: coordenadas → estado BR (nome/UF, tabela local) → `Cidade, Qualificador` (filtro por estado/UF/país) → nome livre. |
-| **`ficha/`** | shim parcial | Fichas de personagem. Template via DM, aprovação por botões (com `+oc` cria o OC). `interactions.ts` roteado por `ficha_`. |
+| **`ficha/`** | ❌ (prefix) | Fichas de personagem. Template via DM, aprovação por botões (com `+oc` cria o OC). `interactions.ts` roteado por `ficha_`. |
 | **`futebol/`** | ❌ (prefix) | Simulador de futebol (o maior ecossistema): `engines/` (matchEngine, mathEngine, aiDirector, advancedEngine), torneios, escalações, táticas. `interactions.ts` roteado por `fb_`. |
-| **`exportchat/`** | ❌ (prefix) | Export de canal para HTML: scan paralelo → 3 workers → merger (7,5 MB) → DM → cleanup. Módulo mais "engenheirado". Roda **no servidor e no PV** (`resolveTarget.ts`: menção, link ou ID + checagem de acesso — ver §12). |
+| **`exportchat/`** | ❌ (prefix) | Export de canal para HTML: scan paralelo → 6 workers (3 quando há exports concorrentes) → merger (7,5 MB) → DM → cleanup. Módulo mais "engenheirado". Roda **no servidor e no PV** (`resolveTarget.ts`: menção, link ou ID + checagem de acesso — ver §12). |
 | **`resumo/`** | ❌ (prefix) | Resumo de RP por IA (§11). Pipeline `parseArgs → collector → confirm → pipeline → pages`, com `interactions.ts` (sessões de paginação + Resumo Definitivo). Aliases: `resume`, `recap`. |
 | **`phone/`** | ✅ | Telefone inter-servidores: register/call/accept/decline/end; `phone:relay` repassa as mensagens da chamada. |
 | **`censura/`** | ❌ (prefix) | Filtro de palavrões estilo proxy: apaga a mensagem e reenvia via webhook com o nome/avatar do autor, termo em █. `wordlist.ts` (listas padrão pt-BR + EN), `engine.ts` (normalização anti-leet/acento, matching por token com fronteira de palavra, cache 5 min). Integra com o proxy de OC via `registerProxyContentFilter` (fala de personagem também sai censurada) e `wasOCProxied` (não reprocessa). O filtro se inscreve no `messageCreate` **dentro do ClientReady** pra garantir que roda depois do `oc:proxy`. |
@@ -181,25 +183,24 @@ Padrão comum: `index.ts` com roteador `switch` + `sendHelp()`, handlers em arqu
 
 | Arquivo | O que faz |
 |---|---|
-| `event_checkout.ts` | Dispatcher pub/sub central (§3). |
-| `command_checkout.ts` | Registra `__system.checkout`: estatísticas de **humanos** (users/channels/words) e de **OCs via webhook** (`trackWebhookStats` → `ocs`), + rotinas horárias de aniversários e de **recálculo econômico** (`recomputeAllAdvanced`). Importa os módulos auto-registráveis (`42`, `roll`, `phone`, `tempo`, `webhook`, `utils/aiUtils`). |
-| `interaction_checkout.ts` | Roteia botões/selects/modais por prefixo de `customId` (ficha/fb/stats/token). |
-| `database.ts` | Conexões Mongo (uma duplicada). |
+| `eventCheckout.ts` | Dispatcher pub/sub central (§3). |
+| `commandCheckout.ts` | Registra `__system.checkout` (estatísticas de **humanos** — users/channels/words, filtrando a blocklist do `rp!ignorar` — e de **OCs via webhook**, `trackWebhookStats` → `ocs`) e `system.routines` no ClientReady (rotinas horárias de aniversários e **recálculo econômico** — `recomputeAllAdvanced`). Importa os módulos auto-registráveis (`42`, `roll`, `phone`, `tempo`, `webhook`, `utils/aiUtils`, `statusRotator`, `telemetry`, `watchdogRpc`, `reactionListener`). |
+| `interactionCheckout.ts` | Roteia botões/selects/modais por prefixo de `customId` (ficha/fb/stats/token). |
+| `database.ts` | Pool central de conexões Mongo: `getConnection(uri)` — uma Connection por URI, compartilhada por todos os models. |
 | `api.ts` | Classe `RPToolAPI` (singleton `api`): `chat()`, `generateRaw()`. Gemini (SDK, safety OFF) + OpenAI (fetch). |
 | `webhook.ts` | Proxy de OC (`handleOCMessage`, inscrito como `oc:proxy`): parse multi-OC por prefixo/sufixo, envia via webhook, conta no `ocs`, apaga a original. `oc:proxy:edit`: reprocessa quando a mensagem é **editada** para um prefixo de OC (seguro — se já tivesse casado, a original teria sido apagada no create). Também `oc:reactionDelete`: reagir ❌/🗑️ apaga o próprio proxy — só o **autor** (mapa em memória das mensagens recentes) ou o **dono do OC** (fallback por nome, sobrevive a restart), e só em webhooks do **próprio bot** (verificado via `fetchWebhook`). Nunca apaga mensagem normal nem de outro bot. |
 | `utils/aiUtils.ts` | IA de OC (`handleAIMessage`/`triggerAIGeneration`, inscrito como `oc:ai`): contexto, persona, memórias com auto-aprendizado, autoMode (menção + periódico com cooldown). `chamarIA` (Gemini/OpenAI). |
 | `utils/tokenHelper.ts` | `getGuildAIConfig(guildId)`: resolve a chave de IA do servidor (assignments), com fallback para `GEMINI_API_KEY` do `.env`. |
 | `utils/economy.ts` | Helpers compartilhados da economia (§10): `tokenize` (aspas), `slugify`, `parseAmount`, resolução de OC/dono (`resolveOwnedOc`/`resolveTargetOc`/`findOcByName`), `getOrCreateWallet`, `resolveItem`, mutação atômica da mochila (`add/removeItemFromWallet`), `getGuildEconomy`, `formatMoney`, `effectivePrice`, `isStaff`. |
 | `utils/economyEngine.ts` | Motor macroeconômico (§10): `snapshotMQ` (M, Q), `windowVolume` (V/PIB via ledger), `recomputeEconomy` (índice de preço), `enableAdvanced`/`rebaseline` (baselines), `recomputeAllAdvanced` (rotina), `recordLedger`, `coinToUsd`. |
-| `reactionListener.ts` | Reaction roles (inscrito no EventCheckout). |
+| `reactionListener.ts` | Reaction roles — auto-registra no `MessageReactionAdd/Remove`; o import que dispara o registro está no `commandCheckout.ts`. |
 | `HtmlTranscript.ts` | Gerador de transcript HTML, compartilhado por exportchat e logs. |
-| `ReturnVersion.ts` | Lê `tools/Data/version.json` (⚠️ não existe → sempre retorna o fallback). |
+| `returnVersion.ts` | Lê a `version` do `package.json` (fonte única — bump lá aparece em todos os footers). |
 | `check_models.ts` | Script CLI avulso (lista modelos Gemini). Não é carregado pelo bot. |
-| `messageTracker.ts` | Tracker de stats **antigo** (morto); só `loadBlockedWords` ainda é usado (pelo `rp!ignorar`). |
-| `utils/textUtils.ts` | `sanitizeOutput`, `extractArgs`, `extractName`, `formatLongContent`, `cleanWrapper` (⚠️ bugado — ver §9). |
+| `utils/blockedWords.ts` | Cache em memória da blocklist do `rp!ignorar` (`getBlockedWords`/`loadBlockedWords`), consumido por mensagem pelo `trackMessageStats`. |
+| `utils/textUtils.ts` | `sanitizeOutput`, `extractArgs`, `extractName`, `formatLongContent`. |
 | `utils/reading.ts` | `parseWikiText`, `readLongText` (paginador). |
 | `interfaces/Command.ts` | Interface `Command` (poucos comandos a usam). |
-| `utils/LogMinister.ts`, `utils/ocHandlers.ts` | Versões **antigas/mortas** (as ativas estão nos supercommands). |
 
 ---
 
@@ -208,7 +209,7 @@ Padrão comum: `index.ts` com roteador `switch` + `sendHelp()`, handlers em arqu
 1. **EventCheckout** — pub/sub tipado, documentado por intent, com dedupe e isolamento de erro por handler.
 2. **Supercomandos** — mesmo esqueleto: cabeçalho de arquitetura, `index.ts` roteador fino, handlers pequenos, `sendHelp()`, try/catch com tag.
 3. **Shims** (`help`/`logs`/`status`) — resolvem "só `commands/` deploya slash" e explicam o porquê no comentário.
-4. **Roteamento de interação por customId** (`interaction_checkout`) — botões/modais/selects roteados por prefixo, stateless, sem collectors (ficha, futebol, status, token).
+4. **Roteamento de interação por customId** (`interactionCheckout`) — botões/modais/selects roteados por prefixo, stateless, sem collectors (ficha, futebol, status, token).
 5. **Logging de console** — convenção emoji + `[TAG]` em praticamente tudo.
 6. **Comentários de intent no `index.ts`** — cada intent justificado, inclusive os removidos.
 
@@ -218,22 +219,25 @@ Padrão comum: `index.ts` com roteador `switch` + `sendHelp()`, handlers em arqu
 
 Pendências reais que **ainda valem** (não foram resolvidas):
 
-- **Versão dessincronizada**: `package.json` (1.4.0), footers hardcoded (`v1.4`/`v1.4.1` em roll/serverinfo/userinfo), `ReturnVersion` caindo no fallback (`tools/Data/version.json` não existe), commits em 1.5.x.
-- **Retry 503 infinito** em `commands/ai.ts` e `commands/resenha.ts` (`while` sem teto) — um outage da API prende o handler.
-- **`cleanWrapper`** (`tools/utils/textUtils.ts`) corta o 1º/último caractere de qualquer string (`startsWith('')` sempre `true`). Só o `ocHandlers` morto usa, mas é uma mina.
-- **`rp!ignorar add/remove`** não afeta a coleta atual (o tracker ativo não lê a blocklist; só o `clean` retroativo funciona).
-- **Conexões Mongo duplicadas** (~7× `DB_RESTANTE`) — centralizar em `database.ts`.
+- ~~**Versão dessincronizada**~~ ✅ resolvido na 1.6: `returnVersion()` lê o `package.json`; footers dinâmicos.
+- ~~**Retry 503 infinito**~~ ✅ resolvido na 1.6: `rp!ai`/`rp!resenha` usam `withAIRetry` (`tools/utils/ai/retry.ts`) — teto de 8 tentativas, backoff, e cota diária explicada ao usuário (`tools/utils/ai/errors.ts`).
+- ~~**`cleanWrapper`** bugado~~ ✅ removido na 1.6 (a versão viva e correta é `supercommands/oc/utils.ts`).
+- ~~**`rp!ignorar add/remove`** no-op~~ ✅ resolvido na 1.6: `trackMessageStats` filtra pela blocklist (`tools/utils/blockedWords.ts`).
+- ~~**Conexões Mongo duplicadas**~~ ✅ resolvido na 1.6: `database.ts` mantém um mapa `uri → Connection` (`getConnection`, `maxPoolSize: 10`); todos os models compartilham o pool da sua URI.
 - **Chaves de IA em texto plano** no Mongo (`TokenSchema.value`).
-- **Código morto remanescente**: `tools/utils/LogMinister.ts`, `tools/utils/ocHandlers.ts`, `tools/messageTracker.ts` (tracker; manter só `loadBlockedWords`), `tools/models/GuildConfig.ts` (só o LogMinister morto usa).
-- **`tsconfig` com `strict: false`** — mascara `any` implícito e awaits faltando.
-- **Git**: `dist/` (build antigo) trackeado; binário `stockfish` (~40 MB) versionado — deveria ser baixado no deploy.
-- **`readme.md`** desatualizado (estrutura antiga; cita `DISCORD_TOKEN`, o código usa `xdTOKEN`).
+- ~~**Código morto remanescente**~~ ✅ apagados na 1.6: `tools/utils/LogMinister.ts`, `tools/utils/ocHandlers.ts`, `tools/messageTracker.ts`, `futebol/handlers/roundView.ts`, `futebol/engines/advancedEngine.ts`, `phone/handlers/install.ts`, `phone/handlers/uninstall.ts`, `tools/types.d.ts`. Resta `tools/models/GuildConfig.ts` (sem consumidor vivo).
+- **`tsconfig` com `strict: false`** — mascara `any` implícito e awaits faltando. (`npm run typecheck` existe e passa com 0 erros no modo atual.)
+- ~~**Git**: `dist/` e `stockfish` trackeados~~ ✅ destrackeados na 1.6 (`.gitignore` cobre; o binário segue no disco pro deploy manual).
+- ~~**`readme.md`** desatualizado~~ ✅ reescrito na 1.6 (instalação, `.env` completo, ponteiro pro `rp!help`).
+- **Limitação conhecida — anti-SSRF do `rp!download`**: o `validateUrl` (`commands/download.ts`) filtra
+  rede privada por string de hostname — não cobre IPv6 privado (`fc00::/7`, `[::ffff:127.0.0.1]`)
+  nem rebind de DNS. Aceitável para um bot de Discord, mas registrado aqui de propósito.
 
 ### Duplicações candidatas a universalização
 `sanitizeOutput` (5 cópias), cliente de IA (`api.ts` vs `aiUtils.chamarIA` vs `resumo/modules/aiClient.ts`), loop de retry, `fakeMessage` (adaptador slash→texto em ~8 comandos), confirmação Sim/Não com botões (ban/kick/fatos/exportchat). Mover para utils compartilhados.
 
 ### Variáveis de ambiente
-`xdTOKEN`, `CLIENT_ID`, `DB_OC`, `DB_OC_WIKI`, `DB_RESTANTE`, `DB_STATUS`, `DB_FICHA`, `DB_FB_USER`, `DB_FB_REPORT`, `DB_ECONOMY` (opcional — cai em `DB_RESTANTE`), `GEMINI_API_KEY`, `WOLFRAM_IDS`, `OWNER_LOG_CHANNEL_ID` (opcional).
+`xdTOKEN`, `CLIENT_ID`, `DB_OC`, `DB_OC_WIKI`, `DB_RESTANTE`, `DB_STATUS`, `DB_FICHA`, `DB_FB_USER`, `DB_FB_REPORT`, `DB_ECONOMY` (opcional — cai em `DB_RESTANTE`), `GEMINI_API_KEY`, `GEMINI_MODEL` (opcional — modelo do fallback de IA, default `gemini-3-flash-preview`), `WOLFRAM_IDS`, `OWNER_LOG_CHANNEL_ID` (opcional), `YTDLP_PATH` / `YTDLP_COOKIES` (opcionais — `rp!download`).
 
 ---
 
@@ -283,7 +287,7 @@ Ligada por servidor com `rp!wallet economia avancada on`. Modelo pela **Teoria Q
 - **Câmbio fictício→dólar** (`coinToUsd`): `saldo × baseUsdRate / priceIndex` (moeda inflacionada compra menos dólar).
 - **PIB**: volume de `buy+sell+transfer` na janela (`windowVolume`).
 - **Dashboard** `rp!wallet economia`: M, Q, índice/inflação, V, PIB, câmbio, economia em USD + gráfico do índice (QuickChart **baixado e anexado** via `attachment://`, porque o proxy do Discord não busca imagem externa).
-- **Rotina**: `recomputeAllAdvanced()` roda de hora em hora (`command_checkout.ts`), só nos servidores com `advanced=true`.
+- **Rotina**: `recomputeAllAdvanced()` roda de hora em hora (`commandCheckout.ts`), só nos servidores com `advanced=true`.
 
 Faucets/sinks alimentam o ledger: `pay→transfer`, `buy→buy`, `sell→sell`, admin `add→faucet`, `remove→sink`.
 

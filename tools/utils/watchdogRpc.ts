@@ -15,6 +15,7 @@
 // Auto-registra no ClientReady via EventCheckout — importado pelo bloco de
 // auto-registro do commandCheckout. Sem DB_STATUS no .env, desativa-se sozinho.
 import mongoose from 'mongoose';
+import { getConnection } from '../database';
 import { Client } from 'discord.js';
 import { EventCheckout } from '../eventCheckout';
 
@@ -23,7 +24,7 @@ const uri = process.env.DB_STATUS;
 let RequestModel: mongoose.Model<any> | null = null;
 
 if (uri) {
-    const conn = mongoose.createConnection(uri);
+    const conn = getConnection(uri, 'Status');
     conn.on('error', (err) => console.error('❌ [WatchdogRPC] Erro na conexão DB_STATUS:', err));
 
     const schema = new mongoose.Schema(

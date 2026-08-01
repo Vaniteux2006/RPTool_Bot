@@ -3,7 +3,7 @@
 // O futebol é um supercommand completo em supercommands/futebol/. Este arquivo
 // existe apenas para registrar o slash /futebol no deploy (supercommands não são
 // varridos pelo deploy de slash — mesmo padrão do commands/chess.ts).
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, Message, MessageFlags } from 'discord.js';
 
 const futebolSuper = (() => {
     try { return require('../supercommands/futebol/index').default; }
@@ -22,7 +22,7 @@ export default {
     async executeSlash(interaction: ChatInputCommandInteraction) {
         return interaction.reply({
             content: '⚽ O futebol funciona por comandos de texto. Use `rp!futebol` para ver o painel completo.',
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
         });
     },
 

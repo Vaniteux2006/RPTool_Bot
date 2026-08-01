@@ -1,8 +1,9 @@
+import { getConnection } from '../database';
 // RPTool/tools/models/FutebolSchema.ts
 import mongoose, { Schema, Document } from 'mongoose';
 import 'dotenv/config';
 
-const fbUserConnection = mongoose.createConnection(process.env.DB_FB_USER as string);
+const fbUserConnection = getConnection(process.env.DB_FB_USER as string, 'Futebol');
 fbUserConnection.on('connected', () => console.log('✅ [MongoDB] Conectado ao banco Futebol (FB_USER)'));
 fbUserConnection.on('error', (err) => console.error('❌ [MongoDB] Erro no banco Futebol (FB_USER):', err));
 

@@ -213,28 +213,49 @@ export interface WeatherHistorical {
     code: number;
 }
 
+// Cache por (lat, lon, dia): o arquivo histórico é IMUTÁVEL para um dia passado.
+// Sem isto, cada relógio fazia 1 request a cada tick de 30s = 2.880/dia — e
+// ~4 relógios estouravam o limite gratuito da Open-Meteo, matando o clima de todos.
+const HIST_CACHE_CAP = 5000;
+const HIST_NEG_TTL_MS = 5 * 60_000; // falha/sem dados: tenta de novo em 5 min
+const histCache = new Map<string, { data: WeatherHistorical | null; expires: number | null }>();
+
 export async function getWeatherHistorical(
     lat:  number,
     lon:  number,
     date: Date,
 ): Promise<WeatherHistorical | null> {
+    let year = date.getUTCFullYear();
+    if (year < 1950) year = 2000;
+    if (year > new Date().getUTCFullYear()) year = new Date().getUTCFullYear() - 1;
+
+    const mm      = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const dd      = String(date.getUTCDate()).padStart(2, '0');
+    const dateStr = `${year}-${mm}-${dd}`;
+
+    const cacheKey = `${lat.toFixed(3)}|${lon.toFixed(3)}|${dateStr}`;
+    const hit = histCache.get(cacheKey);
+    if (hit && (hit.expires === null || hit.expires > Date.now())) return hit.data;
+
     try {
-        let year = date.getUTCFullYear();
-        if (year < 1950) year = 2000;
-        if (year > new Date().getUTCFullYear()) year = new Date().getUTCFullYear() - 1;
-
-        const mm      = String(date.getUTCMonth() + 1).padStart(2, '0');
-        const dd      = String(date.getUTCDate()).padStart(2, '0');
-        const dateStr = `${year}-${mm}-${dd}`;
-
         const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
         const res = await axios.get(url, { timeout: 10000 });
 
-        if (!res.data?.daily?.weather_code) return null;
-        return {
-            min:  res.data.daily.temperature_2m_min[0],
-            max:  res.data.daily.temperature_2m_max[0],
-            code: res.data.daily.weather_code[0],
-        };
-    } catch { return null; }
+        const data: WeatherHistorical | null = res.data?.daily?.weather_code
+            ? {
+                min:  res.data.daily.temperature_2m_min[0],
+                max:  res.data.daily.temperature_2m_max[0],
+                code: res.data.daily.weather_code[0],
+            }
+            : null;
+
+        // Sucesso: permanente (dado imutável); sem dados: TTL curto
+        histCache.set(cacheKey, { data, expires: data ? null : Date.now() + HIST_NEG_TTL_MS });
+        if (histCache.size > HIST_CACHE_CAP) histCache.delete(histCache.keys().next().value as string);
+        return data;
+    } catch {
+        // Falha de rede/rate-limit: cache negativo curto pra não martelar a API
+        histCache.set(cacheKey, { data: null, expires: Date.now() + HIST_NEG_TTL_MS });
+        return null;
+    }
 }

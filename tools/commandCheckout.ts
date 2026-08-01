@@ -17,10 +17,12 @@ import './utils/aiUtils';       // IA de OC (oc:ai)      — auto-registra no Me
 import './utils/statusRotator'; // status rotativo do bot — auto-registra no ClientReady
 import './utils/telemetry';     // heartbeat + logs p/ o Watchdog — auto-registra no ClientReady
 import './utils/watchdogRpc';   // consultas sob demanda do Watchdog — auto-registra no ClientReady
+import './reactionListener';    // reaction roles — auto-registra no MessageReactionAdd/Remove
 
 // ─── Rotinas de inicialização ─────────────────────────────────────────────────
 import birthdayCmd from '../commands/birthday';
 import { STOPWORDS } from './utils/stopwords';
+import { getBlockedWords } from './utils/blockedWords';
 import { recomputeAllAdvanced } from './utils/economyEngine';
 import { bumpServerStat, bumpUserChannel } from './utils/statsBuffer';
 
@@ -44,6 +46,10 @@ async function initRoutines(client: Client): Promise<void> {
     console.log('🛠️ [Checkout] Rotinas inicializadas.');
 }
 
+// Rotinas horárias arrancam no boot, não na primeira mensagem — um servidor
+// silencioso também precisa de painéis de aniversário e economia atualizados.
+EventCheckout.onClientReady('system.routines', initRoutines);
+
 // ─── Tracking de stats de mensagem ───────────────────────────────────────────
 // Não escreve no Mongo diretamente: acumula no statsBuffer (flush a cada 15s
 // via bulkWrite). Reduz de 2 ops/mensagem para ~2 ops/servidor por ciclo —
@@ -55,9 +61,13 @@ async function trackMessageStats(message: Message): Promise<void> {
     const rawWords = content.match(/[a-záàâãéèêíïóôõöúçñ]+/g) ?? [];
     const wordCounts: Record<string, number> = {};
 
+    // Blocklist do rp!ignorar — cache em memória, sem query por mensagem
+    const blocked = await getBlockedWords(message.guild.id);
+
     for (const w of rawWords) {
         // palavras de 3+ letras que não sejam funcionais (ver tools/utils/stopwords.ts)
-        if (w.length >= 3 && !STOPWORDS.has(w)) {
+        // nem bloqueadas pelo rp!ignorar do servidor
+        if (w.length >= 3 && !STOPWORDS.has(w) && !blocked.has(w)) {
             const key = `words.${w}`;
             wordCounts[key] = (wordCounts[key] ?? 0) + 1;
         }
@@ -99,8 +109,6 @@ async function trackWebhookStats(message: Message): Promise<void> {
 
 // ─── Handler central registrado no EventCheckout ──────────────────────────────
 EventCheckout.onMessageCreate('__system.checkout', async (message: Message) => {
-    await initRoutines(message.client as Client);
-
     if (message.webhookId) {
         // Mensagem de OC (RPTool/Tupperbox/PluralKit/...) → contabiliza por personagem
         trackWebhookStats(message).catch(() => null);

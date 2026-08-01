@@ -1,6 +1,7 @@
 import { Message, EmbedBuilder } from 'discord.js';
 import { TeamModel } from '../../../tools/models/FutebolSchema';
 import { extractArgs } from '../../../tools/utils/textUtils';
+import { escapeRegex } from '../../../tools/utils/text';
 import path from 'path';
 import fs from 'fs';
 
@@ -89,6 +90,3 @@ function loadTacticsJson() {
     return JSON.parse(fs.readFileSync(tacticsPath, 'utf-8'));
 }
 
-function escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}

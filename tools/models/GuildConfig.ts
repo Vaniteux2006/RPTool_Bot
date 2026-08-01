@@ -1,6 +1,7 @@
+import { getConnection } from '../database';
 import mongoose, { Schema, Document } from 'mongoose';
 
-const configConnection = mongoose.createConnection(process.env.DB_RESTANTE as string);
+const configConnection = getConnection(process.env.DB_RESTANTE as string, 'Geral');
 
 export interface IGuildConfig extends Document {
     guildId: string;

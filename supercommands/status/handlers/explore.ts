@@ -14,6 +14,7 @@ import {
     aggTimeline, aggTop, aggTopCount, aggKeyTimeline, lineChartMulti,
     presetRange, periodLabel, formatPeriodPoint, fmt, StatField,
 } from './aggregate';
+import { parseBRDateISO } from '../../../tools/utils/date';
 
 interface State { from: string | null; to: string | null; view: string; arg: string; uid: string; }
 
@@ -32,12 +33,8 @@ function parseState(id: string): State {
     const p = id.split(':'); // stats_exp:from:to:view:arg:uid
     return { from: p[1] === 'all' ? null : p[1], to: p[2] === 'all' ? null : p[2], view: p[3], arg: p[4] === '_' ? '' : p[4], uid: p[5] };
 }
-function parseBRDate(s: string): string | null {
-    const m = (s || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (!m) return null;
-    const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
-    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
-}
+// Agora com validação de overflow (31/02 → null), igual ao docpast.
+const parseBRDate = (s: string): string | null => parseBRDateISO(s, { exigirAno: true });
 const renderKey = (view: string, k: string) =>
     view === 'users' ? `<@${k}>` : view === 'channels' ? `<#${k}>` : view === 'ocs' ? `🎭 **${k}**` : `\`${k}\``;
 

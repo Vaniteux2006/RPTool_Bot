@@ -55,7 +55,8 @@ const OCSchema = new Schema({
         persona: { type: String, default: "" },
         activeChannelId: { type: String, default: null },
         autoMode: { type: Boolean, default: false },
-        replyDelay: { type: Number, default: 30 },
+        // 120s é o padrão que os textos ao usuário anunciam (oc auto / aiUtils)
+        replyDelay: { type: Number, default: 120 },
         memories: [{ id: String, content: String }]
     }
 });

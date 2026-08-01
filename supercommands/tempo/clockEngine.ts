@@ -3,6 +3,7 @@
 import { Client, TextChannel } from 'discord.js';
 import { ClockModel, IClock } from '../../tools/models/ClockSchema';
 import { getWeatherHistorical, wmoToEmoji, wmoToText, STANDARD_WEATHERS } from '../clima/weatherUtils';
+import { runPool } from '../../tools/utils/pool';
 
 let engineRunning = false;
 
@@ -90,36 +91,65 @@ export function formatClockMessage(clock: IClock, rpgDate: Date, weatherData: an
 }
 
 // ─── Ciclo de atualização ────────────────────────────────────────────────────
+// Cache das referências de Message: fetch de canal + mensagem eram 2 chamadas de
+// API por relógio por tick. Guardamos a referência e só refazemos o fetch quando
+// o edit falhar (mensagem apagada, canal recriado...).
+const messageCache = new Map<string, import('discord.js').Message>();
+
+// Guarda de sobreposição: o setInterval NÃO espera o tick anterior — com muitos
+// relógios (fetch + HTTP cada) os ticks empilhavam.
+let ticking = false;
+
+async function tickOneClock(client: Client, clock: IClock & { id?: string }): Promise<void> {
+    if (clock.paused) return;
+
+    const rpgDate = computeRPGTime(clock);
+
+    let weatherData = null;
+    if (clock.latitude && clock.longitude && !clock.forcedWeather) {
+        weatherData = await getWeatherHistorical(clock.latitude, clock.longitude, rpgDate);
+    }
+
+    const newContent = formatClockMessage(clock, rpgDate, weatherData);
+
+    // 1º tenta a referência em cache — zero chamadas de API se nada mudou
+    const cached = messageCache.get(clock.messageId);
+    if (cached) {
+        if (cached.content === newContent) return;
+        try {
+            await cached.edit(newContent);
+            return;
+        } catch {
+            messageCache.delete(clock.messageId); // referência velha → refaz o fetch abaixo
+        }
+    }
+
+    const channel = await client.channels.fetch(clock.channelId).catch(() => null) as TextChannel | null;
+    if (!channel) return;
+
+    const msg = await channel.messages.fetch(clock.messageId).catch(() => null);
+    if (!msg) return;
+    messageCache.set(clock.messageId, msg);
+
+    if (msg.content !== newContent) await msg.edit(newContent);
+}
+
 export async function tickClocks(client: Client): Promise<void> {
+    if (ticking) return; // tick anterior ainda rodando — pula esta rodada
+    ticking = true;
     try {
         const clocks = await ClockModel.find({});
-        for (const clock of clocks) {
+        await runPool(clocks, 4, async clock => {
             try {
-                if (clock.paused) continue;
-
-                const channel = await client.channels.fetch(clock.channelId).catch(() => null) as TextChannel | null;
-                if (!channel) continue;
-
-                const msg = await channel.messages.fetch(clock.messageId).catch(() => null);
-                if (!msg) continue;
-
-                const rpgDate = computeRPGTime(clock);
-
-                let weatherData = null;
-                if (clock.latitude && clock.longitude && !clock.forcedWeather) {
-                    weatherData = await getWeatherHistorical(clock.latitude, clock.longitude, rpgDate);
-                }
-
-                const newContent = formatClockMessage(clock, rpgDate, weatherData);
-                if (msg.content !== newContent) {
-                    await msg.edit(newContent);
-                }
+                await tickOneClock(client, clock);
             } catch (e) {
                 console.error(`[Clock Engine] Erro ao atualizar "${clock.name}":`, e);
             }
-        }
+        });
     } catch (err) {
         console.error('[Clock Engine] Erro crítico no tick:', err);
+    } finally {
+        ticking = false;
     }
 }
 

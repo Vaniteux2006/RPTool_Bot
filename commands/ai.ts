@@ -1,14 +1,9 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
-import { api } from '../tools/api';
 import { getGuildAIConfig } from '../tools/utils/tokenHelper';
-
-function sanitizeOutput(text: string): string {
-    if (!text) return text;
-    return text
-        .replace(/@everyone/g, '@everyоne') 
-        .replace(/@here/g, '@hеre')        
-        .replace(/<@&(\d+)>/g, '<@&\u200b$1>'); 
-}
+import { chamarIA } from '../tools/utils/ai/client';
+import { withAIRetry } from '../tools/utils/ai/retry';
+import { motivoInterrupcao, rotuloRetry, descreverErroFatal } from '../tools/utils/ai/errors';
+import { sanitizeOutput } from '../tools/utils/text';
 
 export default {
     name: 'ai',
@@ -22,8 +17,8 @@ export default {
     async executeSlash(interaction: ChatInputCommandInteraction) {
         const msg = interaction.options.getString('mensagem');
         if (!msg) return;
-        
-        await interaction.deferReply(); 
+
+        await interaction.deferReply();
         await this.runAI(interaction, msg);
     },
 
@@ -32,89 +27,40 @@ export default {
         if (!userMessage) return message.reply("⚠️ Você precisa falar algo!");
 
         const loading = await message.reply("🧠 **[ Pensando... ]**");
-        await this.runAI(loading, userMessage, true); 
+        await this.runAI(loading, userMessage, true);
     },
 
     async runAI(target: any, text: string, isEdit = false) {
         const guildId = target.guildId || target.guild?.id;
+        const responder = (t: string) => (isEdit ? target.edit(t) : target.editReply(t));
 
         try {
             const config = await getGuildAIConfig(guildId);
             if (!config) {
-                 const errText = "⚠️ Nenhum token configurado. Use `rp!token` para configurar.";
-                 if (isEdit) await target.edit(errText); else await target.editReply(errText);
-                 return;
+                return await responder("⚠️ Nenhum token configurado. Use `rp!token` para configurar.");
             }
 
-            let replyText = "";
-            let attempt = 1;
-            let success = false;
+            const prompt =
+                `[INSTRUÇÃO DO SISTEMA]\n` +
+                `Você é um bot assistente de IA. Seja útil e breve.\n` +
+                `[CONTEXTO]\nResponda como RPTool. Seja imersivo.\n` +
+                `[USUÁRIO]: ${text}\n[RPTool]:`;
 
-            // --- SISTEMA DE RETRY INFINITO PARA 503 ---
-            while (!success) {
-                try {
-                    replyText = await api.chat(
-                        "RPTool", 
-                        "Você é um bot assistente de IA. Seja útil e breve.", 
-                        text,
-                        config
-                    );
-                    
-                    // Se a API retornar o 503 em texto
-                    if (replyText.includes('503') || replyText.includes('high demand') || replyText.includes('Service Unavailable')) {
-                        throw new Error('503');
-                    }
-                    
-                    success = true; // Quebra o loop se deu certo
-                } catch (error: any) {
-                    const errorMsg = error.message || error.toString();
-                    if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
-                        console.warn(`[AI] Retry ${attempt} - Servidor sobrecarregado (503):`, errorMsg);
-                        const retryMsg = `🔥 **ERRO 503: Servidores fritando!** 🍟\nEspera aí, a IA vai tentar de novo em 5 segundos... (Tentativa ${attempt})`;
-                        if (isEdit) await target.edit(retryMsg); else await target.editReply(retryMsg);
-                        
-                        await new Promise(resolve => setTimeout(resolve, 5000));
-                        attempt++;
-                    } else {
-                        throw error; // Se não for 503, joga pro catch principal
-                    }
-                }
+            // Retry com teto (nunca infinito): só insiste em 503/rate-limit.
+            const resultado = await withAIRetry(() => chamarIA(prompt, config), {
+                onRetry: (falha, espera, tentativa) =>
+                    responder(`${rotuloRetry(falha)}\n🔄 Tentando de novo em ${espera}s... (tentativa ${tentativa})`).catch(() => null),
+            });
+
+            if (!resultado.ok) {
+                const { titulo, detalhe } = motivoInterrupcao(resultado.falha!);
+                return await responder(`${titulo}\n${detalhe}`);
             }
-            // ------------------------
 
-            replyText = sanitizeOutput(replyText);
-
-            if (isEdit) await target.edit(replyText);
-            else await target.editReply(replyText);
-
+            await responder(sanitizeOutput(resultado.valor!));
         } catch (error: any) {
             console.error(`[AI Error] ${error.message}`);
-
-            let errText = "😵‍💫 **Minha cabeça deu um nó... Tenta de novo?**";
-            const errorMsg = error.message || error.toString();
-
-            if (errorMsg.includes('GoogleGenerativeAI Error') && errorMsg.includes('was blocked')) {
-                errText = "⚠️ **Algo no teu texto passou totalmente dos limites e a IA não gostou. Toma cuidado aí.**";
-            }
-            else if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Quota')) {
-                const limitMatch = errorMsg.match(/limit:\s*(\d+)/i);
-                
-                if (errorMsg.includes('Quota') || limitMatch) {
-                    const limitAmount = limitMatch ? limitMatch[1] : "várias";
-                    errText = `🛑 **ERRO! LIMITE ATINGIDO!** A IA estourou a cota de **${limitAmount}** requisições. Use \`rp!token\` pra mudar de API.`;
-                } else {
-                    const match = errorMsg.match(/retry in (\d+(\.\d+)?)/) || errorMsg.match(/after (\d+)/);
-                    let seconds = 60; 
-                    if (match) seconds = Math.ceil(parseFloat(match[1]));
-                    
-                    errText = `🔥 **CALMA AÍ! Muita mensagem pra ler!**\n⏳ *O cérebro fritou... Tenta de novo em **${seconds}s**.*`;
-                }
-            } else if (errorMsg.includes('503') || errorMsg.includes('Overloaded') || errorMsg.includes('high demand')) {
-                errText = "🔥 **ERRO: ESTÃO FRITANDO OS SERVIDORES!** 🍟\nAlta demanda na IA do Google (Erro 503). Espera um pouquinho que já esfria.";
-            }
-
-            if (isEdit) await target.edit(errText);
-            else await target.editReply(errText);
+            await responder(descreverErroFatal(error)).catch(() => null);
         }
     }
 };

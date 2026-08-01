@@ -1,7 +1,6 @@
 import {
     Message, EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-    ComponentType, ButtonInteraction
-} from 'discord.js';
+    ComponentType, ButtonInteraction, MessageFlags } from 'discord.js';
 import axios from 'axios';
 
 // ─── rp!img ───────────────────────────────────────────────────────────────────
@@ -187,7 +186,7 @@ export default {
 
         collector.on('collect', async (i: ButtonInteraction) => {
             if (i.user.id !== message.author.id) {
-                return i.reply({ content: '🔒 Só quem pesquisou pode navegar. Faça sua própria busca com `rp!img`!', ephemeral: true });
+                return i.reply({ content: '🔒 Só quem pesquisou pode navegar. Faça sua própria busca com `rp!img`!', flags: MessageFlags.Ephemeral });
             }
 
             if (i.customId === 'img_close') {

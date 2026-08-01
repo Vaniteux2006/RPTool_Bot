@@ -1,6 +1,7 @@
 import { Message } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
 import { extractName } from '../utils';
+import { markAIChannel } from '../../../tools/utils/ocCache';
 
 // rp!oc auto "Nome" [on|off]
 // Liga/desliga o autoMode: o NPC passa a participar sozinho da conversa neste canal
@@ -34,6 +35,7 @@ export default async function handleAuto(message: Message, args: string[], userI
     oc.ai.enabled = true;
     oc.ai.autoMode = true;
     oc.ai.activeChannelId = message.channel.id;
+    markAIChannel(message.channel.id);
     if (!oc.ai.replyDelay || oc.ai.replyDelay < 30) oc.ai.replyDelay = 120; // padrão equilibrado (~2 min)
     oc.markModified('ai');
     await oc.save();

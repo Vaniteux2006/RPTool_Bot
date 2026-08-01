@@ -1,4 +1,4 @@
-import { Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
+import { Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { OCModel, IOC } from '../../../tools/models/OCSchema';
 
 // Critérios de "Classificar por" disponíveis no menu. O default é data de criação.
@@ -159,7 +159,7 @@ export default async function handleList(message: Message, args: string[], userI
 
     collector.on('collect', async (i) => {
         if (i.user.id !== userId) {
-            return i.reply({ content: "🚫 Só quem pediu a lista pode mexer.", ephemeral: true });
+            return i.reply({ content: "🚫 Só quem pediu a lista pode mexer.", flags: MessageFlags.Ephemeral });
         }
 
         // Trocar ordenação (reseta a inversão pro critério novo começar na direção natural)
@@ -209,7 +209,7 @@ export default async function handleList(message: Message, args: string[], userI
 
                 const inputPage = parseInt(modalSubmit.fields.getTextInputValue('page_input'));
                 if (isNaN(inputPage) || inputPage < 1 || inputPage > totalPages) {
-                    return modalSubmit.reply({ content: `❌ Página inválida. Digite um número de 1 a ${totalPages}.`, ephemeral: true });
+                    return modalSubmit.reply({ content: `❌ Página inválida. Digite um número de 1 a ${totalPages}.`, flags: MessageFlags.Ephemeral });
                 }
 
                 currentPage = inputPage;

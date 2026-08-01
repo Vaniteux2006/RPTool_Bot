@@ -3,8 +3,8 @@ import { Message, EmbedBuilder } from 'discord.js';
 import { TeamModel, IPlayer, VALID_ARCHETYPES } from '../../../tools/models/FutebolSchema';
 import { calculateOverallFromStats, hasCustomStats } from '../engines/mathEngine';
 import { extractArgs } from '../../../tools/utils/textUtils';
+import { escapeRegex } from '../../../tools/utils/text';
 
-function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function clamp(n: number, min = 1, max = 99) { return Math.min(max, Math.max(min, Math.round(n))); }
 
 // ─── Flag parser: extrai "-pac 85 -sho 92 ..." em Record ─────────────────────

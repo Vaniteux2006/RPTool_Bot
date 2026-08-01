@@ -1,8 +1,9 @@
+import { getConnection } from '../database';
 import mongoose, { Schema, Document } from 'mongoose';
 import 'dotenv/config';
 
 // Segue o seu padrão de usar conexões separadas
-const restanteConnection = mongoose.createConnection(process.env.DB_RESTANTE as string);
+const restanteConnection = getConnection(process.env.DB_RESTANTE as string, 'Geral');
 
 // ==========================================
 // 1. TAREFAS (ITENS)

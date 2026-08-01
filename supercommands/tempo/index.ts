@@ -1,5 +1,6 @@
 // RPTool/supercommands/tempo/index.ts
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+// Comando prefix-only (rp!tempo) — sem registro de slash (ver DOCUMENTACAO.md).
+import { Message } from 'discord.js';
 import { startClockEngine } from './clockEngine';
 import { EventCheckout } from '../../tools/eventCheckout';
 
@@ -25,14 +26,6 @@ export default {
     name:        'tempo',
     description: 'Motor de Tempo RP — relógios, velocidade, saltos e conversões',
     aliases:     ['time', 'clock', 'relogio', 'relógio'],
-
-    data: new SlashCommandBuilder()
-        .setName('tempo')
-        .setDescription('Motor de Tempo RP'),
-
-    async executeSlash(interaction: ChatInputCommandInteraction) {
-        return interaction.reply({ content: 'Use `rp!tempo` para ver os comandos disponíveis.', ephemeral: true });
-    },
 
     async execute(message: Message, args: string[]) {
         const action = args[0]?.toLowerCase();

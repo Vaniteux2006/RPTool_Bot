@@ -8,19 +8,17 @@ import {
     Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     ModalBuilder, TextInputBuilder, TextInputStyle, Client, Guild,
 } from 'discord.js';
+import { truncarCampo } from '../../../tools/utils/discord/embed';
 import { trendWindows, aggTrendingWords, aggHotMoments, formatDateBR, fmt } from './aggregate';
+import { parseBRDateISO } from '../../../tools/utils/date';
 
 type Win = '24h' | '7d' | '30d';
 interface State { window: Win; anchor: string; uid: string; } // anchor = 'now' | 'YYYY-MM-DD'
 
 const recentDaysOf = (w: Win) => (w === '24h' ? 1 : w === '7d' ? 7 : 30);
 
-function parseBRDate(s: string): string | null {
-    const m = (s || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (!m) return null;
-    const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
-    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
-}
+// Agora com validação de overflow (31/02 → null), igual ao docpast.
+const parseBRDate = (s: string): string | null => parseBRDateISO(s, { exigirAno: true });
 
 function shiftAnchor(anchor: string, window: Win, dir: number): string {
     const today = new Date();
@@ -69,8 +67,8 @@ export async function buildTrendingPayload(_client: Client, guild: Guild, s: Sta
         .setTitle(`🔥 Em Alta · ${guild.name}`)
         .setDescription(`O que estava bombando ${quando} (janela: **${formatDateBR(w.recentFrom)} → ${formatDateBR(w.recentTo)}**).`)
         .addFields(
-            { name: '🔥 Palavras em Alta', value: altaTxt.slice(0, 1024), inline: false },
-            { name: '💥 Momentos Quentes', value: hotTxt.slice(0, 1024), inline: false },
+            { name: '🔥 Palavras em Alta', value: truncarCampo(altaTxt), inline: false },
+            { name: '💥 Momentos Quentes', value: truncarCampo(hotTxt), inline: false },
         )
         .setFooter({ text: 'RPTool | Trending • use ◀ ▶ 📅 para viajar no tempo' })
         .setTimestamp();

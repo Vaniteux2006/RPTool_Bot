@@ -4,9 +4,10 @@
 // crash) apagava tudo e dava "Partida não encontrada". Agora persistem no Mongo
 // e expiram sozinhas 1h após o último lance, via índice TTL em `updatedAt`.
 import mongoose, { Schema, Document } from 'mongoose';
+import { getConnection } from '../database';
 import 'dotenv/config';
 
-const restanteConnection = mongoose.createConnection(process.env.DB_RESTANTE as string);
+const restanteConnection = getConnection(process.env.DB_RESTANTE as string, 'Geral');
 
 export interface IChessGame extends Document {
     gameId: string;

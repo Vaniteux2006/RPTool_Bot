@@ -1,4 +1,4 @@
-import { Message, EmbedBuilder, ChatInputCommandInteraction, TextChannel } from 'discord.js';
+import { Message, EmbedBuilder, ChatInputCommandInteraction, TextChannel, MessageFlags } from 'discord.js';
 import { Command } from '../tools/interfaces/Command';
 // 👇 Importando os Models novinhos em folha! (Verifique se o caminho da pasta bate com o seu)
 import { KanbanItemModel, KanbanPainelModel } from '../tools/models/KanbanSchema';
@@ -59,7 +59,7 @@ export const command: Command = {
         const client = event.client;
 
         if (!guildId) {
-            return isMessage ? event.reply('❌ Comando restrito a servidores.') : event.reply({ content: '❌ Restrito a servidores.', ephemeral: true });
+            return isMessage ? event.reply('❌ Comando restrito a servidores.') : event.reply({ content: '❌ Restrito a servidores.', flags: MessageFlags.Ephemeral });
         }
 
         const subCommand = args[0]?.toLowerCase();
@@ -76,7 +76,7 @@ export const command: Command = {
                     { name: '📺 Criar Painel', value: '`rp!kanban show #canal`' },
                     { name: '👀 Checkar R', value: '`rp!kanban ver`' }
                 );
-            return isMessage ? event.reply({ embeds: [helpEmbed] }) : event.reply({ embeds: [helpEmbed], ephemeral: true });
+            return isMessage ? event.reply({ embeds: [helpEmbed] }) : event.reply({ embeds: [helpEmbed], flags: MessageFlags.Ephemeral });
         }
 
         try {

@@ -17,11 +17,8 @@ import {
     FormatConfig,
 } from '../engines/progression';
 
-function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-
-function isGuildAdmin(message: Message): boolean {
-    return !!message.member?.permissions.has('ManageGuild');
-}
+import { escapeRegex } from '../../../tools/utils/text';
+import { isStaff as isGuildAdmin } from '../../../tools/utils/discord/permissions';
 
 // Determina o tipo de fase principal de um formato
 function resolvePrimaryPhaseType(cfg: FormatConfig): 'league' | 'groups' | 'knockout' | 'swiss' {

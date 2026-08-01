@@ -104,20 +104,6 @@ export async function restoreChannel(guild: Guild, channel: GuildChannel, snap: 
     await channel.permissionOverwrites.edit(guild.roles.everyone, state, { reason: 'Lockdown encerrado' });
 }
 
-// ─── Pool de concorrência ─────────────────────────────────────────────────────
+// O pool de concorrência (runPool) foi promovido para tools/utils/pool.ts.
 // Cada canal tem seu próprio bucket de rate limit na API → 4 em paralelo é
 // seguro (o discord.js enfileira sozinho se esbarrar no limite global).
-
-export async function runPool<T>(
-    items: T[], limit: number, worker: (item: T) => Promise<void>,
-): Promise<{ ok: number; failed: number }> {
-    let ok = 0, failed = 0, next = 0;
-    const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
-        while (next < items.length) {
-            const item = items[next++];
-            try { await worker(item); ok++; } catch { failed++; }
-        }
-    });
-    await Promise.all(lanes);
-    return { ok, failed };
-}

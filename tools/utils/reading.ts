@@ -1,4 +1,4 @@
-import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
+import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, MessageFlags } from 'discord.js';
 
 // 🔍 FUNÇÃO 1: Extrai referências do texto (Ex: "Ele encontrou a [[Espada Sagrada]]")
 export function parseWikiText(text: string): string[] {
@@ -40,7 +40,7 @@ export async function readLongText(message: Message, baseEmbed: EmbedBuilder, te
 
     collector.on('collect', async (i) => {
         if (i.user.id !== message.author.id) {
-            return i.reply({ content: "🚫 Apenas quem pediu pode folhear as páginas.", ephemeral: true });
+            return i.reply({ content: "🚫 Apenas quem pediu pode folhear as páginas.", flags: MessageFlags.Ephemeral });
         }
 
         if (i.customId === 'prev_ler' && currentPage > 0) currentPage--;

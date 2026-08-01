@@ -1,4 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder, ChatInputCommandInteraction, Message, ChannelType, GuildMember } from 'discord.js';
+import returnVersion from '../tools/returnVersion';
 
 export default {
     name: 'serverinfo',
@@ -83,7 +84,7 @@ export default {
             .setColor(0xFFD700) 
             .setTitle(`🏰 Informações de ${guild.name}`)
             .setThumbnail(guild.iconURL({ dynamic: true }))
-            .setFooter({ text: `RPTool v1.4.1` })
+            .setFooter({ text: `RPTool v${returnVersion()}` })
             .addFields(
                 { name: '🆔 Identidade', value: `**ID:** \`${guild.id}\`\n**Dono:** ${owner.user.tag}\n**Criado em:** ${criacao}`, inline: false },
                 { name: '📊 Estatísticas', value: `**Membros:** ${guild.memberCount}\n**Bans:** ${banCount}`, inline: true },

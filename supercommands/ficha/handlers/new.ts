@@ -8,6 +8,7 @@ import {
     TextChannel,
     DMChannel,
 } from 'discord.js';
+import { truncarCampo } from '../../../tools/utils/discord/embed';
 import { TemplateModel, FichaModel } from '../../../tools/models/FichaSchema';
 
 // Trava por usuário: o wizard roda na DM via awaitMessages, e DOIS wizards
@@ -195,7 +196,7 @@ async function runWizard(message: Message, template: any, integrateOC: boolean) 
     for (const [key, val] of Object.entries(respostas)) {
         const strVal = String(val);
         if (strVal.startsWith('http')) continue;
-        embed.addFields({ name: key, value: strVal.substring(0, 1024), inline: true });
+        embed.addFields({ name: key, value: truncarCampo(strVal), inline: true });
     }
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(

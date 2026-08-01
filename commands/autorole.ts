@@ -4,8 +4,7 @@ import {
     ChatInputCommandInteraction,
     PermissionFlagsBits,
     GuildMember,
-    Message,
-} from 'discord.js';
+    Message, MessageFlags } from 'discord.js';
 import { AutoroleModel } from '../tools/models/AutoroleConfig';
 import { EventCheckout } from '../tools/eventCheckout';
 
@@ -59,7 +58,7 @@ const autorole = {
             const role = interaction.options.getRole('cargo');
             if (!role) return;
             if (config.autorole.includes(role.id))
-                return interaction.reply({ content: `⚠️ O cargo **${role.name}** já está na lista.`, ephemeral: true });
+                return interaction.reply({ content: `⚠️ O cargo **${role.name}** já está na lista.`, flags: MessageFlags.Ephemeral });
             config.autorole.push(role.id);
             await config.save();
             return interaction.reply(`✅ Cargo **${role.name}** adicionado ao Autorole.`);
@@ -69,7 +68,7 @@ const autorole = {
             const role = interaction.options.getRole('cargo');
             if (!role) return;
             if (!config.autorole.includes(role.id))
-                return interaction.reply({ content: `⚠️ O cargo **${role.name}** não está configurado.`, ephemeral: true });
+                return interaction.reply({ content: `⚠️ O cargo **${role.name}** não está configurado.`, flags: MessageFlags.Ephemeral });
             config.autorole = config.autorole.filter((id: string) => id !== role.id);
             await config.save();
             return interaction.reply(`🗑️ Cargo **${role.name}** removido do Autorole.`);

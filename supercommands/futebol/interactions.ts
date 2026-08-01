@@ -4,8 +4,7 @@ import {
     ActionRowBuilder,
     ButtonStyle,
     ButtonInteraction,
-    StringSelectMenuInteraction,
-} from 'discord.js';
+    StringSelectMenuInteraction, MessageFlags } from 'discord.js';
 import { MatchReportModel } from '../../tools/models/FutebolReportSchema';
 import { TeamModel } from '../../tools/models/FutebolSchema';
 
@@ -28,14 +27,14 @@ export async function handleFutebolInteraction(
         const report   = await MatchReportModel.findById(reportId).catch(() => null);
 
         if (!report) {
-            return interaction.reply({ content: '❌ Súmula expirada (limite de 48h).', ephemeral: true });
+            return interaction.reply({ content: '❌ Súmula expirada (limite de 48h).', flags: MessageFlags.Ephemeral });
         }
 
         const expirationTs = Math.floor(report.createdAt.getTime() / 1000) + 48 * 3600;
         return interaction.reply({
             embeds:     [buildSummaryEmbed(report, expirationTs)],
             components: [buildDetailButtons(reportId)],
-            ephemeral:  true,
+            flags: MessageFlags.Ephemeral,
         });
     }
 
@@ -50,9 +49,9 @@ export async function handleFutebolInteraction(
         const tactic    = parts[5];
 
         const team = await TeamModel.findById(teamId).catch(() => null);
-        if (!team) return interaction.reply({ content: '❌ Time não encontrado.', ephemeral: true });
+        if (!team) return interaction.reply({ content: '❌ Time não encontrado.', flags: MessageFlags.Ephemeral });
         if (team.adminId !== interaction.user.id) {
-            return interaction.reply({ content: '❌ Apenas o dono do time pode aplicar esta tática.', ephemeral: true });
+            return interaction.reply({ content: '❌ Apenas o dono do time pode aplicar esta tática.', flags: MessageFlags.Ephemeral });
         }
 
         team.defaultFormation = formation;
@@ -61,7 +60,7 @@ export async function handleFutebolInteraction(
 
         return interaction.reply({
             content:   `✅ Tática aplicada em **${team.name}**: \`${formation}\` — **${tactic}**`,
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
         });
     }
 
@@ -79,7 +78,7 @@ export async function handleFutebolInteraction(
     if (!report) {
         return interaction.reply({
             content:   '❌ **Súmula destruída.** As análises expiram após 48h para poupar espaço.',
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
         });
     }
 
@@ -123,7 +122,7 @@ export async function handleFutebolInteraction(
             )
             .setFooter({ text: 'Motor de Simulação Tática — RPTool' });
 
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     // ── ⭐ Notas Individuais ───────────────────────────────────────────────────
@@ -165,7 +164,7 @@ export async function handleFutebolInteraction(
                 },
             );
 
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     // ── 📰 Narração Completa ──────────────────────────────────────────────────
@@ -173,7 +172,7 @@ export async function handleFutebolInteraction(
         const log = report.eventsLog ?? [];
 
         if (log.length === 0) {
-            return interaction.reply({ content: '📭 Narração não disponível.', ephemeral: true });
+            return interaction.reply({ content: '📭 Narração não disponível.', flags: MessageFlags.Ephemeral });
         }
 
         // Divide em páginas de 25 linhas (embeds têm limite de 4096 chars)
@@ -190,7 +189,7 @@ export async function handleFutebolInteraction(
                     : 'Narração completa',
             });
 
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 }
 

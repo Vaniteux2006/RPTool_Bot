@@ -1,9 +1,10 @@
+import { getConnection } from '../database';
 // RPTool/tools/models/FichaSchema.ts
 import mongoose, { Schema, Document } from 'mongoose';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const fichaConnection = mongoose.createConnection(process.env.DB_FICHA as string);
+const fichaConnection = getConnection(process.env.DB_FICHA as string, 'Ficha');
 
 export interface ITemplate extends Document {
     guildId:        string;

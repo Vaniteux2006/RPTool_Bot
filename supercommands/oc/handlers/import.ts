@@ -2,13 +2,15 @@
 import { Message } from 'discord.js';
 import axios from 'axios';
 import { OCModel, WikiModel } from '../../../tools/models/OCSchema';
+import { markUserHasOC } from '../../../tools/utils/ocCache';
 
 export default async function handleImport(message: Message, args: string[], userId: string) {
     const attachment = message.attachments.first();
     if (!attachment?.name?.endsWith(".json")) return message.reply("⚠️ Anexe o arquivo `.json`.");
 
     try {
-        const res = await axios.get(attachment.url);
+        // maxContentLength: um "json" de 500 MB não pode ser bufferizado inteiro na RAM
+        const res = await axios.get(attachment.url, { timeout: 10_000, maxContentLength: 2 * 1024 * 1024 });
         const data = res.data;
 
         // --- Normalização de formato Tupperbox ---
@@ -41,6 +43,7 @@ export default async function handleImport(message: Message, args: string[], use
         if (!data.OCs || !Array.isArray(data.OCs)) return message.reply("❌ Formato de arquivo inválido.");
 
         const aguarde = await message.reply("⏳ Sincronizando bancos de dados...");
+        markUserHasOC(userId);
         let count = 0;
 
         for (const t of data.OCs) {

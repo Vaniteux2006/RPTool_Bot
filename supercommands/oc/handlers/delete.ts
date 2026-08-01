@@ -1,6 +1,7 @@
 import { Message } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
 import { extractName } from '../utils';
+import { recheckUserOC, recheckAIChannel } from '../../../tools/utils/ocCache';
 
 export default async function handleDelete(message: Message, args: string[], userId: string) {
     const extracted = extractName(message.content, args[0]);
@@ -10,6 +11,9 @@ export default async function handleDelete(message: Message, args: string[], use
     const deleted = await OCModel.findOneAndDelete({ adminId: userId, name: extracted.name });
     
     if (!deleted) return message.reply("OC não encontrado.");
+
+    recheckUserOC(userId).catch(() => null);
+    if (deleted.ai?.activeChannelId) recheckAIChannel(deleted.ai.activeChannelId).catch(() => null);
 
     return message.reply(`🗑️ OC **${extracted.name}** deletado.`);
 }

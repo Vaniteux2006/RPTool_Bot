@@ -1,6 +1,7 @@
 import { Message, AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { TournamentModel, TeamModel } from '../../../tools/models/FutebolSchema';
 import { extractArgs } from '../../../tools/utils/textUtils';
+import { escapeRegex } from '../../../tools/utils/text';
 
 export async function handleHistory(message: Message, args: string[]) {
     const cleanArgs = extractArgs(message.content, 'history');
@@ -111,5 +112,3 @@ export async function handleHistory(message: Message, args: string[]) {
 
     return message.reply({ embeds: [embed], files: [attachment] });
 }
-
-function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }

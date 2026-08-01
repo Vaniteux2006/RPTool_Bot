@@ -5,8 +5,7 @@ import {
     ButtonBuilder,
     ButtonStyle,
     ComponentType,
-    TextChannel,
-} from 'discord.js';
+    TextChannel, MessageFlags } from 'discord.js';
 import { ITeam, IPlayer } from '../../../tools/models/FutebolSchema';
 import { MatchReportModel } from '../../../tools/models/FutebolReportSchema';
 import { calculateTeamStats, getPlayerMacros, calculatePlayerRating, generateGenericPlayers } from './mathEngine';
@@ -226,7 +225,7 @@ export async function simulateTacticalMatch(
         cancelCollector.on('collect', async (i: any) => {
             irlOptions.cancelToken.cancelled = true;
             cancelCollector.stop();
-            await i.reply({ content: '⏹ Partida cancelada.', ephemeral: true });
+            await i.reply({ content: '⏹ Partida cancelada.', flags: MessageFlags.Ephemeral });
         });
     }
 
@@ -546,7 +545,7 @@ async function askHalftimeSubstitutions(
             collector.on('collect', async (interaction) => {
                 if (interaction.customId === 'fb_halftime_skip') {
                     collector.stop();
-                    await interaction.reply({ content: '▶️ Sem substituições. Continuando...', ephemeral: true });
+                    await interaction.reply({ content: '▶️ Sem substituições. Continuando...', flags: MessageFlags.Ephemeral });
                     return;
                 }
 
@@ -557,12 +556,12 @@ async function askHalftimeSubstitutions(
                 const used   = isHome ? homeSubsUsed : awaySubsUsed;
 
                 if (decided.has(team.name)) {
-                    await interaction.reply({ content: '❌ Você já fez suas substituições neste intervalo.', ephemeral: true });
+                    await interaction.reply({ content: '❌ Você já fez suas substituições neste intervalo.', flags: MessageFlags.Ephemeral });
                     return;
                 }
 
                 if (bench.length === 0 || used >= 5) {
-                    await interaction.reply({ content: '⚠️ Sem reservas disponíveis ou limite de 5 substituições atingido.', ephemeral: true });
+                    await interaction.reply({ content: '⚠️ Sem reservas disponíveis ou limite de 5 substituições atingido.', flags: MessageFlags.Ephemeral });
                     decided.add(team.name);
                     if (decided.size >= 2) collector.stop();
                     return;
@@ -583,7 +582,7 @@ async function askHalftimeSubstitutions(
                         `-# Esta mensagem some em 30s.`,
                 });
 
-                await interaction.reply({ content: '✅ Lista enviada abaixo. Responda em 30 segundos.', ephemeral: true });
+                await interaction.reply({ content: '✅ Lista enviada abaixo. Responda em 30 segundos.', flags: MessageFlags.Ephemeral });
 
                 const msgCollector = channel.createMessageCollector({
                     filter: (m) => m.author.id === interaction.user.id && m.content.includes('/'),

@@ -1,8 +1,9 @@
+import { getConnection } from '../database';
 import mongoose, { Schema, Document } from 'mongoose';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const generalConnection = mongoose.createConnection(process.env.DB_FICHA as string);
+const generalConnection = getConnection(process.env.DB_FICHA as string, 'Ficha');
 
 export interface IReactionRole extends Document {
     guildId: string;

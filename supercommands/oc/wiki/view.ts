@@ -1,8 +1,10 @@
+import { MessageFlags } from 'discord.js';
 // RPTool/supercommands/oc/wiki/view.ts
 import { Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, EmbedBuilder } from "discord.js";
 import { OCModel, WikiModel } from "../../../tools/models/OCSchema";
 import { CUSTOM_EMOJI_RE } from "../../../tools/utils/economy";
 import { extractName } from "../utils";
+import { escapeRegex } from "../../../tools/utils/text";
 
 export default async function handleView(message: Message, args: string[], userId: string) {
     const extracted = extractName(message.content, "wiki");
@@ -20,7 +22,6 @@ export default async function handleView(message: Message, args: string[], userI
     };
 
     const generateWikiView = async (targetName: string, mode: "main" | "section" | "gallery" = "main", index: number = 0, pageIndex: number = 0): Promise<{ embeds: EmbedBuilder[], components: ActionRowBuilder<any>[], currentTarget: string } | null> => {
-        const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const t = await OCModel.findOne({ name: { $regex: new RegExp(`^${escapeRegex(targetName)}$`, 'i') } });
         if (!t) return null;
 
@@ -232,7 +233,7 @@ export default async function handleView(message: Message, args: string[], userI
                     currentWikiData = newData;
                     await i.update({ embeds: newData.embeds, components: newData.components });
                 } else {
-                    await i.reply({ content: `❌ A Wiki de **${referencedName}** não foi encontrada no banco de dados.`, ephemeral: true });
+                    await i.reply({ content: `❌ A Wiki de **${referencedName}** não foi encontrada no banco de dados.`, flags: MessageFlags.Ephemeral });
                 }
             }
         }

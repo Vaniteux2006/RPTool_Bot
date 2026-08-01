@@ -1,14 +1,8 @@
 import { Message } from 'discord.js';
 import { TournamentModel, TourneyMatchModel, ITournament, IStanding } from '../../../tools/models/FutebolSchema';
 import { extractArgs } from '../../../tools/utils/textUtils';
-
-function escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function requireAdmin(message: Message): boolean {
-    return !!message.member?.permissions.has('ManageGuild');
-}
+import { escapeRegex } from '../../../tools/utils/text';
+import { isStaff as requireAdmin } from '../../../tools/utils/discord/permissions';
 
 // Busca um time inscrito no torneio pelo nome (via cache da standings — funciona
 // inclusive para times globais de outros servidores e times já deletados)

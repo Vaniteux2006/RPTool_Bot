@@ -9,6 +9,7 @@ import { TeamModel } from '../../../tools/models/FutebolSchema';
 import { simulateTacticalMatch, TacticStyle, buildExpirationFooter, IrlOptions } from '../engines/matchEngine';
 import { generateTeamViaAI } from '../engines/aiDirector';
 import { extractArgs } from '../../../tools/utils/textUtils';
+import { escapeRegex } from '../../../tools/utils/text';
 
 // ─── rp!futebol match "Time A" "Time B" [-n] [-r] [-irl [segundos]] ───────────
 // Flags:
@@ -160,5 +161,3 @@ export default async function handleMatch(message: Message, args: string[]) {
     await waitMsg.delete().catch(() => null);
     return message.reply({ content: expiration.content, embeds: [embed], components: [row] });
 }
-
-function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }

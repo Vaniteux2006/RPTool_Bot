@@ -22,6 +22,7 @@ import {
 } from 'discord.js';
 import ServerStats, { BackfillStateModel } from '../../../tools/models/ServerStats';
 import { STOPWORDS } from '../../../tools/utils/stopwords';
+import { parseBRDateISO } from '../../../tools/utils/date';
 
 const DEFAULT_DAYS   = 30;     // alcance padrão se nenhuma data for passada
 const WORKERS        = 3;      // canais varridos em paralelo
@@ -34,15 +35,7 @@ function sanitizeOCKey(name: string): string {
     return (name || 'Desconhecido').replace(/[.$]/g, '').trim().slice(0, 80) || 'Desconhecido';
 }
 
-function parseDate(input: string): string | null {
-    const m = (input || '').trim().match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
-    if (!m) return null;
-    const day = +m[1], month = +m[2], year = m[3] ? +m[3] : new Date().getUTCFullYear();
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    const d = new Date(Date.UTC(year, month - 1, day));
-    if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
-    return d.toISOString().split('T')[0];
-}
+const parseDate = (input: string): string | null => parseBRDateISO(input);
 
 interface Bucket { total: number; users: Record<string, number>; channels: Record<string, number>; ocs: Record<string, number>; words: Record<string, number>; }
 const emptyBucket = (): Bucket => ({ total: 0, users: {}, channels: {}, ocs: {}, words: {} });

@@ -5,10 +5,11 @@ import {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    TextChannel,
-} from 'discord.js';
+    TextChannel, MessageFlags } from 'discord.js';
+import { truncarCampo } from '../../tools/utils/discord/embed';
 import { FichaModel, TemplateModel } from '../../tools/models/FichaSchema';
 import { OCModel, WikiModel }        from '../../tools/models/OCSchema';
+import { markUserHasOC }             from '../../tools/utils/ocCache';
 import { compilarTemplate }          from './handlers/template';
 
 // ─── Handler principal ────────────────────────────────────────────────────────
@@ -24,7 +25,7 @@ export async function handleFichaInteraction(interaction: any) {
         if (fields.length === 0) {
             return interaction.reply({
                 content: '❌ Nenhum campo válido encontrado. Use o formato `Campo: {tipo}` (ex: `Nome: {string_name}`).',
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         }
 
@@ -42,7 +43,7 @@ export async function handleFichaInteraction(interaction: any) {
 
         return interaction.reply({
             content: `✅ **Modelo registrado com ${fields.length} campo(s):**\n${fieldList}`,
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
         });
     }
 
@@ -72,7 +73,7 @@ export async function handleFichaInteraction(interaction: any) {
 
         const ficha = await FichaModel.findById(fichaId);
         if (!ficha) {
-            return interaction.reply({ content: '❌ Ficha não encontrada.', ephemeral: true });
+            return interaction.reply({ content: '❌ Ficha não encontrada.', flags: MessageFlags.Ephemeral });
         }
 
         ficha.status = 'rejected';
@@ -105,7 +106,7 @@ export async function handleFichaInteraction(interaction: any) {
         const ficha   = await FichaModel.findById(fichaId);
 
         if (!ficha) {
-            return interaction.reply({ content: '❌ Ficha não encontrada.', ephemeral: true });
+            return interaction.reply({ content: '❌ Ficha não encontrada.', flags: MessageFlags.Ephemeral });
         }
 
         ficha.status = 'approved';
@@ -140,6 +141,7 @@ export async function handleFichaInteraction(interaction: any) {
                     suffix:  '',
                     avatar:  ficha.avatar,
                 });
+                markUserHasOC(ficha.userId);
 
                 await WikiModel.create({
                     ocId:       novoOC._id,
@@ -213,7 +215,7 @@ async function postarResultado(
         for (const [key, val] of Object.entries(ficha.data as Record<string, any>)) {
             const strVal = String(val);
             if (strVal.startsWith('http')) continue;
-            embed.addFields({ name: key, value: strVal.substring(0, 1024), inline: true });
+            embed.addFields({ name: key, value: truncarCampo(strVal), inline: true });
         }
     }
 

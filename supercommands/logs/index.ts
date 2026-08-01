@@ -21,16 +21,15 @@ import './events/ReactionLogs';            // ← novo: REACTION_ADD/REMOVE/ALL/
 import './events/PollLogs';               // ← novo: POLL_VOTE_ADD/REMOVE (opt-in)
 import './events/VoiceChannelEffectLogs'; // ← novo: VOICE_CHANNEL_EFFECT_SEND (comentado)
 
+// Comando prefix-only (rp!logs) — sem registro de slash (ver DOCUMENTACAO.md).
 import {
-    SlashCommandBuilder,
-    ChatInputCommandInteraction,
     Message,
     EmbedBuilder,
-    PermissionFlagsBits,
     TextChannel,
     ChannelType,
 } from 'discord.js';
 import { LogModel } from '../../tools/models/LogConfig';
+import { isStaff } from '../../tools/utils/discord/permissions';
 
 // ─── Categorias de log disponíveis ────────────────────────────────────────────
 export const LOG_CATEGORIES = {
@@ -60,23 +59,13 @@ const OPT_IN_CATEGORIES = new Set<LogCategory>(['reactions', 'polls']);
 export default {
     name:        'logs',
     description: 'Sistema de logs de auditoria do servidor',
-    aliases:     ['log', 'auditoria'],
-
-    data: new SlashCommandBuilder()
-        .setName('logs')
-        .setDescription('Configura o sistema de logs do servidor')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
-
-    async executeSlash(interaction: ChatInputCommandInteraction) {
-        return interaction.reply({ content: 'Use `rp!logs` para configurar.', ephemeral: true });
-    },
+    aliases:     ['log', 'auditoria', 'setlogs', 'audit'],
 
     async execute(message: Message, args: string[]) {
         const action = args[0]?.toLowerCase();
         if (!action) return sendHelp(message);
 
-        const member = message.guild!.members.cache.get(message.author.id);
-        if (!member?.permissions.has(PermissionFlagsBits.ManageGuild))
+        if (!isStaff(message))
             return message.reply('❌ Apenas administradores podem configurar o sistema de logs.');
 
         try {

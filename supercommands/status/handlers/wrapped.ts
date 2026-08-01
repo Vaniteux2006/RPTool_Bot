@@ -3,6 +3,7 @@
 // Retrospectiva estilo "Wrapped" do servidor (ou de um usuário) em um ano ou em
 // todo o histórico.
 import { Message, EmbedBuilder } from 'discord.js';
+import { truncarCampo } from '../../../tools/utils/discord/embed';
 import {
     fetchRange, totalOf, sumMap, topN, hourHistogram, weekdayHistogram, peakDay,
     monthlySeries, argMax, WEEKDAYS_FULL, formatYM, formatDateBR, fmt, userTopChannel,
@@ -102,7 +103,7 @@ export async function handleWrapped(message: Message, args: string[]): Promise<a
             { name: '👥 Top 5 Usuários', value: topUsers, inline: false },
             { name: '💬 Top 5 Canais', value: topChannels, inline: false },
             { name: '🎭 Top 5 OCs', value: topOcs, inline: false },
-            { name: '📝 Palavras do período', value: topWords.slice(0, 1024), inline: false },
+            { name: '📝 Palavras do período', value: truncarCampo(topWords), inline: false },
         )
         .setFooter({ text: 'RPTool | Wrapped • horários em UTC' });
 

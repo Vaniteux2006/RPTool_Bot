@@ -3,6 +3,7 @@ import { Message, EmbedBuilder } from 'discord.js';
 
 export default {
     name: 'console',
+    aliases: ['js', 'run', 'eval'],
     description: 'Executa código JavaScript em uma Sandbox segura (Piston API).',
     execute: async (message: Message, args: string[]) => {
         // Pega o código removendo o comando e a formatação do Discord (```js ... ```)
@@ -16,16 +17,17 @@ export default {
         const aguardeMsg = await message.reply("⏳ Executando em ambiente seguro...");
 
         try {
-            // Envia o código para a Piston API
-            const response = await axios.post('https://emacs.piston.rs/api/v2/execute', {
+            // Envia o código para a Piston API (endpoint oficial; version '*' pega
+            // a versão de Node disponível no runtime — não envelhece)
+            const response = await axios.post('https://emkc.org/api/v2/piston/execute', {
                 language: 'javascript',
-                version: '18.15.0', // Versão do Node
+                version: '*',
                 files: [
                     { content: code }
                 ],
                 compile_timeout: 10000,
                 run_timeout: 3000, // Se tiver while(true), ele mata em 3 segundos
-            });
+            }, { timeout: 20_000 });
 
             const data = response.data;
             const output = data.run.output || "✅ Código executado sem retornos visíveis.";

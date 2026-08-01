@@ -21,9 +21,8 @@ export const LIMITE_EMBED = 6000;
 // Itens (tópicos / ações) por página de embed.
 export const MAX_ITENS_POR_PAGINA = 30;
 
-// Escada de espera do retry. O comando é "manda e esquece", então o retry segue
-// infinito para erros transitórios — só deixa de martelar de 5 em 5 segundos.
-export const ESCADA_BACKOFF = [5, 10, 30, 60];
+// A escada de backoff do retry vive em tools/utils/ai/errors.ts (ESCADA_BACKOFF),
+// compartilhada por todos os consumidores de IA.
 
 // Quanto tempo uma sessão de paginação continua clicável (ver interactions.ts).
 export const TTL_SESSAO_MS = 6 * 60 * 60 * 1000;

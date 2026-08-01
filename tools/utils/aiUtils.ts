@@ -1,8 +1,10 @@
-import axios from 'axios';
 import { Message, TextChannel } from "discord.js";
 import { OCModel } from "../models/OCSchema";
 import { getGuildAIConfig } from './tokenHelper';
-import { sanitizeOutput } from './textUtils';
+import { sanitizeOutput, escapeRegex, normalize as normalizeText } from './text';
+import { chamarIA } from './ai/client';
+import { getOrCreateProxyWebhook } from '../webhook';
+import { channelHasAI } from './ocCache';
 import { EventCheckout } from '../eventCheckout';
 
 export const autoTimers = new Map<string, NodeJS.Timeout>();
@@ -10,13 +12,6 @@ export const autoTimers = new Map<string, NodeJS.Timeout>();
 // Cooldown por OC (em memória): última vez que o NPC respondeu sozinho no autoMode.
 const lastAutoReply = new Map<string, number>();
 const MENTION_DELAY_MS = 5000; // "tempo de digitação" antes de responder
-
-function normalizeText(s: string): string {
-    return (s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-}
-function escapeRegex(s: string): string {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 // O conteúdo cita o nome do OC? (qualquer palavra significativa do nome, com limite de palavra)
 function mentionsOC(content: string, oc: any): boolean {
     const text = normalizeText(content);
@@ -32,44 +27,12 @@ function scheduleAutoReply(id: string, oc: any, channel: TextChannel, delayMs: n
     autoTimers.set(id, timer);
 }
 
-export async function chamarIA(prompt: string, config: any): Promise<string> {
-    try {
-        if (config.provider === 'gemini') {
-
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.key}`;
-            const body = {
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
-            };
-            const res = await axios.post(url, body);
-            return res.data.candidates[0].content.parts[0].text;
-        }
-        else if (config.provider === 'openai') {
-            // FALTAVAM AS ASPAS AQUI
-            const url = 'https://api.openai.com/v1/chat/completions';
-            const body = {
-                model: config.model,
-                messages: [{ role: "user", content: prompt }],
-                response_format: { type: "json_object" }
-            };
-            const res = await axios.post(url, body, {
-                // FALTAVAM AS CRASES AQUI EM VOLTA DO BEARER
-                headers: { 'Authorization': `Bearer ${config.key}` }
-            });
-            return res.data.choices[0].message.content;
-        }
-        
-        throw new Error("Provedor de IA não suportado.");
-        
-    } catch (error) {
-        console.error("❌ Erro na API da IA:", error);
-        throw error;
-    }
-}
-
 export async function handleAIMessage(message: Message): Promise<boolean> {
     if (message.author.bot || message.content.startsWith("rp!")) return false;
     if (!message.guild) return false;
+
+    // Curto-circuito: canal sem IA de OC ativa não gera query nenhuma.
+    if (!channelHasAI(message.channel.id)) return false;
 
     const activeOCs = await OCModel.find({ "ai.enabled": true, "ai.activeChannelId": message.channel.id });
     if (activeOCs.length === 0) return false;
@@ -166,7 +129,7 @@ Exemplo de formato esperado:
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            let rawResponse = await chamarIA(masterPrompt, aiConfig);
+            let rawResponse = await chamarIA(masterPrompt, aiConfig, { json: true });
             rawResponse = rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
             const parsed = JSON.parse(rawResponse);
 
@@ -215,12 +178,8 @@ Exemplo de formato esperado:
     if (!respostaDaIA || !respostaDaIA.trim()) return;
 
     try {
-        const hooks = await channel.fetchWebhooks();
-        let hook = hooks.find(w => w.owner?.id === channel.client.user?.id);
-
-        if (!hook) {
-            hook = await channel.createWebhook({ name: "RPTool OC IA" });
-        }
+        // Mesma webhook do proxy de OC (tools/webhook.ts) — nome/avatar consistentes
+        const hook = await getOrCreateProxyWebhook(channel);
 
         await hook.send({
             content: respostaDaIA,

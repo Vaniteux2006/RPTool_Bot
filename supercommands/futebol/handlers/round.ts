@@ -13,12 +13,10 @@ import { simulateTacticalMatch, TacticStyle } from '../engines/matchEngine';
 import { updateStandings, advanceAfterRound, isNeutralMatch } from '../engines/progression';
 import { extractArgs } from '../../../tools/utils/textUtils';
 
-function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-function chunk<T>(arr: T[], n: number): T[][] { const r: T[][] = []; for (let i = 0; i < arr.length; i += n) r.push(arr.slice(i, i + n)); return r; }
+import { escapeRegex } from '../../../tools/utils/text';
+import { isStaff as isGuildAdmin } from '../../../tools/utils/discord/permissions';
 
-function isGuildAdmin(message: Message): boolean {
-    return !!message.member?.permissions.has('ManageGuild');
-}
+function chunk<T>(arr: T[], n: number): T[][] { const r: T[][] = []; for (let i = 0; i < arr.length; i += n) r.push(arr.slice(i, i + n)); return r; }
 
 // ─── rp!futebol round sim "Torneio" ──────────────────────────────────────────
 export async function handleRoundSim(message: Message, args: string[]) {

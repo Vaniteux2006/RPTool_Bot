@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits, Message, ChatInputCommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, Message, ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 
 export default {
     name: 'unban',
@@ -37,7 +37,7 @@ export default {
             await interaction.reply(`✅ ID **${userId}** desbanido!`);
         } catch (error) {
             console.warn('[UNBAN] Falha ao desbanir via slash:', userId, error);
-            await interaction.reply({ content: '❌ Erro ao desbanir.', ephemeral: true });
+            await interaction.reply({ content: '❌ Erro ao desbanir.', flags: MessageFlags.Ephemeral });
         }
     }
 };

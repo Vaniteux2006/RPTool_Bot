@@ -1,20 +1,15 @@
 // RPTool/supercommands/tempo/handlers/clock.ts
 // CRUD completo dos relógios RP
-import { Message, TextChannel } from 'discord.js';
+import { Message, PermissionsBitField, TextChannel } from 'discord.js';
 import { ClockModel, IClock } from '../../../tools/models/ClockSchema';
 import { formatClockMessage, computeRPGTime } from '../clockEngine';
+import { hasPerm } from '../../../tools/utils/discord/permissions';
+import { parseDuration } from '../../../tools/utils/date';
 
 // ─── Parseia "1m", "2h", "3d" em milissegundos ───────────────────────────────
+// Delegado ao parser único (tools/utils/date.ts) — unidade obrigatória, como antes.
 export function parseTimeStr(str: string): number {
-    if (!str) return 0;
-    const m = str.match(/^(\d+(?:[.,]\d+)?)\s*([mhd])$/i);
-    if (!m) return 0;
-    const val  = parseFloat(m[1].replace(',', '.'));
-    const unit = m[2].toLowerCase();
-    if (unit === 'm') return val * 60_000;
-    if (unit === 'h') return val * 3_600_000;
-    if (unit === 'd') return val * 86_400_000;
-    return 0;
+    return parseDuration(str, { exigirUnidade: true }) ?? 0;
 }
 
 // ─── Parseia "1m -> 1h" em multiplicador de velocidade ───────────────────────
@@ -83,7 +78,7 @@ export async function handleCreate(message: Message, args: string[]) {
     // Usuários copiam o "[Nome]" da ajuda ao pé da letra — remove colchetes externos
     if (name.startsWith('[') && name.endsWith(']')) name = name.slice(1, -1).trim();
 
-    if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageChannels')) {
+    if (!hasPerm(message, PermissionsBitField.Flags.ManageChannels)) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para criar relógios.');
     }
 
@@ -195,7 +190,7 @@ export async function handleSet(message: Message, args: string[]) {
         return message.reply('❌ Data ou hora inválida. Use o formato `DD/MM/AAAA HH:MM`.');
     }
 
-    if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageChannels')) {
+    if (!hasPerm(message, PermissionsBitField.Flags.ManageChannels)) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para configurar relógios.');
     }
 
@@ -300,7 +295,7 @@ export async function handleDelete(message: Message, args: string[]) {
     const name = args.slice(1).join(' ');
     if (!name) return message.reply('⚠️ **Uso:** `rp!tempo delete <Nome>`');
 
-    if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageChannels')) {
+    if (!hasPerm(message, PermissionsBitField.Flags.ManageChannels)) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para deletar relógios.');
     }
 

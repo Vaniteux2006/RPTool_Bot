@@ -1,7 +1,8 @@
+import { getConnection } from '../database';
 import mongoose from 'mongoose';
 import 'dotenv/config';
 
-const restanteConnection = mongoose.createConnection(process.env.DB_RESTANTE as string);
+const restanteConnection = getConnection(process.env.DB_RESTANTE as string, 'Geral');
 
 restanteConnection.on('connected', () => {
     console.log('✅ [MongoDB] Conectado ao banco Restante (Sistemas Gerais)');

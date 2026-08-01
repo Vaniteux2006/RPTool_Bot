@@ -1,5 +1,6 @@
 import { Message } from 'discord.js';
 import { OCModel } from '../../tools/models/OCSchema'; // Ajuste o caminho conforme o seu projeto
+import { markUserHasOC } from '../../tools/utils/ocCache';
 
 // Importação dos módulos que fragmentamos
 import handleCreate from './handlers/create';
@@ -23,6 +24,7 @@ import handleInsert from './ai/insert';
 import handleMemories from './ai/memories';
 import handleDelay from './ai/delay';
 import handleEnd from './ai/end';
+import handlePuppet from './ai/puppet';
 import handleDuo from './social_handlers/duo';
 import handleSolo from './social_handlers/solo';
 import handleBirthday from './social_handlers/birthday';
@@ -63,6 +65,7 @@ export default {
                         createdAt: new Date()
                     });
 
+                    markUserHasOC(userId);
                     return message.reply("✅ OC **Nosferatu** criado!\nExemplo: `Nosferatu:Oi`");
                 }
             }
@@ -106,6 +109,7 @@ Use \`rp!help oc\` para detalhes.
                 case 'memories': return handleMemories(message, args, userId);
                 case 'delay': return handleDelay(message, args, userId);
                 case 'end': return handleEnd(message, args, userId);
+                case 'puppet': return handlePuppet(message, args, userId);
                 case 'duo': return handleDuo(message, args, userId);
                 case 'solo': return handleSolo(message, args, userId);
                 case 'birthday': return handleBirthday(message, args, userId);

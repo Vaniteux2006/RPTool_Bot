@@ -1,6 +1,7 @@
 import { Message } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
 import { extractName, cleanWrapper } from '../utils';
+import { markUserHasOC } from '../../../tools/utils/ocCache';
 
 export default async function handleCreate(message: Message, args: string[], userId: string) {
     const extracted = extractName(message.content, args[0]);
@@ -36,6 +37,7 @@ export default async function handleCreate(message: Message, args: string[], use
         suffix: suffix,
         avatar: avatarUrl
     });
+    markUserHasOC(userId);
 
     return message.reply(`✅ OC **${name}** criado com sucesso!${avatarUrl === defaultAvatar ? " (Avatar padrão do Nosferatu aplicado 🧛‍♂️)" : ""}`);
 }

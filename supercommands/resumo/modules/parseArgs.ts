@@ -4,6 +4,7 @@
 // flag ou intervalo de datas. Este módulo transforma isso num objeto único.
 import { Message, TextChannel } from 'discord.js';
 import { JANELA_PADRAO_MS, TOKENS_AJUDA, TOKENS_PULAR } from '../config';
+import { parseBRDate } from '../../../tools/utils/date';
 
 export interface ArgsResumo {
     canal: TextChannel;
@@ -24,16 +25,11 @@ export function dateToSnowflake(date: Date): string {
 }
 
 // Aceita DD/MM, DD/MM/AAAA e qualquer um dos dois com HH:MM.
+// ⚠️ MUDANÇA CONSCIENTE (v1.6): antes montava a data em FUSO LOCAL, deslocando a
+// janela em ~3h vs. o resto do pipeline de estatística (todo em UTC). Agora usa
+// o parser único (tools/utils/date.ts), sempre UTC e com validação de overflow.
 export function parseCustomDate(dateStr: string): Date | null {
-    if (!dateStr) return null;
-    const match = dateStr.trim().match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?(?:\s+(\d{1,2}):(\d{2}))?/);
-    if (!match) return null;
-    const day = parseInt(match[1]);
-    const month = parseInt(match[2]) - 1;
-    const year = match[3] ? parseInt(match[3]) : new Date().getFullYear();
-    const hours = match[4] ? parseInt(match[4]) : 0;
-    const minutes = match[5] ? parseInt(match[5]) : 0;
-    return new Date(year, month, day, hours, minutes);
+    return parseBRDate(dateStr, { comHora: true });
 }
 
 export function parseArgs(message: Message, args: string[]): ArgsResumo {
@@ -63,13 +59,13 @@ export function parseArgs(message: Message, args: string[]): ArgsResumo {
         const parsedFim = parseCustomDate(fimStr);
         if (parsedInicio) inicio = parsedInicio;
         if (parsedFim) fim = parsedFim;
-        // Só a data inicial: o intervalo é o dia inteiro dela.
-        else if (parsedInicio) { fim = new Date(parsedInicio); fim.setHours(23, 59, 59); }
+        // Só a data inicial: o intervalo é o dia inteiro dela (em UTC, como o parser).
+        else if (parsedInicio) { fim = new Date(parsedInicio); fim.setUTCHours(23, 59, 59); }
     } else if (bruto.trim() !== '') {
         const dia = parseCustomDate(bruto);
         if (dia) {
-            inicio = new Date(dia); inicio.setHours(0, 0, 0);
-            fim = new Date(dia); fim.setHours(23, 59, 59);
+            inicio = new Date(dia); inicio.setUTCHours(0, 0, 0);
+            fim = new Date(dia); fim.setUTCHours(23, 59, 59);
         }
     }
 

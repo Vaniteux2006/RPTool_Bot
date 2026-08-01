@@ -1,6 +1,7 @@
 import { Message } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
 import { extractName } from '../utils';
+import { markUserHasOC } from '../../../tools/utils/ocCache';
 
 export default async function handleDuo(message: Message, args: string[], userId: string) {
     const extracted = extractName(message.content, args[0]);
@@ -20,6 +21,7 @@ export default async function handleDuo(message: Message, args: string[], userId
 
     oc.duoIds.push(targetId);
     await oc.save();
+    markUserHasOC(targetId);
 
     return message.reply(`🤝 Usuário <@${targetId}> agora pode usar **${oc.name}**!`);
 }

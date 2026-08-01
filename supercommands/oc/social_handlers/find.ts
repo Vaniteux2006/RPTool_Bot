@@ -1,10 +1,6 @@
 import { Message, EmbedBuilder } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
-
-// Escapa metacaracteres para o termo digitado virar busca literal (evita regex quebrada)
-function escapeRegex(text: string) {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { escapeRegex } from '../../../tools/utils/text';
 
 export default async function handleFind(message: Message, args: string[]) {
     // Busca global: monta o termo direto dos args para funcionar com qualquer alias (oc, tul, char...)

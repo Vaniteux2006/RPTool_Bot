@@ -1,15 +1,9 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
-import { api } from '../tools/api';
 import { getGuildAIConfig } from '../tools/utils/tokenHelper';
-
-
-function sanitizeOutput(text: string): string {
-    if (!text) return text;
-    return text
-        .replace(/@everyone/g, '@everyоne')
-        .replace(/@here/g, '@hеre')         
-        .replace(/<@&(\d+)>/g, '<@&\u200b$1>'); 
-}
+import { chamarIA } from '../tools/utils/ai/client';
+import { withAIRetry } from '../tools/utils/ai/retry';
+import { motivoInterrupcao, rotuloRetry } from '../tools/utils/ai/errors';
+import { sanitizeOutput } from '../tools/utils/text';
 
 export default {
     name: 'resenha',
@@ -80,32 +74,22 @@ export default {
             {"status": "r-00" ou "r-01", "analysis": "Uma frase curta, ácida e informal em português explicando o motivo."}
             `;
 
-            let rawText = "";
-            let attempt = 1;
-            let success = false;
+            // Retry com teto (nunca infinito): só insiste em 503/rate-limit.
+            const resultado = await withAIRetry(() => chamarIA(prompt, config, { json: true }), {
+                onRetry: (falha, espera, tentativa) => {
+                    console.warn(`[RESENHA] Retry ${tentativa} (${falha.tipo}):`, falha.msg);
+                    if (loading.edit) {
+                        return loading.edit(`${rotuloRetry(falha)}\n🔄 Julgando a resenha de novo em ${espera}s... (tentativa ${tentativa})`).catch(() => null);
+                    }
+                },
+            });
 
-            // --- SISTEMA DE RETRY INFINITO PARA 503 ---
-            while (!success) {
-                try {
-                    rawText = await api.generateRaw(prompt, config);
-                    if (rawText.includes('503') || rawText.includes('high demand')) {
-                        throw new Error('503');
-                    }
-                    success = true;
-                } catch (error: any) {
-                    const errorMsg = error.message || error.toString();
-                    if (errorMsg.includes('503') || errorMsg.includes('Overloaded')) {
-                        console.warn(`[RESENHA] Retry ${attempt} - Servidor sobrecarregado (503):`, errorMsg);
-                        const retryMsg = `🔥 **ERRO 503: Servidores fritando!** 🍟\nDeu ruim na leitura da resenha, tentando de novo em 5 segundos... (Tentativa ${attempt})`;
-                        if (loading.edit) await loading.edit(retryMsg);
-                        await new Promise(resolve => setTimeout(resolve, 5000));
-                        attempt++;
-                    } else {
-                        throw error; // Passa adiante se for outro erro
-                    }
-                }
+            if (!resultado.ok) {
+                const { titulo, detalhe } = motivoInterrupcao(resultado.falha!);
+                const msgFalha = `${titulo}\n${detalhe}`;
+                return loading.edit ? await loading.edit(msgFalha) : await message.reply(msgFalha);
             }
-            // ------------------------
+            const rawText = resultado.valor!;
 
             let result;
             try {

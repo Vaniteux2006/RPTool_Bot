@@ -1,6 +1,7 @@
 // RPTool/supercommands/clima/handlers/weather.ts
-import { Message } from 'discord.js';
+import { Message, PermissionsBitField } from 'discord.js';
 import { ClockModel } from '../../../tools/models/ClockSchema';
+import { hasPerm } from '../../../tools/utils/discord/permissions';
 import {
     getCoords,
     getWeatherInstant,
@@ -87,7 +88,7 @@ export async function handleSync(message: Message, args: string[]) {
         );
     }
 
-    if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageChannels')) {
+    if (!hasPerm(message, PermissionsBitField.Flags.ManageChannels)) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para sincronizar o clima.');
     }
 
@@ -137,7 +138,7 @@ export async function handleForce(message: Message, args: string[]) {
         );
     }
 
-    if (!message.guild!.members.cache.get(message.author.id)?.permissions.has('ManageChannels')) {
+    if (!hasPerm(message, PermissionsBitField.Flags.ManageChannels)) {
         return message.reply('❌ Você precisa de permissão **Gerenciar Canais** para forçar o clima.');
     }
 

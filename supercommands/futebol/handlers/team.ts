@@ -6,15 +6,13 @@ import {
     StringSelectMenuOptionBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ComponentType,
-} from 'discord.js';
+    ComponentType, MessageFlags } from 'discord.js';
 import { TeamModel, ITeam, VALID_ARCHETYPES } from '../../../tools/models/FutebolSchema';
 import { extractArgs } from '../../../tools/utils/textUtils';
 import { generateFullSquadViaAI, suggestTacticsViaAI } from '../engines/aiDirector';
+import { escapeRegex } from '../../../tools/utils/text';
 
 const VALID_POSITIONS = ['GK', 'DEF', 'MID', 'ATK'];
-
-function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 // ─── rp!futebol create "Nome" [emoji] ─────────────────────────────────────────
 export async function handleCreateTeam(message: Message, args: string[], userId: string) {
@@ -448,7 +446,7 @@ async function sendTeamList(message: Message, allTeams: ITeam[], title: string) 
                 { name: 'Reservas',  value: String(found.players.filter(p => !p.isStarter).length), inline: true },
             );
 
-        await i.reply({ embeds: [detail], ephemeral: true });
+        await i.reply({ embeds: [detail], flags: MessageFlags.Ephemeral });
     });
 
     collector.on('end', () => {

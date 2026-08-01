@@ -7,8 +7,7 @@ import {
     GuildMember,
     PartialGuildMember,
     AuditLogEvent,
-    EmbedBuilder,
-} from 'discord.js';
+    EmbedBuilder, MessageFlags } from 'discord.js';
 import { WelcomeModel } from '../tools/models/Outros';
 import { getAverageColor } from 'fast-average-color-node';
 import { EventCheckout } from '../tools/eventCheckout';
@@ -24,7 +23,7 @@ const welcome = {
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
-        await interaction.reply({ content: 'Use o comando de texto `rp!welcome` para essa versão avançada!', ephemeral: true });
+        await interaction.reply({ content: 'Use o comando de texto `rp!welcome` para essa versão avançada!', flags: MessageFlags.Ephemeral });
     },
 
     async execute(message: Message | any, args: string[]) {

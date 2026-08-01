@@ -1,8 +1,9 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { getConnection } from '../database';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const restanteConnection = mongoose.createConnection(process.env.DB_RESTANTE as string);
+const restanteConnection = getConnection(process.env.DB_RESTANTE as string, 'Geral');
 
 export interface ITokenKey {
     id: string;

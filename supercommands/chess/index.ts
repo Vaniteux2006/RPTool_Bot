@@ -13,6 +13,7 @@
 import {
     Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder,
 } from 'discord.js';
+import { truncarCampo } from '../../tools/utils/discord/embed';
 import { Chess } from 'chess.js';
 import { Difficulty, DIFFICULTY } from './engine';
 import { ChessGameModel } from '../../tools/models/ChessSchema';
@@ -212,7 +213,7 @@ export async function buildGamePayload(game: ChessGame, opts: { thinking?: boole
         embed.setDescription(toMove + check + thinking);
     }
 
-    embed.addFields({ name: '📜 Lances', value: formatHistory(game.history).slice(0, 1024), inline: false });
+    embed.addFields({ name: '📜 Lances', value: truncarCampo(formatHistory(game.history)), inline: false });
     if (game.vsBot) {
         const evalText = opts.evalText ?? game.lastEval;
         const evalPart = evalText ? ` • Avaliação: ${evalText}` : '';

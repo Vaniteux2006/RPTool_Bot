@@ -1,7 +1,7 @@
 import { Message, PermissionFlagsBits } from 'discord.js';
 import { Command } from '../tools/interfaces/Command';
 import ServerStats, { BlockedWordsModel } from '../tools/models/ServerStats';
-import { loadBlockedWords } from '../tools/messageTracker';
+import { loadBlockedWords } from '../tools/utils/blockedWords';
 
 export default {
     name: 'ignorar',

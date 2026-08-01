@@ -5,3 +5,5 @@ bin/stockfish_linux
 bin/yt-dlp
 bin/yt-dlp.exe
 docs
+stockfish
+stockfish.exe

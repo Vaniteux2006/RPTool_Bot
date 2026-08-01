@@ -4,14 +4,11 @@ import {
 } from "discord.js";
 import { OCModel, IOC } from "./models/OCSchema";
 import { EventCheckout } from "./eventCheckout";
+import { userHasOC } from "./utils/ocCache";
 
-export function sanitizeOutput(text: string): string {
-    if (!text) return text;
-    return text
-        .replace(/@everyone/g, '@everyоne') 
-        .replace(/@here/g, '@hеre')        
-        .replace(/<@&(\d+)>/g, '<@&\u200b$1>');
-}
+// Fonte única em tools/utils/text.ts — re-exportado para os consumidores antigos.
+import { sanitizeOutput } from './utils/text';
+export { sanitizeOutput };
 
 // ─── Content filters ──────────────────────────────────────────────────────────
 // Módulos externos (ex: supercommands/censura) podem transformar o conteúdo
@@ -93,9 +90,37 @@ export async function buildReplyEmbed(message: Message): Promise<object | undefi
     }
 }
 
+// ─── Buffer do messageCount dos OCs ──────────────────────────────────────────
+// Métrica exibida no rp!oc info. Acumula em memória e flusha em lote a cada 30s
+// (era 1 write no Mongo por fala de OC — inaceitável em escala).
+const ocCountBuffer = new Map<string, number>();
+
+function bumpOCMessageCount(ocId: string): void {
+    ocCountBuffer.set(ocId, (ocCountBuffer.get(ocId) ?? 0) + 1);
+}
+
+async function flushOCMessageCounts(): Promise<void> {
+    if (ocCountBuffer.size === 0) return;
+    const ops = Array.from(ocCountBuffer.entries()).map(([id, n]) => ({
+        updateOne: { filter: { _id: id }, update: { $inc: { messageCount: n } } },
+    }));
+    ocCountBuffer.clear();
+    try {
+        await OCModel.bulkWrite(ops as any, { ordered: false });
+    } catch (e) {
+        console.error('❌ [OC] Falha no flush do messageCount:', e);
+    }
+}
+
+setInterval(() => { flushOCMessageCounts().catch(() => null); }, 30_000).unref();
+
 export async function handleOCMessage(message: Message): Promise<boolean> {
     if (message.author.bot) return false;
     if (!message.guild) return false;
+
+    // Curto-circuito: se o autor não tem NENHUM OC, nem toca no Mongo.
+    // (Era 1 find() por mensagem em todos os servidores — o teto de escala do bot.)
+    if (!userHasOC(message.author.id)) return false;
 
     const myOCs = await OCModel.find({
         $or: [
@@ -227,8 +252,9 @@ export async function handleOCMessage(message: Message): Promise<boolean> {
             // Guarda quem enviou este proxy, pra permitir apagar reagindo \u274C.
             if (sent?.id) rememberOCMessage(sent.id, message.author.id);
 
-            match.messageCount += 1;
-            match.save().catch(()=>{});
+            // messageCount é métrica, não dado crítico: acumula em memória e
+            // flusha em lote (era 1 write no Mongo por fala de OC).
+            bumpOCMessageCount(String(match._id));
             // Estatísticas do OC são contabilizadas em commandCheckout.trackWebhookStats
             // (pela mensagem de webhook reenviada), por nome — não duplicar aqui.
         }

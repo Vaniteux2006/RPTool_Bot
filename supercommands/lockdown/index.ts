@@ -25,9 +25,9 @@ import {
     lockableChannels,
     lockChannel,
     restoreChannel,
-    runPool,
     snapshotChannel,
 } from './engine';
+import { runPool } from '../../tools/utils/pool';
 
 // ─── Cache do estado ativo (pro hook de channelCreate não bater no Mongo à toa) ─
 

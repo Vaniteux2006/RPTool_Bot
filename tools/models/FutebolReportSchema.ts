@@ -1,8 +1,9 @@
+import { getConnection } from '../database';
 import mongoose, { Schema, Document } from 'mongoose';
 import 'dotenv/config';
 
 // ─── Conexão exclusiva para relatórios temporários (autodestroem após 48h) ───
-const fbReportConnection = mongoose.createConnection(process.env.DB_FB_REPORT as string);
+const fbReportConnection = getConnection(process.env.DB_FB_REPORT as string, 'FutebolReport');
 fbReportConnection.on('connected', () => console.log('✅ [MongoDB] Conectado ao banco de Relatórios (FB_REPORT)'));
 fbReportConnection.on('error', (err) => console.error('❌ [MongoDB] Erro no banco de Relatórios (FB_REPORT):', err));
 

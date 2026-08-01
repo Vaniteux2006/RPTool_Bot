@@ -8,7 +8,7 @@
 //
 // Este arquivo só mantém `rp!chess` funcionando e expõe um slash `/chess` enxuto
 // (supercommands não são varridos pelo deploy de slash — por isso o shim aqui).
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message, Collection } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, Message, Collection, MessageFlags } from 'discord.js';
 
 const chessSuper = (() => {
     try { return require('../supercommands/chess/index').default; }
@@ -28,7 +28,7 @@ export default {
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
         if (!chessSuper?.execute) {
-            return interaction.reply({ content: '❌ Módulo de xadrez não encontrado.', ephemeral: true });
+            return interaction.reply({ content: '❌ Módulo de xadrez não encontrado.', flags: MessageFlags.Ephemeral });
         }
         await interaction.deferReply();
 

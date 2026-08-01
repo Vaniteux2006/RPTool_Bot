@@ -34,12 +34,13 @@ export async function getGuildAIConfig(guildId: string | null): Promise<AIConfig
 }
 
 function fallbackEnv(): AIConfig | undefined {
-    // Se ninguém configurou, tenta usar o global do .env
+    // Se ninguém configurou, tenta usar o global do .env.
+    // O modelo é configurável via GEMINI_MODEL (nomes de preview envelhecem rápido).
     if (process.env.GEMINI_API_KEY) {
         return {
             provider: 'gemini',
             key: process.env.GEMINI_API_KEY,
-            model: 'gemini-3-flash-preview'
+            model: process.env.GEMINI_MODEL || 'gemini-3-flash-preview'
         };
     }
     return undefined;

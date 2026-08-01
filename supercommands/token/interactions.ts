@@ -10,7 +10,7 @@ import {
 } from 'discord.js';
 import { TokenModel } from '../../tools/models/TokenSchema';
 import { buildDashboardPayload, getMutualGuilds, fetchModels } from './index';
-import { api } from '../../tools/api';
+import { chamarIA } from '../../tools/utils/ai/client';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function backRow(uid: string): ActionRowBuilder<ButtonBuilder> {
@@ -204,7 +204,7 @@ export async function handleTokenInteraction(interaction: any): Promise<void> {
                     await interaction.update({ content: `🧪 Testando **${key.name || key.id}**...`, embeds: [], components: [] });
                     let result: string;
                     try {
-                        const r = await api.generateRaw('Responda apenas com a palavra: ok', { provider: key.provider, key: key.value, model: key.model });
+                        const r = await chamarIA('Responda apenas com a palavra: ok', { provider: key.provider, key: key.value, model: key.model }, { timeoutMs: 30_000 });
                         result = `✅ **${key.name || key.id}** está funcionando!\n> Resposta do modelo: \`${(r || '').trim().slice(0, 100)}\``;
                     } catch (e: any) {
                         result = `❌ **${key.name || key.id}** falhou no teste.\n> Erro: \`${(e?.message || String(e)).slice(0, 200)}\``;

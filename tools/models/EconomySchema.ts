@@ -1,16 +1,16 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import 'dotenv/config';
+import { getConnection } from '../database';
 
-// ─── Conexão exclusiva da Economia (PERSISTENTE — sem TTL) ────────────────────
-// Reusa o padrão das outras conexões (createConnection por env var), mas os dados
-// aqui são permanentes: carteira, mochila e loja de cada OC não expiram.
+// ─── Conexão da Economia (PERSISTENTE — sem TTL) ─────────────────────────────
+// Dados permanentes: carteira, mochila e loja de cada OC não expiram.
+// Sem DB_ECONOMY no .env, compartilha o pool do DB_RESTANTE.
 if (!process.env.DB_ECONOMY) console.warn("⚠️ AVISO: DB_ECONOMY não está no .env");
 
-const economyConnection = mongoose.createConnection(
-    (process.env.DB_ECONOMY as string) || (process.env.DB_RESTANTE as string)
+const economyConnection = getConnection(
+    (process.env.DB_ECONOMY as string) || (process.env.DB_RESTANTE as string),
+    'Economia',
 );
-economyConnection.on('connected', () => console.log('✅ [MongoDB] Conectado ao banco de Economia'));
-economyConnection.on('error', (err) => console.error('❌ [MongoDB] Erro no banco de Economia:', err));
 
 export { economyConnection };
 

@@ -1,5 +1,6 @@
 // RPTool/supercommands/phone/index.ts
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+// Comando prefix-only (rp!phone) — sem registro de slash (ver DOCUMENTACAO.md).
+import { Message } from 'discord.js';
 import { phoneSystem } from './system';
 import { EventCheckout } from '../../tools/eventCheckout';
 
@@ -14,33 +15,6 @@ import handleEnd from './handlers/end';
 export default {
     name: 'phone',
     description: 'Sistema de Telefone Inter-Servidores',
-    
-    data: new SlashCommandBuilder()
-        .setName('phone')
-        .setDescription('Telefone Inter-Servidores')
-        .addSubcommand(sub => sub.setName('call').setDescription('Liga para um servidor').addStringOption(op => op.setName('alvo').setDescription('ID ou Nome do servidor').setRequired(true)))
-        .addSubcommand(sub => sub.setName('register').setDescription('Instala o telefone neste canal').addStringOption(op => op.setName('nome').setDescription('Nome público do local').setRequired(false)))
-        .addSubcommand(sub => sub.setName('accept').setDescription('Atende uma chamada'))
-        .addSubcommand(sub => sub.setName('decline').setDescription('Recusa uma chamada'))
-        .addSubcommand(sub => sub.setName('end').setDescription('Desliga a chamada')),
-
-    async executeSlash(interaction: ChatInputCommandInteraction) {
-        const sub = interaction.options.getSubcommand();
-        const args = [sub]; 
-        const alvo = interaction.options.getString('alvo') || interaction.options.getString('nome');
-        if (alvo) args.push(alvo); 
-
-        const fakeMessage: any = {
-            content: `rp!phone ${args.join(' ')}`, 
-            author: interaction.user, 
-            guild: interaction.guild,
-            channel: interaction.channel, 
-            client: interaction.client, 
-            reply: async (payload: any) => interaction.replied || interaction.deferred ? interaction.followUp(payload) : interaction.reply(payload)
-        };
-        
-        await this.execute(fakeMessage, args);
-    },
 
     async execute(message: Message | any, args: string[]) {
         await phoneSystem.init();

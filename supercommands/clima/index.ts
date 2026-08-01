@@ -1,5 +1,6 @@
 // RPTool/supercommands/clima/index.ts
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+// Comando prefix-only (rp!clima) — sem registro de slash (ver DOCUMENTACAO.md).
+import { Message } from 'discord.js';
 import {
     handleLookup,
     handleRPQuery,
@@ -13,14 +14,6 @@ export default {
     name:        'clima',
     description: 'Sistema de Clima RP — vinculado aos relógios do /tempo',
     aliases:     ['weather', 'chuva', 'sol'],
-
-    data: new SlashCommandBuilder()
-        .setName('clima')
-        .setDescription('Sistema de Clima RP'),
-
-    async executeSlash(interaction: ChatInputCommandInteraction) {
-        return interaction.reply({ content: 'Use `rp!clima` para ver os comandos disponíveis.', ephemeral: true });
-    },
 
     async execute(message: Message, args: string[]) {
         const action = args[0]?.toLowerCase() ?? '';

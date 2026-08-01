@@ -394,8 +394,10 @@ export default {
             }
         };
 
-        const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&bkg=${encodeURIComponent('#2b2d31')}&w=600&h=300`;
-        const response = await axios.get(chartUrl, { responseType: 'arraybuffer' });
+        // POST (não querystring): nomes longos no ranking estouravam o limite de URL
+        const response = await axios.post('https://quickchart.io/chart',
+            { chart: chartConfig, backgroundColor: '#2b2d31', width: 600, height: 300 },
+            { responseType: 'arraybuffer', timeout: 15_000 });
         const attachment = new AttachmentBuilder(Buffer.from(response.data), { name: 'rank.png' });
 
         const embed = new EmbedBuilder()
@@ -417,8 +419,10 @@ export default {
             options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8e9297', font: { size: 10 } }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: '#8e9297', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } } } }
         };
 
-        const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&bkg=${encodeURIComponent('#2b2d31')}&w=600&h=200&v=3`;
-        const response = await axios.get(chartUrl, { responseType: 'arraybuffer' });
+        // POST (não querystring): labels longos estouravam o limite de URL
+        const response = await axios.post('https://quickchart.io/chart',
+            { chart: chartConfig, backgroundColor: '#2b2d31', width: 600, height: 200, version: '3' },
+            { responseType: 'arraybuffer', timeout: 15_000 });
         const attachment = new AttachmentBuilder(Buffer.from(response.data), { name: 'stats.png' });
 
         const fmt = (n: number) => n.toLocaleString('pt-BR');

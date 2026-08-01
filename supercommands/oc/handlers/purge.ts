@@ -1,5 +1,6 @@
-import { Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
+import { Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, MessageFlags } from 'discord.js';
 import { OCModel } from '../../../tools/models/OCSchema';
+import { recheckUserOC } from '../../../tools/utils/ocCache';
 
 export default async function handlePurge(message: Message, args: string[], userId: string) {
     const dangerEmbed = {
@@ -29,12 +30,13 @@ export default async function handlePurge(message: Message, args: string[], user
     collector.on('collect', async (i) => {
         // Bloqueia caso outro usuário tente clicar
         if (i.user.id !== userId) {
-            return i.reply({ content: "🚫 Só quem pediu pode confirmar.", ephemeral: true });
+            return i.reply({ content: "🚫 Só quem pediu pode confirmar.", flags: MessageFlags.Ephemeral });
         }
 
         if (i.customId === 'purge_confirm') {
             // Comportamento destrutivo original: apaga tudo que pertence ao usuário
             await OCModel.deleteMany({ adminId: userId });
+            recheckUserOC(userId).catch(() => null);
             await i.update({ content: "💥 Todos os seus OCs foram destruídos.", embeds: [], components: [] });
             collector.stop("confirmed");
         } 

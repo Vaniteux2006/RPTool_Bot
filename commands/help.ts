@@ -7,7 +7,7 @@
 // Este shim existe porque apenas o loader de /commands registra slash commands
 // no deploy (commandsArray do index.ts) — sem ele, o /help deixaria de existir.
 
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, Message, MessageFlags } from 'discord.js';
 
 // Redireciona para o supercommand real
 const helpSuper = (() => {
@@ -29,7 +29,7 @@ export default {
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
         if (helpSuper?.executeSlash) return helpSuper.executeSlash(interaction);
-        return interaction.reply({ content: '❌ Módulo de ajuda não encontrado em supercommands/help/index.ts', ephemeral: true });
+        return interaction.reply({ content: '❌ Módulo de ajuda não encontrado em supercommands/help/index.ts', flags: MessageFlags.Ephemeral });
     },
 
     async execute(message: Message, args: string[]) {

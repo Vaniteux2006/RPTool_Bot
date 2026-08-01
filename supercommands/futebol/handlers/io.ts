@@ -53,7 +53,8 @@ export async function handleImport(message: Message) {
     }
 
     try {
-        const response = await axios.get<any>(attachment.url, { timeout: 10_000 });
+        // maxContentLength: um "json" de 500 MB não pode ser bufferizado inteiro na RAM
+        const response = await axios.get<any>(attachment.url, { timeout: 10_000, maxContentLength: 2 * 1024 * 1024 });
         const report   = response.data;
 
         // Validação mínima do formato

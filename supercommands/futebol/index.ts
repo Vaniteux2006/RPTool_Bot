@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, Message, MessageFlags } from 'discord.js';
 import handleMatch                          from './handlers/match';
 import { handleExport, handleImport }       from './handlers/io';
 import {
@@ -40,7 +40,7 @@ export default {
         .setDescription('Comandos de futebol do RPTool'),
 
     async executeSlash(interaction: ChatInputCommandInteraction) {
-        return interaction.reply({ content: 'Use `rp!futebol` para ver o painel completo.', ephemeral: true });
+        return interaction.reply({ content: 'Use `rp!futebol` para ver o painel completo.', flags: MessageFlags.Ephemeral });
     },
 
     async execute(message: Message, args: string[]) {
