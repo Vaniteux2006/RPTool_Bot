@@ -68,9 +68,11 @@ export function listOutputFiles(sessionPath: string): string[] {
 }
 
 // ─── Lista arquivos de segmento de uma sessão (ordenados cronologicamente) ───
-export function listSegmentFiles(sessionPath: string): string[] {
+// `ext` separa os dois modos de export: 'html' (padrão) e 'txt' (rp!exportchat
+// readable). Uma sessão só usa um dos dois, mas o filtro evita qualquer mistura.
+export function listSegmentFiles(sessionPath: string, ext: 'html' | 'txt' = 'html'): string[] {
     return fs.readdirSync(sessionPath)
-        .filter(f => f.startsWith('seg_') && f.endsWith('.html'))
+        .filter(f => f.startsWith('seg_') && f.endsWith(`.${ext}`))
         .sort() // "seg_20240101.html" < "seg_20240102.html" — correto cronologicamente
         .map(f => path.join(sessionPath, f));
 }

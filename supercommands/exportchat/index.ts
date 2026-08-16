@@ -23,8 +23,10 @@ import { resolveTarget }    from './modules/resolveTarget';
 import { createSessionDir, deleteSession, cleanOrphanSessions } from './modules/cleanup';
 import { ProgressTracker }  from './modules/ProgressTracker';
 import { SegmentRenderer }  from './modules/SegmentRenderer';
-import { runWorker }        from './modules/worker';
+import { TextRenderer }     from './modules/TextRenderer';
+import { runWorker, SegmentWriter } from './modules/worker';
 import { mergeSegments }    from './modules/merger';
+import { mergeTextSegments } from './modules/textMerger';
 import { askConfirmation }  from './modules/confirm';
 import { scanActiveDays }   from './modules/Scanner';
 
@@ -59,12 +61,19 @@ function textoDeUso(emDM: boolean): string {
     return (
         `❌ Uso: \`rp!exportchat ${alvo}\` (canal de texto ou tópico)\n` +
         `Com intervalo: \`rp!exportchat ${alvo} DD/MM/AAAA -> DD/MM/AAAA\`\n` +
-        `Com hora: \`rp!exportchat ${alvo} HH:MM DD/MM/AAAA -> HH:MM DD/MM/AAAA\`` +
+        `Com hora: \`rp!exportchat ${alvo} HH:MM DD/MM/AAAA -> HH:MM DD/MM/AAAA\`\n` +
+        `Em texto puro: \`rp!exportchat readable ${alvo}\` (.txt, ideal pra IA)` +
         (emDM
             ? '\n-# No PV: botão direito no canal → **Copiar link**. Só dá pra exportar canais que você já consegue ler.'
             : '\n-# Também funciona aqui no meu PV: mande o link do canal em vez da menção.')
     );
 }
+
+// ─── Flag do modo texto ───────────────────────────────────────────────────────
+// `readable` gera .txt em vez de HTML: sem avatar, sem CSS, sem imagem embutida
+// — só "Nick, HH:MM - mensagem". Serve pra jogar a conversa numa IA, ou pra ler
+// um export gigante sem abrir navegador.
+const MODO_TEXTO_RE = /^(readable|legivel|legível|texto|txt)$/i;
 
 // ─── Estado de cancelamento por usuário ──────────────────────────────────────
 const activeExports = new Map<string, boolean>();
@@ -83,6 +92,14 @@ export default {
     aliases:     ['exportar', 'backupchat'],
 
     async execute(message: Message, args: string[]) {
+        // ── 0. Flag de modo texto ─────────────────────────────────────────────
+        // `readable` pode vir em qualquer posição (antes do canal, depois dele
+        // ou no fim) — é uma flag, não um argumento posicional. Sai da lista
+        // antes do parsing pra não confundir canal nem intervalo.
+        const flagIdx = args.findIndex(a => MODO_TEXTO_RE.test(a));
+        const readable = flagIdx !== -1;
+        if (readable) args = [...args.slice(0, flagIdx), ...args.slice(flagIdx + 1)];
+
         // ── 1. Parsear canal ──────────────────────────────────────────────────
         // Funciona em servidor (#menção) e no PV (ID ou link do canal). Quem
         // decide se o usuário pode exportar aquele canal é o resolveTarget.
@@ -125,14 +142,15 @@ export default {
         }
         activeExportCount++;
         try {
-            return await this._run(message, targetChannel, rangeStart, rangeEnd);
+            return await this._run(message, targetChannel, rangeStart, rangeEnd, readable);
         } finally {
             activeExportCount--;
         }
     },
 
     // ─── Pipeline do export (chamado com a vaga do semáforo já garantida) ─────
-    async _run(message: Message, targetChannel: GuildTextBasedChannel, rangeStart: Date, rangeEnd: Date) {
+    async _run(message: Message, targetChannel: GuildTextBasedChannel, rangeStart: Date, rangeEnd: Date, readable = false) {
+        const segExt: 'html' | 'txt' = readable ? 'txt' : 'html';
         // ── 3. Construir fila de dias ─────────────────────────────────────────
         // Para histórico completo, pega a data da msg mais antiga do canal
         let effectiveStart = rangeStart;
@@ -202,7 +220,11 @@ export default {
         // ── 5. Confirmação ────────────────────────────────────────────────────
         // No PV a confirmação acontece no próprio PV — isSendable() cobre os dois
         // casos (canal de servidor e DMChannel).
-        const estimatedFiles = Math.max(1, Math.ceil(totalDays * 0.5));
+        // Texto puro é ~10x mais enxuto que o HTML (sem tags, CSS nem markup de
+        // avatar/embed), então rende muito menos partes para o mesmo período.
+        const estimatedFiles = readable
+            ? Math.max(1, Math.ceil(totalDays * 0.05))
+            : Math.max(1, Math.ceil(totalDays * 0.5));
 
         if (totalDays > 3) {
             const commandCh = message.channel;
@@ -215,7 +237,8 @@ export default {
 
         // ── 6. Status inicial ─────────────────────────────────────────────────
         const statusMsg = await safeReply(message,
-            `⏳ Iniciando export de <#${targetChannel.id}> (${totalDays} dia(s) com mensagens)...\n` +
+            `⏳ Iniciando export de <#${targetChannel.id}> (${totalDays} dia(s) com mensagens)` +
+            (readable ? ' em **texto puro** (.txt)' : '') + '...\n' +
             `-# Use \`rp!export end\` para cancelar`,
         );
 
@@ -249,10 +272,13 @@ export default {
         const colorCache   = new Map<string, string>();
         const nameCache    = new Map<string, string>();
         const pendingFetch = new Set<string>(); // evita fetch duplicado do mesmo userId
+        const resolvedIds  = new Set<string>(); // idem, no modo texto (não usa cor)
 
         // O renderer resolve cor/apelido/menções pelo servidor DO CANAL — que no
         // PV não é o servidor de onde veio o comando (não existe nenhum).
-        const makeRenderer = () => new SegmentRenderer(colorCache, nameCache, targetChannel.guild, pendingFetch);
+        const makeRenderer = (): SegmentWriter => readable
+            ? new TextRenderer(nameCache, targetChannel.guild, pendingFetch, resolvedIds)
+            : new SegmentRenderer(colorCache, nameCache, targetChannel.guild, pendingFetch);
 
         // ── 10. Lançar workers em paralelo ────────────────────────────────────
         // A fila é um array compartilhado — .shift() é atômico em JS single-thread.
@@ -264,7 +290,7 @@ export default {
         // dentro do limite global de 50 req/s do Discord.
         const NUM_WORKERS = activeExportCount > 1 ? 3 : 6;
         const workerPromises = Array.from({ length: NUM_WORKERS }, (_, i) =>
-            runWorker(i + 1, sharedQueue, sessionPath, targetChannel, makeRenderer(), progress, isCancelled),
+            runWorker(i + 1, sharedQueue, sessionPath, targetChannel, makeRenderer(), progress, isCancelled, segExt),
         );
 
         let workerResults;
@@ -301,7 +327,9 @@ export default {
 
         let mergeResult;
         try {
-            mergeResult = await mergeSegments(sessionPath, targetChannel.name, subtitle);
+            mergeResult = readable
+                ? await mergeTextSegments(sessionPath, targetChannel.name, subtitle)
+                : await mergeSegments(sessionPath, targetChannel.name, subtitle);
         } catch (err) {
             cancelCollector.stop();
             activeExports.delete(exportKey);
@@ -333,7 +361,7 @@ export default {
 
             const part       = i + 1;
             const filePath   = outputFiles[i];
-            const fileName   = `${targetChannel.name}_parte${part}de${totalParts}.html`;
+            const fileName   = `${targetChannel.name}_parte${part}de${totalParts}.${segExt}`;
             const attachment = new AttachmentBuilder(filePath, { name: fileName });
 
             await dmChannel.send({
@@ -361,7 +389,8 @@ export default {
 
         return safeEdit(statusMsg,
             `✅ **Export concluído!**\n` +
-            `📨 ${totalRead.toLocaleString('pt-BR')} mensagens · ${totalParts} arquivo(s) enviados no seu DM.` +
+            `📨 ${totalRead.toLocaleString('pt-BR')} mensagens · ${totalParts} arquivo(s) ` +
+            `${readable ? '`.txt`' : '`.html`'} enviados no seu DM.` +
             errWarn + skippedNote,
         );
     },

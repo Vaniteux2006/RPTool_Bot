@@ -5,10 +5,18 @@
 
 import fs   from 'fs';
 import path from 'path';
-import { GuildTextBasedChannel } from 'discord.js';
+import { GuildTextBasedChannel, Message } from 'discord.js';
 import { DaySegment, dateToSnowflake } from './parseArgs';
-import { SegmentRenderer }              from './SegmentRenderer';
 import { ProgressTracker }              from './ProgressTracker';
+
+// Contrato comum dos renderers. O worker não sabe (nem precisa saber) se está
+// gerando HTML (SegmentRenderer) ou texto puro (TextRenderer) — só entrega
+// mensagens e manda gravar.
+export interface SegmentWriter {
+    writeMessage(msg: Message, segFilePath: string): Promise<void>;
+    flush(segFilePath: string): Promise<void>;
+    discard(): void;
+}
 
 const FETCH_DELAY_MS = 150; // delay + latência do fetch ≈ 2-3 req/s reais por worker
 const MAX_RETRIES    = 3;
@@ -29,9 +37,10 @@ export async function runWorker(
     queue:       DaySegment[],
     sessionPath: string,
     channel:     GuildTextBasedChannel,
-    renderer:    SegmentRenderer,
+    renderer:    SegmentWriter,
     progress:    ProgressTracker,
     cancelled:   () => boolean,
+    segExt:      'html' | 'txt' = 'html',
 ): Promise<WorkerResult> {
     const result: WorkerResult = {
         segmentsWritten: 0,
@@ -46,7 +55,7 @@ export async function runWorker(
         const segment = queue.shift();
         if (!segment) break;
 
-        const segFilePath = path.join(sessionPath, `seg_${segment.key}.html`);
+        const segFilePath = path.join(sessionPath, `seg_${segment.key}.${segExt}`);
         let afterId       = dateToSnowflake(new Date(segment.start.getTime() - 1));
         let retries       = 0;
         let msgsThisDay   = 0; // FIX: contador local para detectar dia vazio
