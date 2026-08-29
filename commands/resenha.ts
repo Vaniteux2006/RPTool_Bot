@@ -1,6 +1,9 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
-import { api } from '../api';
-import { getGuildAIConfig } from './utils/tokenHelper';
+import { getGuildAIConfig } from '../tools/utils/tokenHelper';
+import { chamarIA } from '../tools/utils/ai/client';
+import { withAIRetry } from '../tools/utils/ai/retry';
+import { motivoInterrupcao, rotuloRetry } from '../tools/utils/ai/errors';
+import { sanitizeOutput } from '../tools/utils/text';
 
 export default {
     name: 'resenha',
@@ -42,7 +45,7 @@ export default {
 
             if (history.length < 50) {
                 const msgCurta = "❌ **Pouca conversa.** O chat está morto, nem preciso de IA pra saber que NÃO HÁ RESENHA 💀.";
-                return loading.edit ? loading.edit(msgCurta) : message.reply(msgCurta);
+                return loading.edit ? await loading.edit(msgCurta) : await message.reply(msgCurta);
             }
 
             const prompt = `
@@ -71,29 +74,48 @@ export default {
             {"status": "r-00" ou "r-01", "analysis": "Uma frase curta, ácida e informal em português explicando o motivo."}
             `;
 
-            const rawText = await api.generateRaw(prompt, config);
+            // Retry com teto (nunca infinito): só insiste em 503/rate-limit.
+            const resultado = await withAIRetry(() => chamarIA(prompt, config, { json: true }), {
+                onRetry: (falha, espera, tentativa) => {
+                    console.warn(`[RESENHA] Retry ${tentativa} (${falha.tipo}):`, falha.msg);
+                    if (loading.edit) {
+                        return loading.edit(`${rotuloRetry(falha)}\n🔄 Julgando a resenha de novo em ${espera}s... (tentativa ${tentativa})`).catch(() => null);
+                    }
+                },
+            });
+
+            if (!resultado.ok) {
+                const { titulo, detalhe } = motivoInterrupcao(resultado.falha!);
+                const msgFalha = `${titulo}\n${detalhe}`;
+                return loading.edit ? await loading.edit(msgFalha) : await message.reply(msgFalha);
+            }
+            const rawText = resultado.valor!;
 
             let result;
             try {
                 const cleanText = rawText.replace(/```json|```/g, '').trim();
                 result = JSON.parse(cleanText);
+                
+                if (result.analysis) {
+                    result.analysis = sanitizeOutput(result.analysis);
+                }
             } catch (jsonError) {
                 console.error("Erro parse JSON:", rawText);
                 result = { status: "r-00", analysis: "A IA ficou confusa com a bagunça de vocês e falhou no JSON." };
             }
 
             let statusEmoji = "💤";
-            let color = 0x3498db; 
+            let statusLabel = "NÃO HÁ RESENHA";
 
             if (result.status === "r-01") {
-                statusEmoji = "🔥"; 
-                color = 0xe74c3c; 
+                statusEmoji = "🔥";
+                statusLabel = "RESENHA CONFIRMADA";
             }
 
-            const finalText = `## Status: \`${result.status}\` ${statusEmoji}\n> 📝 **Veredito:** ${result.analysis}`;
+            const finalText = `## ${statusEmoji} ${statusLabel} — \`${result.status}\`\n> 📝 **Veredito:** ${result.analysis}`;
 
-            if (loading.edit) loading.edit(finalText);
-            else message.reply(finalText);
+            if (loading.edit) await loading.edit(finalText);
+            else await message.reply(finalText);
 
         } catch (e: any) {
             console.error(e);
@@ -101,16 +123,18 @@ export default {
             const errorMsg = e.message || e.toString();
             let finalMsg = "❌ Falha na análise tática. (Erro de API)";
 
-            if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
+            if (errorMsg.includes('GoogleGenerativeAI Error') && errorMsg.includes('was blocked')) {
+                finalMsg = "⚠️ **Algo no teu texto passou totalmente dos limites e a IA não gostou. Toma cuidado aí.**";
+            }
+            else if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Quota')) {
                 const match = errorMsg.match(/after (\d+)/) || errorMsg.match(/in (\d+)/);
                 const seconds = match ? match[1] : '60';
                 finalMsg = `🔥 **CALMA AÍ! Muita mensagem pra ler! O cérebro fritou. Tenta daqui ${seconds}s.**`;
-            } else if (errorMsg.includes('503')) {
+            } else if (errorMsg.includes('503') || errorMsg.includes('Overloaded')) {
                 finalMsg = "🤯 **Serviço indisponível. A IA foi de base temporariamente.**";
             }
-            // ---------------------------------------------
 
-            if (loading.edit) loading.edit(finalMsg);
+            if (loading.edit) await loading.edit(finalMsg);
         }
     }
 };

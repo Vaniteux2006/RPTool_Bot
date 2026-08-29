@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
-import ReturnVersion from '../ReturnVersion'; 
+import returnVersion from '../tools/returnVersion'; 
 
 export default {
     name: 'version',
@@ -21,16 +21,17 @@ export default {
     },
 
     getEmbed() {
-        const displayVer = ReturnVersion();
+        const displayVer = returnVersion();
 
         return new EmbedBuilder()
             .setColor(0x00FFFF)
             .setTitle('🤖 RPTool - Versão e Créditos')
             .setDescription(`Atualmente operando na build:\n# \`${displayVer}\`\n\nEste projeto épico foi forjado por estas lendas:`)
             .addFields(
-                { name: '👑 Fundador, Idealizador & Dev', value: '> **vaniteux_reborn**', inline: false },
-                { name: '💻 Co-Fundador & Dev', value: '> **mr.ivanol**', inline: false },
-                { name: '🎨 Ilustrador (Avatar)', value: '> **skieeeell**', inline: false }
+                { name: '👑 Fundador, Idealizador & Dev', value: '> @**vaniteux_reborn** (Vaniteux)', inline: false },
+                { name: '💻 Co-Fundador & QA Tester', value: '> @**mr.ivanol** (Ivan)', inline: false },
+                { name: '🎨 Ilustrador (Avatar)', value: '> @**skieeeell** (Skiel)', inline: false },
+                { name: '🐞 QA Tester', value: '> @**thejiveglitch** (Lukas) \n > @**elyathan_gm** (Ely)', inline: false },
             )
             .setFooter({ text: 'TypeScript Update 🚀' });
     }

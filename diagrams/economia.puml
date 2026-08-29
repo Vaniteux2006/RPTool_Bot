@@ -1,0 +1,273 @@
+' ============================================================================
+'  RPTool — Sistema de Economia de OCs (wallet + inventory)
+'  Diagramas UML (PlantUML). Renderize em https://plantuml.com ou VS Code.
+'  Referência textual: DOCUMENTACAO.md §10
+' ============================================================================
+
+
+' ----------------------------------------------------------------------------
+' 1) DIAGRAMA DE CLASSES — Domínio / Modelos (Mongoose @ conexão DB_ECONOMY)
+' ----------------------------------------------------------------------------
+@startuml economia_dominio
+title RPTool — Economia de OCs · Domínio (models)
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+hide circle
+
+enum LedgerType {
+  transfer
+  buy
+  sell
+  faucet
+  sink
+}
+
+class OC <<external · OCSchema · DB_OC>> {
+  +_id : ObjectId
+  +adminId : string
+  +duoIds : string[]
+  +name : string
+  +avatar : string
+}
+
+class Wallet <<DB_ECONOMY>> {
+  +guildId : string
+  +ocId : ObjectId  <<ref OC>>
+  +ownerId : string
+  +balance : number = 0
+  +lastActivityAt : Date
+  +createdAt : Date
+  --
+  índice único (guildId, ocId)
+}
+
+class WalletItem <<embedded>> {
+  +key : string  <<slug>>
+  +qty : number
+  .. só em itens PESSOAIS (freeform) ..
+  +name : string
+  +emoji : string
+  +custom : boolean
+}
+
+class Item <<DB_ECONOMY>> {
+  +guildId : string
+  +key : string  <<slug>>
+  +name : string
+  +emoji : string = 📦
+  +description : string
+  +basePrice : number = 0
+  +stock : number = -1  <<-1 = ilimitado>>
+  +tradable : boolean = true
+  +usable : boolean = true
+  +replyOnUse : string
+  +createdBy : string
+  --
+  índice único (guildId, key)
+}
+
+class GuildEconomy <<DB_ECONOMY>> {
+  +guildId : string  <<único>>
+  +currencyName : string = "Moedas"
+  +symbol : string = 🪙
+  .. modo avançado (opt-in) ..
+  +advanced : boolean = false
+  +autoReprice : boolean = false
+  +baseUsdRate : number = 1
+  +priceIndex : number = 1
+  +moneySupply : number   <<M>>
+  +realWealth : number    <<Q>>
+  +velocity : number      <<V>>
+  .. baselines (genesis) ..
+  +genesisMoneySupply : number
+  +genesisRealWealth : number
+  +genesisVelocity : number
+  +advancedSince : Date
+  +lastRecompute : Date
+  .. reservado (sem comando ainda) ..
+  +dailyAmount : number = 250
+  +workAmount : number = 50
+}
+
+class EconomySnapshot <<embedded>> {
+  +at : Date
+  +priceIndex : number
+  +moneySupply : number
+  +realWealth : number
+  +velocity : number
+  +gdp : number
+}
+
+class Ledger <<DB_ECONOMY · TTL 30d>> {
+  +guildId : string
+  +type : LedgerType
+  +amount : number
+  +createdAt : Date  <<expires 30d>>
+}
+
+Wallet "1" *-- "0..*" WalletItem : items >
+Wallet ..> OC : ocId (ref)
+WalletItem ..> Item : key resolve p/ (guildId)\n(só itens de loja; pessoais são self-described)
+GuildEconomy "1" *-- "0..*" EconomySnapshot : history >
+Ledger "0..*" --> "1" GuildEconomy : guildId
+Ledger ..> LedgerType
+
+note bottom of GuildEconomy
+  priceIndex, câmbio e reajuste
+  só valem quando advanced = true
+end note
+@enduml
+
+
+' ----------------------------------------------------------------------------
+' 2) DIAGRAMA DE COMPONENTES — Camadas do módulo
+' ----------------------------------------------------------------------------
+@startuml economia_componentes
+title RPTool — Economia de OCs · Componentes
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+package "supercommands/wallet" {
+  [index.ts\n(router)] as WalletRouter
+  [handlers/view] as WView
+  [handlers/pay] as WPay
+  [handlers/top] as WTop
+  [handlers/admin] as WAdmin
+  [handlers/economy\n(dashboard + toggles)] as WEco
+}
+
+package "supercommands/inventory" {
+  [index.ts\n(router)] as InvRouter
+  [handlers/view] as IView
+  [handlers/give] as IGive
+  [handlers/use] as IUse
+  [handlers/shop] as IShop
+  [handlers/buy] as IBuy
+  [handlers/sell] as ISell
+  [handlers/admin] as IAdmin
+}
+
+package "tools/utils" {
+  [economy.ts\n(helpers)] as EconUtils
+  [economyEngine.ts\n(macro)] as Engine
+}
+
+package "tools/models" {
+  [EconomySchema.ts\n(Wallet/Item/GuildEconomy/Ledger)] as Models
+  [OCSchema.ts (OCModel)] as OCModel
+}
+
+[command_checkout.ts\n(rotina horária)] as Cron
+
+WalletRouter --> WView
+WalletRouter --> WPay
+WalletRouter --> WTop
+WalletRouter --> WAdmin
+WalletRouter --> WEco
+
+InvRouter --> IView
+InvRouter --> IGive
+InvRouter --> IUse
+InvRouter --> IShop
+InvRouter --> IBuy
+InvRouter --> ISell
+InvRouter --> IAdmin
+
+WView ..> EconUtils
+WPay ..> EconUtils
+WTop ..> EconUtils
+WAdmin ..> EconUtils
+IView ..> EconUtils
+IGive ..> EconUtils
+IUse ..> EconUtils
+IShop ..> EconUtils
+IBuy ..> EconUtils
+ISell ..> EconUtils
+IAdmin ..> EconUtils
+
+WPay ..> Engine : recordLedger
+IBuy ..> Engine : recordLedger
+ISell ..> Engine : recordLedger
+WAdmin ..> Engine : recordLedger
+WView ..> Engine : coinToUsd
+WEco ..> Engine : recompute/enable
+Cron ..> Engine : recomputeAllAdvanced
+
+EconUtils ..> Models
+EconUtils ..> OCModel
+Engine ..> Models
+Engine ..> EconUtils
+@enduml
+
+
+' ----------------------------------------------------------------------------
+' 3) SEQUÊNCIA — Comprar item na loja (rp!inventory buy)
+' ----------------------------------------------------------------------------
+@startuml economia_buy
+title RPTool — Fluxo: rp!inventory buy "OC" "item" [qtd]
+
+actor Usuário
+participant "inventory/index" as R
+participant "handlers/buy" as B
+participant "economy.ts" as U
+participant "economyEngine" as E
+database "DB_ECONOMY" as DB
+
+Usuário -> R : rp!inventory buy "Ana" "Espada" 2
+R -> B : handleBuy(rest)
+B -> U : resolveOwnedOc("Ana")
+U -> DB : OCModel.findOne (dono)
+B -> U : resolveItem("Espada")
+U -> DB : ItemModel.findOne
+B -> U : getGuildEconomy / effectivePrice
+note right of B : total = preço × qtd\n(reajustado se autoReprice)
+
+alt estoque limitado
+  B -> DB : reserva estoque\n(findOneAndUpdate stock >= qtd)
+end
+
+B -> DB : débito atômico\n(balance >= total → $inc -total)
+alt saldo insuficiente
+  B -> DB : devolve estoque
+  B --> Usuário : "saldo insuficiente"
+else ok
+  B -> U : addItemToWallet(key, qtd)
+  U -> DB : $inc items.$.qty (ou $push)
+  B -> E : recordLedger(guild, 'buy', total)
+  E -> DB : insert Ledger (TTL 30d)
+  B --> Usuário : embed "Compra realizada"
+end
+@enduml
+
+
+' ----------------------------------------------------------------------------
+' 4) SEQUÊNCIA — Recálculo macroeconômico / inflação
+' ----------------------------------------------------------------------------
+@startuml economia_inflacao
+title RPTool — Fluxo: recomputeEconomy (M·V = P·Q)
+
+participant "command_checkout\n(setInterval 1h)" as Cron
+participant "economyEngine" as E
+database "DB_ECONOMY" as DB
+
+Cron -> E : recomputeAllAdvanced()
+E -> DB : GuildEconomy.find(advanced=true)
+loop cada servidor avançado
+  E -> E : snapshotMQ(guild)
+  E -> DB : Wallet.find + Item.find
+  note right of E : M = Σ saldos\nQ = Σ basePrice×qty
+  E -> E : windowVolume(guild, 7d)
+  E -> DB : Ledger.aggregate (transfer+buy+sell)
+  note right of E : V = volume / M\nPIB = volume(7d)
+  E -> E : priceIndex =\nclamp( (M/M0)/(Q/Q0)·(V/V0)^0.3 , 0.1, 10 )
+  E -> DB : GuildEconomy.save\n(+ push history)
+end
+
+note over E, DB
+  Reflexos (quando advanced):
+  • loja: effectivePrice = round(basePrice × priceIndex)
+  • câmbio: coinToUsd = saldo × baseUsdRate / priceIndex
+end note
+@enduml

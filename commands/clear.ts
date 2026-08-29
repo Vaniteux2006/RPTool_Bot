@@ -4,12 +4,11 @@ import {
     Message, 
     ChatInputCommandInteraction, 
     TextChannel,
-    ChannelType
-} from 'discord.js';
+    ChannelType, MessageFlags } from 'discord.js';
 
 export default {
     name: 'clear',
-    aliases: ['limpar', 'purge'],
+    aliases: ['limpar', 'clean'],
     description: 'Apaga uma quantidade específica de mensagens.',
     
     data: new SlashCommandBuilder()
@@ -61,7 +60,7 @@ export default {
         const channel = interaction.channel as TextChannel;
 
         if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-            return interaction.reply({ content: '❌ Comando inválido neste canal.', ephemeral: true });
+            return interaction.reply({ content: '❌ Comando inválido neste canal.', flags: MessageFlags.Ephemeral });
         }
 
         try {
@@ -69,14 +68,14 @@ export default {
             
             await interaction.reply({ 
                 content: `🧹 **Sucesso!** Apaguei ${deleted.size} mensagens neste canal.`, 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
 
         } catch (error) {
             console.error(error);
             await interaction.reply({ 
                 content: '❌ Erro ao apagar. Mensagens com mais de 14 dias não podem ser apagadas em massa pelo Discord.', 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
         }
     }

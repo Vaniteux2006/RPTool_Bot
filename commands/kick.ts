@@ -8,8 +8,7 @@ import {
     Message,
     ChatInputCommandInteraction,
     GuildMember,
-    ButtonInteraction
-} from 'discord.js';
+    ButtonInteraction, MessageFlags } from 'discord.js';
 
 export default {
     name: 'kick',
@@ -25,8 +24,8 @@ export default {
         const target = interaction.options.getMember('alvo') as GuildMember;
         const reason = interaction.options.getString('motivo') || 'Não informado';
 
-        if (!target) return interaction.reply({ content: 'Usuário não encontrado.', ephemeral: true });
-        if (!target.kickable) return interaction.reply({ content: 'Não posso expulsar este usuário.', ephemeral: true });
+        if (!target) return interaction.reply({ content: 'Usuário não encontrado.', flags: MessageFlags.Ephemeral });
+        if (!target.kickable) return interaction.reply({ content: 'Não posso expulsar este usuário.', flags: MessageFlags.Ephemeral });
 
         await this.runConfirmation(interaction, target, reason, true);
     },
@@ -52,7 +51,7 @@ export default {
         const text = `⚠️ O usuário **${target.user.tag}** será expulso pelo motivo: \`${reason}\`. Tem certeza disso?`;
         
         const response = isSlash 
-            ? await (ctx as ChatInputCommandInteraction).reply({ content: text, components: [row], fetchReply: true }) 
+            ? await (ctx as ChatInputCommandInteraction).reply({ content: text, components: [row] }).then(() => (ctx as ChatInputCommandInteraction).fetchReply()) 
             : await (ctx as Message).reply({ content: text, components: [row] });
 
         const filter = (i: ButtonInteraction) => i.user.id === (isSlash ? ctx.member?.user.id : (ctx as Message).author.id);

@@ -1,4 +1,6 @@
-import { EmbedBuilder, SlashCommandBuilder, ChatInputCommandInteraction, Message } from 'discord.js';
+import { EmbedBuilder, SlashCommandBuilder, ChatInputCommandInteraction, Message, MessageFlags } from 'discord.js';
+import helpCommand from '../supercommands/help/index';
+import returnVersion from '../tools/returnVersion';
 
 export default {
     name: 'roll',
@@ -23,11 +25,16 @@ export default {
         
         const success = await this.processRoll(fakeMessage, formula);
         if (!success) {
-            await interaction.reply({ content: "⚠️ Formato inválido. Use algo como `1d20+5`.", ephemeral: true });
+            await interaction.reply({ content: "⚠️ Formato inválido. Use algo como `1d20+5`.", flags: MessageFlags.Ephemeral });
         }
     },
 
     async execute(message: Message, args: string[]) {
+        // "rp!roll help" merece o verbete do help, não "formato inválido".
+        const first = (args[0] || '').toLowerCase();
+        if (['help', 'ajuda', 'comandos'].includes(first)) {
+            return helpCommand.execute(message, ['roll', ...args.slice(1)]);
+        }
         const formula = args.join("");
         const success = await this.processRoll(message, formula);
         if (!success) {
@@ -93,7 +100,7 @@ export default {
             .setColor(corFinal)
             .setAuthor({ name: 'Dadinhos! 🎲', iconURL: 'https://media.discordapp.net/attachments/1459362898127098014/1459399809025703988/doguinho.png?ex=6963237c&is=6961d1fc&hm=7ea6574e5b4cc8904ba7547339c89c3874e6955bff8c72973a1aa8090422305b&=&format=webp&quality=lossless' })
             .setDescription(`**[${qtd}d${lados}${textoModificador} : ${listaStr}]**\n No fim, a soma de todos os dados deu: \n **${totalFinal}**`)
-            .setFooter({ text: `RPTool v1.4` });
+            .setFooter({ text: `RPTool v${returnVersion()}` });
 
         await message.reply({ embeds: [embed] });
         return true;

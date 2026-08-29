@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits, Message, ChatInputCommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, Message, ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 
 export default {
     name: 'unban',
@@ -24,6 +24,7 @@ export default {
             await message.guild?.members.unban(userId);
             message.reply(`✅ ID **${userId}** desbanido!`);
         } catch (error) {
+            console.warn('[UNBAN] Falha ao desbanir usuário:', userId, error);
             message.reply('❌ Erro: ID inválido ou não banido.');
         }
     },
@@ -35,7 +36,8 @@ export default {
             await interaction.guild?.members.unban(userId);
             await interaction.reply(`✅ ID **${userId}** desbanido!`);
         } catch (error) {
-            await interaction.reply({ content: '❌ Erro ao desbanir.', ephemeral: true });
+            console.warn('[UNBAN] Falha ao desbanir via slash:', userId, error);
+            await interaction.reply({ content: '❌ Erro ao desbanir.', flags: MessageFlags.Ephemeral });
         }
     }
 };

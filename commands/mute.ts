@@ -1,28 +1,5 @@
-import { SlashCommandBuilder, PermissionFlagsBits, Message, ChatInputCommandInteraction, GuildMember } from 'discord.js';
-
-function parseDuration(str: string): number | null {
-    if (!str) return null;
-    const units: { [key: string]: number } = {
-        's': 1000, 'segundo': 1000, 'segundos': 1000,
-        'm': 60000, 'minuto': 60000, 'minutos': 60000,
-        'h': 3600000, 'hora': 3600000, 'horas': 3600000,
-        'd': 86400000, 'dia': 86400000, 'dias': 86400000,
-        'w': 604800000, 'semana': 604800000, 'semanas': 604800000,
-        'y': 31536000000, 'ano': 31536000000, 'anos': 31536000000
-    };
-    
-    units['mês'] = 2592000000;
-    units['meses'] = 2592000000;
-
-    const match = str.match(/^(\d+)\s*(.*)$/);
-    if (!match) return null;
-    const value = parseInt(match[1]);
-    const unitStr = match[2].trim().toLowerCase();
-    
-    const multiplier = unitStr ? units[unitStr] || units[unitStr.replace(/s$/, '')] : 60000;
-    
-    return multiplier ? value * multiplier : null;
-}
+import { SlashCommandBuilder, PermissionFlagsBits, Message, ChatInputCommandInteraction, GuildMember, MessageFlags } from 'discord.js';
+import { parseDuration } from '../tools/utils/date';
 
 export default {
     name: 'mute',
@@ -40,7 +17,7 @@ export default {
         const ms = parseDuration(timeStr);
 
         if (!ms || ms > 2419200000) { 
-            return interaction.reply({ content: 'Tempo inválido ou maior que 28 dias.', ephemeral: true });
+            return interaction.reply({ content: 'Tempo inválido ou maior que 28 dias.', flags: MessageFlags.Ephemeral });
         }
         if (!target) return interaction.reply("Usuário não encontrado.");
 
