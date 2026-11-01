@@ -76,10 +76,9 @@ export async function handleImport(message: Message) {
                     value: [
                         `**Posse:** ${hs.possessionHome ?? '?'}% ↔ ${hs.possessionAway ?? '?'}%`,
                         `**Chutes (no alvo):** ${hs.shotsHome ?? '?'} (${hs.shotsOnTargetHome ?? '?'}) ↔ ${hs.shotsAway ?? '?'} (${hs.shotsOnTargetAway ?? '?'})`,
-                        `**Faltas:** ${hs.foulsHome ?? '?'} ↔ ${hs.foulsAway ?? '?'}`,
+                        `**Desarmes:** ${hs.tacklesHome ?? '?'} ↔ ${hs.tacklesAway ?? '?'}`,
                         `**Cartões 🟨/🟥:** ${hs.yellowCardsHome ?? 0}/${hs.redCardsHome ?? 0} ↔ ${hs.yellowCardsAway ?? 0}/${hs.redCardsAway ?? 0}`,
-                        `**Escanteios:** ${hs.cornersHome ?? '?'} ↔ ${hs.cornersAway ?? '?'}`,
-                        `**Precisão de Passes:** ${hs.passAccuracyHome ?? '?'}% ↔ ${hs.passAccuracyAway ?? '?'}%`,
+                        `**Erros de passe:** ${hs.passErrorsHome ?? '?'} ↔ ${hs.passErrorsAway ?? '?'}`,
                     ].join('\n'),
                     inline: false,
                 },

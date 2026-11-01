@@ -100,7 +100,7 @@ export default async function handleMatch(message: Message, args: string[]) {
     const neutralTag = isNeutral ? ' *(campo neutro)*' : '';
     const goalLines  = result.eventsLog.filter(l => l.includes('⚽'));
     const cardLines  = result.eventsLog.filter(l => l.includes('🟨') || l.includes('🟥'));
-    const subLines   = result.eventsLog.filter(l => l.includes('🔄'));
+    const subLines   = result.eventsLog.filter(l => l.includes('🔄') || l.includes('🚑'));
     const eventsSummary = [...goalLines, ...cardLines, ...subLines].join('\n') || '*Partida sem incidentes.*';
 
     const homeEmoji = homeTeam.emoji ?? '⚽';
@@ -119,9 +119,8 @@ export default async function handleMatch(message: Message, args: string[]) {
             { name: '\u200B', value: '**📊 ESTATÍSTICAS**', inline: false },
             { name: 'Posse de Bola',     value: `**${result.finalPossessionHome}%** ↔ **${result.finalPossessionAway}%**`,                     inline: true  },
             { name: 'Chutes (no alvo)',  value: `**${result.stats.shotsHome}** (${result.stats.shotsOnTargetHome}) ↔ **${result.stats.shotsAway}** (${result.stats.shotsOnTargetAway})`, inline: true  },
-            { name: 'Faltas',            value: `**${result.stats.foulsHome}** ↔ **${result.stats.foulsAway}**`,                               inline: true  },
-            { name: 'Precisão de Passes',value: `**${result.stats.passAccuracyHome}%** ↔ **${result.stats.passAccuracyAway}%**`,               inline: true  },
-            { name: 'Escanteios',        value: `**${result.stats.cornersHome}** ↔ **${result.stats.cornersAway}**`,                           inline: true  },
+            { name: 'Desarmes',          value: `**${result.stats.tacklesHome}** ↔ **${result.stats.tacklesAway}**`,                           inline: true  },
+            { name: 'Erros de Passe',    value: `**${result.stats.passErrorsHome}** ↔ **${result.stats.passErrorsAway}**`,                     inline: true  },
             { name: 'Cartões 🟨/🟥',     value: `**${result.stats.yellowCardsHome}/${result.stats.redCardsHome}** ↔ **${result.stats.yellowCardsAway}/${result.stats.redCardsAway}**`, inline: true },
         )
         .setFooter({ text: expiration.footer });

@@ -1,5 +1,5 @@
 // RPTool/supercommands/futebol/engines/mathEngine.ts
-import { ITeam, IPlayer } from '../../../tools/models/FutebolSchema';
+import { IPlayer } from '../../../tools/models/FutebolSchema';
 
 // ─── Arquétipos: multiplicadores PAC/SHO/PAS/DRI/DEF/PHY por arquétipo ────────
 const ARCHETYPE_WEIGHTS: Record<string, Record<string, number>> = {
@@ -139,54 +139,6 @@ export function calculateOverallFromStats(position: string, stats: Partial<{
         default:
             return 50;
     }
-}
-
-// ─── Força dos setores do time ────────────────────────────────────────────────
-export function calculateTeamStats(team: ITeam): {
-    ataque: number; meio: number; defesa: number; gk: number; avgOvr: number;
-} {
-    let atkScore = 0, midScore = 0, defScore = 0, gkScore = 0;
-    let countAtk = 0, countMid = 0, countDef = 0;
-    let totalOvr = 0;
-
-    const players = team.players.length > 0 ? team.players : generateGenericPlayers(55);
-
-    players.forEach(p => {
-        const m = getPlayerMacros(p);
-        totalOvr += getEffectiveOverall(p);
-        switch (p.position) {
-            case 'ATK': atkScore += (m.SHO * 0.55) + (m.DRI * 0.25) + (m.PAC * 0.20); countAtk++; break;
-            case 'MID': midScore += (m.PAS * 0.40) + (m.DRI * 0.30) + (m.DEF * 0.30); countMid++; break;
-            case 'DEF': defScore += (m.DEF * 0.55) + (m.PHY * 0.30) + (m.PAC * 0.15); countDef++; break;
-            case 'GK':  gkScore  += (m.DEF * 0.70) + (m.PHY * 0.30); break;
-        }
-    });
-
-    const FB = 40;
-    return {
-        ataque: countAtk > 0 ? atkScore / countAtk : FB,
-        meio:   countMid > 0 ? midScore / countMid : FB,
-        defesa: countDef > 0 ? defScore / countDef : FB,
-        gk:     gkScore  > 0 ? gkScore             : FB,
-        avgOvr: players.length > 0 ? totalOvr / players.length : FB,
-    };
-}
-
-// ─── Nota individual pós-partida ──────────────────────────────────────────────
-export function calculatePlayerRating(params: {
-    goals: number; assists: number; keyPasses: number;
-    tacklesWon: number; errors: number; baseOvr: number; isWinner: boolean;
-}): number {
-    let r = 6.0;
-    r += params.goals       * 1.20;
-    r += params.assists     * 0.70;
-    r += params.keyPasses   * 0.20;
-    r += params.tacklesWon  * 0.15;
-    r -= params.errors      * 0.40;
-    if (params.isWinner)        r += 0.3;
-    if (params.baseOvr >= 85)   r += 0.3;
-    if (params.baseOvr <  50)   r -= 0.5;
-    return parseFloat(Math.min(10, Math.max(1, r)).toFixed(1));
 }
 
 // ─── Plantel genérico (fallback) ──────────────────────────────────────────────

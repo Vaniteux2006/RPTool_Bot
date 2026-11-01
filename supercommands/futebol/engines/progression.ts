@@ -15,6 +15,7 @@ import {
     ITourneyMatch,
     IStanding,
 } from '../../../tools/models/FutebolSchema';
+import { shootout } from './brasfoot/core';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 export interface PhaseConfig {
@@ -173,18 +174,10 @@ function teamLabel(info: Map<string, { name: string; emoji: string }>, t: ITourn
     return `${cached.emoji} **${cached.name}**`;
 }
 
-// Disputa de pênaltis simulada (5 cobranças + morte súbita)
+// Disputa de pênaltis do Brasfoot (bg_0): 70% por cobrança, 5 + morte súbita,
+// encerrando assim que um lado não alcança mais o outro.
 export function simulatePenalties(): { home: number; away: number } {
-    let home = 0, away = 0;
-    for (let i = 0; i < 5; i++) {
-        if (Math.random() < 0.76) home++;
-        if (Math.random() < 0.76) away++;
-    }
-    while (home === away) {
-        if (Math.random() < 0.76) home++;
-        if (Math.random() < 0.76) away++;
-    }
-    return { home, away };
+    return shootout();
 }
 
 // Partida de mata-mata em campo neutro? (final com neutralFinal no formato)

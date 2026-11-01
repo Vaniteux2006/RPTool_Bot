@@ -83,7 +83,7 @@ function buildPlayerCard(player: IPlayer, teamName: string): EmbedBuilder {
         ].join('\n');
     } else {
         // Stats derivados do arquétipo (informativos)
-        const { calculateTeamStats: _, getPlayerMacros, getEffectiveOverall } = require('../engines/mathEngine');
+        const { getPlayerMacros, getEffectiveOverall } = require('../engines/mathEngine');
         const { getPlayerMacros: macros, getEffectiveOverall: effOvr } = require('../engines/mathEngine');
         const m = macros(player);
         leftStats = [

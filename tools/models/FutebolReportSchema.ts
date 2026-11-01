@@ -22,16 +22,14 @@ export interface IMatchReport extends Document {
         shotsAway: number;
         shotsOnTargetHome: number;
         shotsOnTargetAway: number;
-        foulsHome: number;
-        foulsAway: number;
         yellowCardsHome: number;
         yellowCardsAway: number;
         redCardsHome: number;
         redCardsAway: number;
-        cornersHome: number;
-        cornersAway: number;
-        passAccuracyHome: number;
-        passAccuracyAway: number;
+        tacklesHome: number;
+        tacklesAway: number;
+        passErrorsHome: number;
+        passErrorsAway: number;
     };
     homeFormation: string;
     awayFormation: string;
@@ -42,6 +40,7 @@ export interface IMatchReport extends Document {
         team: string;
         playerName: string;
         rating: number;
+        isSub?: boolean;
     }[];
     topPerformerHome: string;
     topPerformerAway: string;
@@ -64,16 +63,14 @@ const MatchReportSchema = new Schema<IMatchReport>({
         shotsAway:           { type: Number, default: 0 },
         shotsOnTargetHome:   { type: Number, default: 0 },
         shotsOnTargetAway:   { type: Number, default: 0 },
-        foulsHome:           { type: Number, default: 0 },
-        foulsAway:           { type: Number, default: 0 },
         yellowCardsHome:     { type: Number, default: 0 },
         yellowCardsAway:     { type: Number, default: 0 },
         redCardsHome:        { type: Number, default: 0 },
         redCardsAway:        { type: Number, default: 0 },
-        cornersHome:         { type: Number, default: 0 },
-        cornersAway:         { type: Number, default: 0 },
-        passAccuracyHome:    { type: Number, default: 80 },
-        passAccuracyAway:    { type: Number, default: 80 },
+        tacklesHome:         { type: Number, default: 0 },
+        tacklesAway:         { type: Number, default: 0 },
+        passErrorsHome:      { type: Number, default: 0 },
+        passErrorsAway:      { type: Number, default: 0 },
     },
 
     homeFormation:    { type: String, default: '4-4-2' },
@@ -85,6 +82,7 @@ const MatchReportSchema = new Schema<IMatchReport>({
         team:       { type: String },
         playerName: { type: String },
         rating:     { type: Number },
+        isSub:      { type: Boolean, default: false },
     }],
     topPerformerHome: { type: String, default: '' },
     topPerformerAway: { type: String, default: '' },

@@ -110,17 +110,16 @@ export async function handleFutebolInteraction(
                     name:   '📊 Números Avançados',
                     value: [
                         `**Posse:** ${s.possessionHome}% ↔ ${s.possessionAway}%`,
-                        `**Precisão de passes:** ${s.passAccuracyHome}% ↔ ${s.passAccuracyAway}%`,
                         `**Chutes totais:** ${s.shotsHome} ↔ ${s.shotsAway}`,
                         `**Chutes no alvo:** ${s.shotsOnTargetHome} ↔ ${s.shotsOnTargetAway}`,
-                        `**Escanteios:** ${s.cornersHome} ↔ ${s.cornersAway}`,
-                        `**Faltas:** ${s.foulsHome} ↔ ${s.foulsAway}`,
+                        `**Desarmes:** ${s.tacklesHome ?? 0} ↔ ${s.tacklesAway ?? 0}`,
+                        `**Erros de passe:** ${s.passErrorsHome ?? 0} ↔ ${s.passErrorsAway ?? 0}`,
                         `**Cartões 🟨/🟥:** ${s.yellowCardsHome}/${s.redCardsHome} ↔ ${s.yellowCardsAway}/${s.redCardsAway}`,
                     ].join('\n'),
                     inline: false,
                 },
             )
-            .setFooter({ text: 'Motor de Simulação Tática — RPTool' });
+            .setFooter({ text: 'Motor da partida: Brasfoot (via Vanifoot) — RPTool' });
 
         return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
@@ -203,8 +202,8 @@ function buildSummaryEmbed(report: any, expirationTs: number): EmbedBuilder {
         .addFields(
             { name: 'Posse de Bola',     value: `**${s.possessionHome}%** ↔ **${s.possessionAway}%**`,                                                                inline: false },
             { name: 'Chutes (no alvo)',  value: `**${s.shotsHome}** (${s.shotsOnTargetHome}) ↔ **${s.shotsAway}** (${s.shotsOnTargetAway})`,                          inline: false },
-            { name: 'Faltas',            value: `**${s.foulsHome}** ↔ **${s.foulsAway}**`,                                                                            inline: false },
-            { name: 'Precisão de Passes',value: `**${s.passAccuracyHome}%** ↔ **${s.passAccuracyAway}%**`,                                                            inline: false },
+            { name: 'Desarmes',          value: `**${s.tacklesHome ?? 0}** ↔ **${s.tacklesAway ?? 0}**`,                                                              inline: false },
+            { name: 'Erros de Passe',    value: `**${s.passErrorsHome ?? 0}** ↔ **${s.passErrorsAway ?? 0}**`,                                                        inline: false },
         )
         .setFooter({ text: `⚠️ Análise expira em 48h (<t:${expirationTs}:R>) • rp!futebol export ${report._id}` });
 }
