@@ -3,7 +3,10 @@
 // Cada "tela" da wiki (início, categoria, comando, busca) vira um par
 // { embeds, components } pronto pra enviar/atualizar na mensagem.
 
+import fs from 'fs';
+import path from 'path';
 import {
+    AttachmentBuilder,
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
@@ -33,7 +36,10 @@ export type HelpState =
 export interface HelpPayload {
     embeds:     EmbedBuilder[];
     components: ActionRowBuilder<any>[];
+    files:      AttachmentBuilder[];
 }
+
+const GUIDES_DIR = path.join(__dirname, 'guides', 'img');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -100,6 +106,16 @@ function navRow(state: HelpState, totalPages = 1): ActionRowBuilder<any> {
     );
 }
 
+/** Anexa o guia visual (guides/img/<id>.png) como imagem do embed, se existir. */
+function withGuide(embed: EmbedBuilder, guide: string | undefined): AttachmentBuilder[] {
+    if (!guide) return [];
+    const file = path.join(GUIDES_DIR, `${guide}.png`);
+    if (!fs.existsSync(file)) return [];
+    const name = `guia-${guide}.png`;
+    embed.setImage(`attachment://${name}`);
+    return [new AttachmentBuilder(file, { name })];
+}
+
 // ─── Telas ────────────────────────────────────────────────────────────────────
 
 function renderHome(): HelpPayload {
@@ -125,7 +141,7 @@ function renderHome(): HelpPayload {
         )
         .setFooter({ text: `${CATEGORIES.reduce((n, c) => n + c.entries.length, 0)} comandos catalogados • menus expiram em 5 min` });
 
-    return { embeds: [embed], components: [categorySelectRow(), navRow({ mode: 'home' })] };
+    return { embeds: [embed], components: [categorySelectRow(), navRow({ mode: 'home' })], files: [] };
 }
 
 function renderCategory(catId: string, page: number): HelpPayload {
@@ -158,6 +174,7 @@ function renderCategory(catId: string, page: number): HelpPayload {
             commandSelectRow(cat),
             navRow({ mode: 'category', catId, page: safePage }, totalPages),
         ],
+        files: withGuide(embed, cat.guide),
     };
 }
 
@@ -196,6 +213,7 @@ function renderEntry(catId: string, entryId: string): HelpPayload {
             commandSelectRow(cat, entry.id),
             navRow({ mode: 'entry', catId, entryId }),
         ],
+        files: withGuide(embed, entry.guide ?? cat.guide),
     };
 }
 
@@ -237,7 +255,7 @@ function renderSearch(query: string): HelpPayload {
     }
 
     components.push(navRow({ mode: 'search', query }));
-    return { embeds: [embed], components };
+    return { embeds: [embed], components, files: [] };
 }
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
@@ -248,4 +266,9 @@ export function render(state: HelpState): HelpPayload {
         case 'search':   return renderSearch(state.query);
         default:         return renderHome();
     }
+}
+
+/** Para editar a mensagem: `attachments: []` descarta o guia da tela anterior. */
+export function renderEdit(state: HelpState): HelpPayload & { attachments: [] } {
+    return { ...render(state), attachments: [] };
 }

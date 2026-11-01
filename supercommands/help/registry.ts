@@ -10,6 +10,7 @@
 //   - `usage` e `subs[].usage` já incluem o prefixo (rp!...)
 //   - `essential: true` faz o comando aparecer na página inicial do rp!help
 //   - `keywords` alimentam a busca (🔍) — inclua sinônimos e termos comuns
+//   - `guide` aponta para um PNG em guides/img/ (conteúdo em guides/data.ts)
 
 export const PREFIX = 'rp!';
 
@@ -30,6 +31,7 @@ export interface HelpEntry {
     keywords?: string[];
     admin?:    boolean;    // exige permissão de staff
     essential?: boolean;   // aparece na página inicial
+    guide?:    string;     // guia visual próprio (guides/img/<id>.png); sem ele, usa o da categoria
 }
 
 export interface HelpCategory {
@@ -37,6 +39,7 @@ export interface HelpCategory {
     label:   string;
     emoji:   string;
     desc:    string;       // máx ~90 chars (vai pro select menu)
+    guide?:  string;       // guia visual da categoria (guides/img/<id>.png)
     entries: HelpEntry[];
 }
 
@@ -47,6 +50,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'Utilidades & Informações',
         emoji: '🛠️',
         desc: 'Ferramentas gerais, status do servidor e utilitários',
+        guide: 'utilidades',
         entries: [
             {
                 id: 'help', name: 'help', emoji: '🆘', essential: true,
@@ -89,7 +93,7 @@ export const CATEGORIES: HelpCategory[] = [
                 keywords: ['usuario', 'perfil', 'avatar', 'membro'],
             },
             {
-                id: 'status', name: 'status', emoji: '📊',
+                id: 'status', name: 'status', guide: 'status', emoji: '📊',
                 summary: 'Dashboard de atividade do servidor (últimos 14 dias).',
                 usage: ['rp!status'],
                 details: 'Gera gráficos de atividade a partir das mensagens registradas. Aceita um alvo específico (usuário, canal ou OC) pra filtrar o gráfico. A suíte histórica (heatmap, historico, perfil, wrapped, explorar, trending) usa todo o histórico coletado — rode `rp!status docpast` (admin) uma vez pra importar o passado do servidor.',
@@ -180,6 +184,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'Moderação & Administração',
         emoji: '🛡️',
         desc: 'Punições, gerenciamento de chat, cargos e boas-vindas',
+        guide: 'moderacao',
         entries: [
             {
                 id: 'ban', name: 'ban', emoji: '🔨', admin: true, essential: true,
@@ -294,6 +299,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'Logs & Backups',
         emoji: '📋',
         desc: 'Auditoria de eventos do servidor e exportação de chats',
+        guide: 'logs',
         entries: [
             {
                 id: 'logs', name: 'logs', emoji: '📋', admin: true,
@@ -337,6 +343,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'OCs — Criação & Gestão',
         emoji: '🎭',
         desc: 'Criação, edição e organização de personagens originais',
+        guide: 'oc',
         entries: [
             {
                 id: 'oc', name: 'oc', emoji: '🎭', essential: true,
@@ -408,6 +415,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'OCs — Wiki',
         emoji: '📖',
         desc: 'Wiki interativa com lore, tópicos e galeria de cada OC',
+        guide: 'wiki',
         entries: [
             {
                 id: 'oc-wiki', name: 'oc wiki', emoji: '📖',
@@ -450,6 +458,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'Inteligência Artificial',
         emoji: '🤖',
         desc: 'NPCs com IA, personas de OC, memórias e resumos',
+        guide: 'ia',
         entries: [
             {
                 id: 'token', name: 'token', emoji: '🔑',
@@ -522,6 +531,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'RPG & Mundo',
         emoji: '🎲',
         desc: 'Fichas de personagem, dados e eventos do servidor',
+        guide: 'rpg',
         entries: [
             {
                 id: 'ficha', name: 'ficha', emoji: '📋',
@@ -567,6 +577,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'Tempo & Clima',
         emoji: '🕰️',
         desc: 'Relógios de RP com velocidade própria e clima sincronizado',
+        guide: 'tempo',
         entries: [
             {
                 id: 'tempo', name: 'tempo', emoji: '🕰️',
@@ -611,6 +622,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'Diversão & Social',
         emoji: '🎮',
         desc: 'Minigames, telefone inter-servidores e easter eggs',
+        guide: 'social',
         entries: [
             {
                 id: 'phone', name: 'phone', emoji: '☎️',
@@ -640,7 +652,7 @@ export const CATEGORIES: HelpCategory[] = [
                 keywords: ['xadrez', 'stockfish', 'jogo', 'tabuleiro', 'pvp'],
             },
             {
-                id: 'futebol', name: 'futebol', emoji: '⚽',
+                id: 'futebol', name: 'futebol', guide: 'futebol', emoji: '⚽',
                 summary: 'Motor de simulação tática de futebol — clubes, torneios e partidas.',
                 usage: ['rp!futebol'],
                 details: 'Funde clubes, monte elencos (na mão ou gerados por IA), defina táticas e simule partidas e torneios completos: pontos corridos, grupos, mata-mata (ida/volta, byes e pênaltis) e sistema suíço, com transição automática de fases. Flags do `match`: `-n` campo neutro, `-r` resultado direto, `-irl [10-60]` partida ao vivo. Flags do `tourney create`: `-ida`, `-turno`, `-grupos N`, `-avanca N`, `-min N`, `-max N`.',
@@ -689,6 +701,7 @@ export const CATEGORIES: HelpCategory[] = [
         label: 'Economia & RP',
         emoji: '💰',
         desc: 'Carteira e inventário POR PERSONAGEM (OC) — dinheiro, itens e loja',
+        guide: 'economia',
         entries: [
             {
                 id: 'wallet', name: 'wallet', emoji: '🪙', essential: true,

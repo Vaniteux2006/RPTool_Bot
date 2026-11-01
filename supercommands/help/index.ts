@@ -5,6 +5,7 @@
 //   registry.ts → conteúdo (categorias, comandos, subcomandos, keywords)
 //   search.ts   → busca com normalização de acentos e scoring
 //   views.ts    → renderizadores de cada tela (home, categoria, comando, busca)
+//   guides/     → guias visuais (PNG) mostrados nas telas de categoria e comando
 //   index.ts    → roteamento + collector de botões/menus + modal de pesquisa
 //
 // Para adicionar um comando novo ao help, edite SOMENTE o registry.ts.
@@ -27,7 +28,7 @@ import {
     ActionRowBuilder, MessageFlags } from 'discord.js';
 import { CATEGORIES } from './registry';
 import { normalize } from './search';
-import { render, HelpState } from './views';
+import { render, renderEdit, HelpState } from './views';
 
 const COLLECTOR_TIME = 5 * 60 * 1000; // 5 min, igual à wiki de OC
 
@@ -83,21 +84,21 @@ async function runHelp(target: Message | ChatInputCommandInteraction, isSlash: b
                     const [catId, entryId] = i.values[0].split(':');
                     state = { mode: 'entry', catId, entryId };
                 }
-                return await i.update(render(state));
+                return await i.update(renderEdit(state));
             }
 
             if (i.isButton()) {
                 switch (i.customId) {
                     case 'help_home':
                         state = { mode: 'home' };
-                        return await i.update(render(state));
+                        return await i.update(renderEdit(state));
 
                     case 'help_prev':
                     case 'help_next':
                         if (state.mode === 'category') {
                             state.page += i.customId === 'help_next' ? 1 : -1;
                         }
-                        return await i.update(render(state));
+                        return await i.update(renderEdit(state));
 
                     case 'help_search':
                         return await openSearchModal(i);
@@ -142,7 +143,7 @@ async function runHelp(target: Message | ChatInputCommandInteraction, isSlash: b
 
         state = { mode: 'search', query: submit.fields.getTextInputValue('help_query') };
         await submit.deferUpdate();
-        await sent.edit(render(state)).catch(() => {});
+        await sent.edit(renderEdit(state)).catch(() => {});
     }
 }
 
