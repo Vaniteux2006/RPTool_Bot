@@ -4,9 +4,13 @@ import {
 import axios from 'axios';
 
 // ─── rp!img ───────────────────────────────────────────────────────────────────
-// Pesquisa de imagens via DuckDuckGo (resultados do Bing por baixo) — gratuito,
-// sem chave de API e sem cota. Fluxo: pega o token "vqd" da página de busca,
-// depois consulta o endpoint JSON i.js.
+// Pesquisa de imagens em duas fontes:
+//   • Serper.dev (Google Imagens) — só se SERPER_API_KEY estiver no .env. É a
+//     que acerta termos de nicho ("chaveamento copa do brasil 2026").
+//   • Bing (scraping da página de busca) — gratuito, sem chave. Bom para termos
+//     comuns, fraco em termos muito específicos. Usado quando não há chave, a
+//     cota do Serper acabou ou ele não achou nada.
+// (O DuckDuckGo passou a responder com desafio anti-bot e foi removido.)
 // O proxy do Discord não busca imagens de qualquer host (hotlink protection),
 // então baixamos a imagem no bot e anexamos via attachment://. Se o site
 // bloquear o download, caímos para a thumbnail do Bing (sempre embeda).
@@ -33,51 +37,121 @@ const EXT_BY_MIME: Record<string, string> = {
 
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
-// O DuckDuckGo exige um token "vqd" atrelado à query, extraído do HTML da busca
-async function getVqd(query: string): Promise<string | null> {
-    const { data } = await axios.get('https://duckduckgo.com/', {
-        params: { q: query, ia: 'images', iax: 'images' },
-        headers: { 'User-Agent': BROWSER_UA },
-        timeout: 8_000
-    });
-    const match = String(data).match(/vqd=["']?([\d-]+)["']?/);
-    return match ? match[1] : null;
+// ─── Serper.dev (Google Imagens) ─────────────────────────────────────────────
+async function searchSerper(query: string, apiKey: string): Promise<ImageResult[]> {
+    const { data } = await axios.post('https://google.serper.dev/images',
+        { q: query, gl: 'br', hl: 'pt-br', num: MAX_RESULTS, safe: 'active' },
+        { headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' }, timeout: 10_000 }
+    );
+
+    return (data.images || []).slice(0, MAX_RESULTS).map((item: any) => ({
+        link: item.imageUrl,
+        title: item.title || 'Sem título',
+        contextLink: item.link || item.imageUrl,
+        thumbnailLink: item.thumbnailUrl || '',
+        width: item.imageWidth || 0,
+        height: item.imageHeight || 0
+    }));
 }
 
-async function searchImages(query: string): Promise<ImageResult[]> {
-    const vqd = await getVqd(query);
-    if (!vqd) throw new Error('Não foi possível obter o token de busca (vqd) do DuckDuckGo.');
+// ─── Bing (scraping) ─────────────────────────────────────────────────────────
+// Cada resultado da página tem um atributo m="{...}" com o JSON da imagem
+// (murl = imagem, purl = página, turl = thumbnail do bing.net, t = título).
+// Sem cookies de sessão o Bing devolve resultados aleatórios; e cada nível de
+// SafeSearch acerta termos diferentes (moderate vai bem em termos comuns,
+// strict às vezes acerta os de nicho). Por isso buscamos nos dois e ficamos
+// com os resultados cujo título/página contém as palavras pesquisadas.
+const decodeHtml = (s: string) => s
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-    // O endpoint devolve 403 sem o conjunto completo de headers de navegador
-    const { data } = await axios.get('https://duckduckgo.com/i.js', {
-        params: {
-            l: 'br-pt',
-            o: 'json',
-            q: query,
-            vqd,
-            f: ',,,',
-            p: '1' // SafeSearch ativo
-        },
-        headers: {
-            'User-Agent': BROWSER_UA,
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-            'Referer': `https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`,
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin'
-        },
+const BING_HEADERS = {
+    'User-Agent': BROWSER_UA,
+    'Accept': 'text/html,application/xhtml+xml',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8'
+};
+const BING_COOKIE_TTL = 30 * 60_000;
+let bingCookie = { value: '', at: 0 };
+
+async function getBingCookie(): Promise<string> {
+    if (bingCookie.value && Date.now() - bingCookie.at < BING_COOKIE_TTL) return bingCookie.value;
+    const response = await axios.get('https://www.bing.com/', { headers: BING_HEADERS, timeout: 8_000 });
+    const value = (response.headers['set-cookie'] || []).map(c => c.split(';')[0]).join('; ');
+    bingCookie = { value, at: Date.now() };
+    return value;
+}
+
+const normalize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Quantas palavras da busca aparecem no título ou no link da página. */
+function relevance(result: ImageResult, terms: string[]): number {
+    let page = result.contextLink;
+    try { page = decodeURIComponent(page); } catch { /* link com % solto */ }
+    const haystack = normalize(`${result.title} ${page}`);
+    return terms.filter(t => haystack.includes(t)).length;
+}
+
+async function fetchBing(query: string, adlt: 'moderate' | 'strict'): Promise<ImageResult[]> {
+    const { data } = await axios.get('https://www.bing.com/images/search', {
+        params: { q: query, form: 'HDRSC2', first: 1, adlt },
+        headers: { ...BING_HEADERS, Cookie: await getBingCookie().catch(() => '') },
         timeout: 10_000
     });
 
-    return (data.results || []).slice(0, MAX_RESULTS).map((item: any) => ({
-        link: item.image,
-        title: item.title || 'Sem título',
-        contextLink: item.url || item.image,
-        thumbnailLink: item.thumbnail || '',
-        width: item.width || 0,
-        height: item.height || 0
-    }));
+    const results: ImageResult[] = [];
+    for (const match of String(data).matchAll(/ m="([^"]+)"/g)) {
+        let item: any;
+        try { item = JSON.parse(decodeHtml(match[1])); } catch { continue; }
+        if (!item?.murl) continue;
+        results.push({
+            link: item.murl,
+            title: item.t || 'Sem título',
+            contextLink: item.purl || item.murl,
+            thumbnailLink: item.turl || '',
+            width: 0,
+            height: 0
+        });
+    }
+    return results;
+}
+
+async function searchBing(query: string): Promise<ImageResult[]> {
+    const terms = [...new Set(normalize(query).split(/\s+/).filter(t => t.length >= 3))];
+    let best: ImageResult[] = [];
+    let lastError: unknown = null;
+    let answered = false;
+
+    for (const adlt of ['moderate', 'strict'] as const) {
+        let results: ImageResult[];
+        try { results = await fetchBing(query, adlt); } catch (error) { lastError = error; continue; }
+        answered = true;
+
+        // Sem termos úteis (ex: "gt"), não dá pra julgar relevância
+        const ranked = terms.length === 0 ? results : results
+            .map(r => ({ r, score: relevance(r, terms) }))
+            .filter(x => x.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .map(x => x.r);
+
+        if (ranked.length > best.length) best = ranked;
+        if (best.length >= MAX_RESULTS) break;
+    }
+    // As duas buscas falharam na rede → erro de verdade, não "nenhuma imagem"
+    if (!answered) throw lastError;
+    return best.slice(0, MAX_RESULTS);
+}
+
+async function searchImages(query: string): Promise<ImageResult[]> {
+    const apiKey = process.env.SERPER_API_KEY;
+    if (apiKey) {
+        try {
+            const results = await searchSerper(query, apiKey);
+            if (results.length > 0) return results;
+        } catch (error: any) {
+            // 401/403 = chave inválida ou cota esgotada; segue pro Bing
+            console.warn('[IMG] Serper falhou, usando Bing:', error?.response?.status || error?.message);
+        }
+    }
+    return searchBing(query);
 }
 
 // Baixa a imagem e devolve o anexo pronto; null se o host bloquear/for grande demais.

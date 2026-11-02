@@ -68,6 +68,7 @@ Regra da casa: comando simples vive em `commands/`; quando cresce, vira uma past
    OWNER_LOG_CHANNEL_ID=            # Canal de log do dono do bot
    YTDLP_PATH=                      # Binário próprio do yt-dlp (rp!download)
    YTDLP_COOKIES=                   # cookies.txt p/ sites que exigem login
+   SERPER_API_KEY=                  # Google Imagens no rp!img (sem chave usa o Bing)
    ```
 3. **Inicie:**
    ```bash

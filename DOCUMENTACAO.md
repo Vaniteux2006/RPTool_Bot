@@ -237,7 +237,7 @@ Pendências reais que **ainda valem** (não foram resolvidas):
 `sanitizeOutput` (5 cópias), cliente de IA (`api.ts` vs `aiUtils.chamarIA` vs `resumo/modules/aiClient.ts`), loop de retry, `fakeMessage` (adaptador slash→texto em ~8 comandos), confirmação Sim/Não com botões (ban/kick/fatos/exportchat). Mover para utils compartilhados.
 
 ### Variáveis de ambiente
-`xdTOKEN`, `CLIENT_ID`, `DB_OC`, `DB_OC_WIKI`, `DB_RESTANTE`, `DB_STATUS`, `DB_FICHA`, `DB_FB_USER`, `DB_FB_REPORT`, `DB_ECONOMY` (opcional — cai em `DB_RESTANTE`), `GEMINI_API_KEY`, `GEMINI_MODEL` (opcional — modelo do fallback de IA, default `gemini-3-flash-preview`), `WOLFRAM_IDS`, `OWNER_LOG_CHANNEL_ID` (opcional), `YTDLP_PATH` / `YTDLP_COOKIES` (opcionais — `rp!download`).
+`xdTOKEN`, `CLIENT_ID`, `DB_OC`, `DB_OC_WIKI`, `DB_RESTANTE`, `DB_STATUS`, `DB_FICHA`, `DB_FB_USER`, `DB_FB_REPORT`, `DB_ECONOMY` (opcional — cai em `DB_RESTANTE`), `GEMINI_API_KEY`, `GEMINI_MODEL` (opcional — modelo do fallback de IA, default `gemini-3-flash-preview`), `WOLFRAM_IDS`, `OWNER_LOG_CHANNEL_ID` (opcional), `YTDLP_PATH` / `YTDLP_COOKIES` (opcionais — `rp!download`), `SERPER_API_KEY` (opcional — Google Imagens no `rp!img`; sem ela usa o Bing).
 
 ---
 
